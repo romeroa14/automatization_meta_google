@@ -84,17 +84,18 @@ class AutomationTaskResource extends Resource
                             ->default('daily')
                             ->reactive(),
                         Forms\Components\TimePicker::make('scheduled_time')
-                            ->label('Hora Programada')
-                            ->helperText('Hora específica para ejecutar la tarea (opcional)')
+                            ->label('Hora del Día')
+                            ->helperText('¿A qué hora específica quieres que se ejecute? (ej: 08:00 para las 8 de la mañana)')
+                            ->seconds(false)
                             ->reactive(),
                         Forms\Components\DateTimePicker::make('next_run')
                             ->label('Primera Ejecución')
-                            ->helperText('¿Cuándo quieres que se ejecute por primera vez?')
-                            ->placeholder('Dejar vacío para usar hora inteligente automática')
+                            ->helperText('¿Cuándo quieres que se ejecute por primera vez? (Si no configuras, se ejecutará en la próxima hora programada)')
+                            ->placeholder('Dejar vacío para usar la hora programada')
                             ->displayFormat('d/m/Y H:i')
                             ->native(false)
                             ->afterStateHydrated(function ($state, $record) {
-                                // Si no hay next_run configurado, sugerir una hora inteligente
+                                // Si no hay next_run configurado, sugerir basado en scheduled_time
                                 if (!$state && !$record) {
                                     $suggestedTime = self::calculateSuggestedTimeStatic('daily');
                                     $suggestedDateTime = now()->copy()->setTime($suggestedTime['hour'], $suggestedTime['minute']);
@@ -107,21 +108,29 @@ class AutomationTaskResource extends Resource
                                     return $suggestedDateTime;
                                 }
                                 return $state;
-                            })
-                            ->afterStateUpdated(function ($state, $record) {
-                                // Si se cambia la frecuencia, actualizar la sugerencia
-                                if ($record && $state) {
-                                    $suggestedTime = self::calculateSuggestedTimeStatic($record->frequency);
-                                    $suggestedDateTime = now()->copy()->setTime($suggestedTime['hour'], $suggestedTime['minute']);
-                                    
-                                    if ($suggestedDateTime->isPast()) {
-                                        $suggestedDateTime = $suggestedDateTime->addDay();
-                                    }
-                                    
-                                    // Actualizar el campo con la nueva sugerencia
-                                    $record->next_run = $suggestedDateTime;
-                                }
                             }),
+                        Forms\Components\Placeholder::make('scheduling_info')
+                            ->label('Información de Programación')
+                            ->content(function ($record) {
+                                if (!$record) return 'Configura la frecuencia y hora para ver la información';
+                                
+                                $info = "Frecuencia: {$record->frequency}\n";
+                                
+                                if ($record->scheduled_time) {
+                                    $info .= "Hora programada: {$record->scheduled_time->format('H:i')}\n";
+                                }
+                                
+                                if ($record->next_run) {
+                                    $info .= "Próxima ejecución: {$record->next_run->format('d/m/Y H:i')}\n";
+                                }
+                                
+                                if ($record->last_run) {
+                                    $info .= "Última ejecución: {$record->last_run->format('d/m/Y H:i')}";
+                                }
+                                
+                                return $info;
+                            })
+                            ->visible(fn ($record) => $record && $record->exists),
                         Forms\Components\Placeholder::make('last_run_info')
                             ->label('Última Ejecución')
                             ->content(fn ($record) => $record && $record->last_run 

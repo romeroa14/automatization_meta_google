@@ -97,13 +97,13 @@ class AutomationTask extends Model
 
         $now = now();
         
-        // Si hay scheduled_time configurado, usarlo como hora específica
+        // Si hay scheduled_time configurado, usar esa hora específica
         if ($this->scheduled_time) {
             $scheduledHour = $this->scheduled_time->hour;
             $scheduledMinute = $this->scheduled_time->minute;
             
             // Calcular la próxima ejecución basada en la frecuencia y hora programada
-            return match($this->frequency) {
+            $nextRun = match($this->frequency) {
                 'hourly' => $now->copy()->addHour()->setTime($scheduledHour, $scheduledMinute),
                 'daily' => $now->copy()->addDay()->setTime($scheduledHour, $scheduledMinute),
                 'weekly' => $now->copy()->addWeek()->setTime($scheduledHour, $scheduledMinute),
@@ -111,6 +111,19 @@ class AutomationTask extends Model
                 'custom' => null, // Se maneja manualmente
                 default => $now->copy()->addDay()->setTime($scheduledHour, $scheduledMinute),
             };
+            
+            // Si la próxima ejecución ya pasó, calcular la siguiente
+            if ($nextRun && $nextRun->isPast()) {
+                $nextRun = match($this->frequency) {
+                    'hourly' => $nextRun->addHour(),
+                    'daily' => $nextRun->addDay(),
+                    'weekly' => $nextRun->addWeek(),
+                    'monthly' => $nextRun->addMonth(),
+                    default => $nextRun->addDay(),
+                };
+            }
+            
+            return $nextRun;
         }
         
         // Si no hay scheduled_time, usar la hora actual + frecuencia
