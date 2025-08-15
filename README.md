@@ -1,212 +1,267 @@
-# Sistema de Automatización Facebook Ads → Google Sheets
+# 🚀 Sistema de Automatización Facebook Ads → Google Sheets
 
-Sistema completo de automatización para sincronizar datos de Facebook Ads a Google Sheets usando Laravel 11 y FilamentPHP v3.
+Un sistema completo de automatización que sincroniza métricas de Facebook Ads directamente a Google Sheets en tiempo real.
 
-## 🚀 Características
+## ✨ Características Principales
 
-- **Integración Facebook Ads API**: Obtiene métricas de campañas publicitarias
-- **Integración Google Sheets API**: Actualiza hojas de cálculo automáticamente
-- **Panel de Administración**: Interfaz completa con FilamentPHP
-- **Programación Flexible**: Frecuencias personalizables (hora, día, semana, mes)
-- **Monitoreo en Tiempo Real**: Logs detallados y estadísticas
-- **Ejecución Manual**: Botón para ejecutar tareas inmediatamente
-- **Procesamiento en Colas**: Jobs asíncronos para mejor rendimiento
+- 🔄 **Sincronización Automática**: Métricas de Facebook Ads a Google Sheets
+- 📊 **Panel de Administración**: Interfaz web completa con Filament
+- ⏰ **Tareas Programadas**: Ejecución automática con horarios personalizados
+- 🔗 **Google Apps Script Universal**: Un solo script para múltiples hojas
+- 📈 **Logs Detallados**: Monitoreo completo de ejecuciones
+- 🎯 **Mapeo Dinámico**: Configuración flexible de celdas
+- 🚀 **Cola de Jobs**: Procesamiento asíncrono robusto
 
-## 📋 Requisitos
+## 🛠️ Tecnologías Utilizadas
+
+- **Laravel 11** - Framework PHP
+- **Filament 3** - Panel de administración
+- **Facebook Ads API** - Integración con Meta
+- **Google Apps Script** - Automatización de Google Sheets
+- **PostgreSQL** - Base de datos
+- **Redis** - Cola de jobs (opcional)
+
+## 📋 Requisitos Previos
 
 - PHP 8.2+
-- Laravel 11
-- PostgreSQL
 - Composer
-- Credenciales de Facebook Business API
-- Credenciales de Google Sheets API
+- Node.js & NPM
+- PostgreSQL
+- Cuenta de Facebook Ads
+- Cuenta de Google Workspace
 
-## 🛠️ Instalación
+## 🚀 Instalación
 
-1. **Clonar el proyecto**
+### 1. Clonar el repositorio
 ```bash
-git clone <repository-url>
-cd data_ia_marketing
+git clone git@github.com:romeroa14/automatization_meta_google.git
+cd automatization_meta_google
 ```
 
-2. **Instalar dependencias**
+### 2. Instalar dependencias
 ```bash
 composer install
+npm install
 ```
 
-3. **Configurar base de datos**
+### 3. Configurar variables de entorno
 ```bash
-# Configurar .env con PostgreSQL
-DB_CONNECTION=pgsql
-DB_HOST=localhost
-DB_PORT=5432
-DB_DATABASE=auto_admetricas
-DB_USERNAME=postgres
-DB_PASSWORD=123456
+cp .env.example .env
 ```
 
-4. **Ejecutar migraciones**
+Editar `.env` con tus credenciales:
+```env
+# Base de datos
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=admetricas
+DB_USERNAME=tu_usuario
+DB_PASSWORD=tu_password
+
+# Facebook Ads API
+FACEBOOK_APP_ID=tu_app_id
+FACEBOOK_APP_SECRET=tu_app_secret
+FACEBOOK_ACCESS_TOKEN=tu_access_token
+
+# Google Apps Script Web App
+GOOGLE_WEBAPP_URL=https://script.google.com/macros/s/TU_WEBAPP_ID/exec
+```
+
+### 4. Configurar base de datos
 ```bash
 php artisan migrate
+php artisan db:seed
 ```
 
-5. **Crear usuario administrador**
+### 5. Configurar Google Apps Script
 ```bash
-php artisan make:filament-user
+php artisan google:setup-script
 ```
 
-6. **Instalar dependencias de APIs**
+### 6. Compilar assets
 ```bash
-composer require google/apiclient facebook/php-business-sdk
+npm run build
 ```
 
-## 🔧 Configuración
-
-### Facebook Business API
-
-1. Crear una aplicación en [Facebook Developers](https://developers.facebook.com/)
-2. Obtener App ID y App Secret
-3. Generar Access Token con permisos de ads_management
-4. Obtener Account ID de la cuenta publicitaria
-
-### Google Sheets API
-
-1. Crear proyecto en [Google Cloud Console](https://console.cloud.google.com/)
-2. Habilitar Google Sheets API
-3. Crear credenciales de servicio (Service Account)
-4. Descargar archivo JSON de credenciales
-5. Compartir la hoja de cálculo con el email del service account
-
-## 📖 Uso
-
-### 1. Configurar Cuenta Facebook
-
-1. Ir a **Cuentas Facebook** en el panel
-2. Crear nueva cuenta con:
-   - Nombre de la cuenta
-   - Account ID (sin "act_")
-   - App ID
-   - App Secret
-   - Access Token
-
-### 2. Configurar Google Sheet
-
-1. Ir a **Google Sheets** en el panel
-2. Crear nueva configuración con:
-   - Nombre de la hoja
-   - Spreadsheet ID (de la URL)
-   - Nombre de la hoja de trabajo
-   - Credenciales JSON
-   - Mapeo de celdas (ej: `{"impressions": "B2", "clicks": "B3"}`)
-
-### 3. Crear Tarea de Automatización
-
-1. Ir a **Tareas de Automatización**
-2. Crear nueva tarea con:
-   - Nombre y descripción
-   - Seleccionar cuenta Facebook
-   - Seleccionar Google Sheet
-   - Configurar frecuencia y hora
-   - Activar la tarea
-
-### 4. Ejecutar Manualmente
-
-- Usar el botón **"Ejecutar Ahora"** en la lista de tareas
-- O ejecutar desde consola: `php artisan automation:run --task-id=1`
-
-## 🔄 Automatización
-
-### Scheduler
-
-El sistema ejecuta automáticamente las tareas programadas cada 5 minutos:
-
+### 7. Configurar cron job
 ```bash
-# Verificar tareas pendientes
-php artisan automation:run
-
-# Ejecutar tarea específica
-php artisan automation:run --task-id=1
+# Agregar al crontab
+* * * * * cd /ruta/a/tu/proyecto && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-### Colas
+## 📊 Configuración de Facebook Ads
 
-Los jobs se procesan en segundo plano:
+### 1. Crear aplicación en Facebook Developers
+- Ve a [Facebook Developers](https://developers.facebook.com/)
+- Crea una nueva aplicación
+- Configura Facebook Login
+- Obtén App ID y App Secret
 
-```bash
-# Procesar colas
-php artisan queue:work
+### 2. Configurar permisos
+- `ads_management`
+- `ads_read`
+- `business_management`
 
-# Ver estado de colas
-php artisan queue:monitor
+### 3. Generar Access Token
+- Token de larga duración (60 días)
+- Con permisos de administrador de anuncios
+
+## 🔧 Configuración de Google Sheets
+
+### 1. Crear Google Apps Script
+- Ve a [Google Apps Script](https://script.google.com/)
+- Crea un nuevo proyecto
+- Copia el código generado por el comando `setup-script`
+- Despliega como Web App
+
+### 2. Configurar permisos
+- Ejecutar como: "Yo mismo"
+- Acceso: "Cualquier persona"
+
+### 3. Actualizar URL en .env
+```env
+GOOGLE_WEBAPP_URL=https://script.google.com/macros/s/TU_WEBAPP_ID/exec
 ```
 
-## 📊 Monitoreo
+## 🎯 Uso del Sistema
 
-### Dashboard
+### 1. Acceder al panel de administración
+```
+http://tu-dominio.com/admin
+```
 
-- **Estadísticas en tiempo real**
-- **Tareas activas/inactivas**
-- **Ejecuciones del día**
-- **Última ejecución**
+### 2. Configurar cuentas de Facebook
+- Ve a "Cuentas Facebook"
+- Agrega tus credenciales de Facebook Ads
 
-### Logs
+### 3. Configurar Google Sheets
+- Ve a "Google Sheets"
+- Agrega el ID del spreadsheet y hoja
+- Configura el mapeo de celdas
 
-- **Registro detallado** de cada ejecución
-- **Tiempo de ejecución**
-- **Registros procesados**
-- **Errores y mensajes**
+### 4. Crear tareas de automatización
+- Ve a "Tareas de Automatización"
+- Selecciona cuenta de Facebook y Google Sheet
+- Configura frecuencia y horario
+- Activa la tarea
 
-## 🗂️ Estructura del Proyecto
+### 5. Monitorear ejecuciones
+- Ve a "Logs de Tareas"
+- Revisa el estado de las ejecuciones
+- Verifica los datos sincronizados
+
+## 📈 Estructura del Proyecto
 
 ```
 app/
-├── Console/Commands/
-│   └── RunAutomationTasks.php      # Comando para ejecutar tareas
-├── Jobs/
-│   └── SyncFacebookAdsToGoogleSheets.php  # Job de sincronización
-├── Models/
-│   ├── FacebookAccount.php         # Modelo de cuentas Facebook
-│   ├── GoogleSheet.php             # Modelo de hojas Google
-│   ├── AutomationTask.php          # Modelo de tareas
-│   └── TaskLog.php                 # Modelo de logs
-└── Filament/
-    ├── Resources/                  # Recursos de Filament
-    └── Widgets/
-        └── AutomationStats.php     # Widget de estadísticas
+├── Console/Commands/          # Comandos de consola
+├── Filament/Resources/        # Recursos del panel admin
+├── Jobs/                      # Jobs de sincronización
+├── Models/                    # Modelos Eloquent
+└── Services/                  # Servicios de negocio
 
-database/migrations/               # Migraciones de base de datos
-config/automation.php             # Configuración del sistema
-routes/console.php                # Configuración del scheduler
+database/
+├── migrations/               # Migraciones de BD
+└── seeders/                 # Datos iniciales
+
+config/
+├── automation.php           # Configuración de automatización
+└── services.php            # Configuración de servicios
 ```
 
-## 🔐 Seguridad
+## 🔄 Flujo de Sincronización
 
-- **Credenciales encriptadas** en base de datos
-- **Acceso por usuario** a configuraciones
-- **Logs de auditoría** de todas las acciones
-- **Validación de permisos** en APIs
+1. **Programación**: El sistema verifica tareas pendientes
+2. **Despacho**: Se crea un job de sincronización
+3. **Facebook API**: Se obtienen métricas de Facebook Ads
+4. **Procesamiento**: Se formatean los datos
+5. **Google Sheets**: Se actualizan las celdas via Web App
+6. **Logging**: Se registra el resultado de la ejecución
 
-## 🚨 Troubleshooting
+## 📊 Métricas Sincronizadas
 
-### Error de conexión Facebook
-- Verificar App ID y App Secret
-- Comprobar permisos del Access Token
-- Validar Account ID
+- **Impressions**: Impresiones
+- **Clicks**: Clics
+- **Spend**: Gasto
+- **Reach**: Alcance
+- **CTR**: Tasa de clics
+- **CPM**: Costo por mil impresiones
+- **CPC**: Costo por clic
 
-### Error de conexión Google Sheets
-- Verificar credenciales JSON
-- Comprobar permisos de la hoja
-- Validar Spreadsheet ID
+## 🛠️ Comandos Útiles
 
-### Jobs no se ejecutan
-- Verificar que `queue:work` esté corriendo
-- Comprobar configuración de colas
+```bash
+# Ejecutar tareas manualmente
+php artisan automation:run
+
+# Procesar cola de jobs
+php artisan queue:work
+
+# Verificar conexión con Facebook
+php artisan facebook:test
+
+# Configurar Google Apps Script
+php artisan google:setup-script
+
+# Ver logs de tareas
+php artisan task:logs
+```
+
+## 🔍 Monitoreo y Logs
+
+### Logs de Laravel
+```bash
+tail -f storage/logs/laravel.log
+```
+
+### Logs de Tareas
+- Panel de administración → Logs de Tareas
+- Detalles de cada ejecución
+- Tiempo de ejecución
+- Datos sincronizados
+
+## 🚨 Solución de Problemas
+
+### Error de Facebook API
+- Verificar credenciales en `.env`
+- Comprobar permisos de la aplicación
+- Verificar que el token no haya expirado
+
+### Error de Google Sheets
+- Verificar URL del Web App
+- Comprobar permisos del spreadsheet
+- Ejecutar `testUniversalScript()` en Google Apps Script
+
+### Jobs no se procesan
+- Verificar configuración de colas
+- Ejecutar `php artisan queue:work`
 - Revisar logs de Laravel
 
-## 📝 Licencia
+## 🤝 Contribuir
 
-Este proyecto es de uso interno para automatización de marketing.
+1. Fork el proyecto
+2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
+3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
+4. Push a la rama (`git push origin feature/AmazingFeature`)
+5. Abre un Pull Request
 
-## 🤝 Contribución
+## 📄 Licencia
 
-Para reportar bugs o solicitar características, crear un issue en el repositorio.
+Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.
+
+## 👨‍💻 Autor
+
+**Alfredo Romero**
+- GitHub: [@romeroa14](https://github.com/romeroa14)
+
+## 🙏 Agradecimientos
+
+- Laravel Team por el framework
+- Filament Team por el panel de administración
+- Facebook por la API de Ads
+- Google por Apps Script
+
+---
+
+⭐ Si este proyecto te ayuda, ¡dale una estrella en GitHub!
