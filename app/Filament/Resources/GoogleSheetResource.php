@@ -1,0 +1,308 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\GoogleSheetResource\Pages;
+use App\Filament\Resources\GoogleSheetResource\RelationManagers;
+use App\Models\GoogleSheet;
+use Filament\Forms;
+use Filament\Forms\Form;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Filament\Forms\Components\Actions\Action;
+use Filament\Notifications\Notification;
+
+class GoogleSheetResource extends Resource
+{
+    protected static ?string $model = GoogleSheet::class;
+
+    protected static ?string $navigationIcon = 'heroicon-o-table-cells';
+
+    protected static ?string $navigationLabel = 'Google Sheets';
+
+    protected static ?string $modelLabel = 'Google Sheet';
+
+    protected static ?string $pluralModelLabel = 'Google Sheets';
+
+    protected static ?int $navigationSort = 2;
+
+    public static function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Forms\Components\Section::make('Información del Spreadsheet')
+                    ->description('Configura los datos de tu Google Sheet')
+                    ->schema([
+                        Forms\Components\TextInput::make('name')
+                            ->label('Nombre')
+                            ->required()
+                            ->maxLength(255)
+                            ->placeholder('Mi Spreadsheet de Métricas'),
+                        Forms\Components\TextInput::make('spreadsheet_id')
+                            ->label('ID del Spreadsheet')
+                            ->required()
+                            ->maxLength(255)
+                            ->placeholder('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms')
+                            ->helperText('El ID de tu Google Sheet (se encuentra en la URL)')
+                            ->suffixAction(
+                                Action::make('fetch_sheets')
+                                    ->label('Consultar Hojas')
+                                    ->icon('heroicon-o-arrow-path')
+                                    ->color('primary')
+                                    ->action(function ($state, $set) {
+                                        if (empty($state)) {
+                                            Notification::make()
+                                                ->title('Error')
+                                                ->body('Primero ingresa el ID del Spreadsheet')
+                                                ->danger()
+                                                ->send();
+                                            return;
+                                        }
+                                        
+                                        try {
+                                            $sheets = self::fetchGoogleSheets($state);
+                                            
+                                            if (empty($sheets)) {
+                                                Notification::make()
+                                                    ->title('No se encontraron hojas')
+                                                    ->body('Verifica que el ID del Spreadsheet sea correcto y que tengas permisos de acceso')
+                                                    ->warning()
+                                                    ->send();
+                                                return;
+                                            }
+                                            
+                                            // Guardar las hojas en el formulario para usarlas en el select
+                                            $set('available_sheets', $sheets);
+                                            
+                                            Notification::make()
+                                                ->title('Hojas encontradas')
+                                                ->body('Se encontraron ' . count($sheets) . ' hojas en el spreadsheet')
+                                                ->success()
+                                                ->send();
+                                            
+                                        } catch (\Exception $e) {
+                                            Notification::make()
+                                                ->title('Error')
+                                                ->body('Error al consultar las hojas: ' . $e->getMessage())
+                                                ->danger()
+                                                ->send();
+                                        }
+                                    })
+                            ),
+                        Forms\Components\Select::make('worksheet_name')
+                            ->label('Nombre de la Hoja')
+                            ->required()
+                            // ->maxLength(255)
+                            ->placeholder('Selecciona una hoja')
+                            ->helperText('El nombre de la hoja donde se escribirán los datos')
+                            ->options(function ($get) {
+                                $sheets = $get('available_sheets');
+                                if (!$sheets) {
+                                    return [];
+                                }
+                                
+                                $options = [];
+                                foreach ($sheets as $sheet) {
+                                    $options[$sheet] = $sheet;
+                                }
+                                return $options;
+                            })
+                            ->searchable()
+                            ->disabled(fn ($get) => empty($get('available_sheets')))
+                            ->reactive(),
+                        Forms\Components\Hidden::make('available_sheets'),
+                    ])->columns(2),
+
+                Forms\Components\Section::make('Configuración del Sistema')
+                    ->description('El sistema usa una URL universal configurada en las variables de entorno')
+                    ->schema([
+                        Forms\Components\Placeholder::make('webapp_info')
+                            ->label('Web App Universal')
+                            ->content('El sistema está configurado para usar una URL universal de Google Apps Script que permite actualizar cualquier Google Sheet automáticamente.')
+                            ->columnSpanFull(),
+                        Forms\Components\Placeholder::make('permissions_info')
+                            ->label('Permisos Requeridos')
+                            ->content('Asegúrate de que tu Google Sheet tenga permisos de acceso público o que tu cuenta tenga permisos de editor.')
+                            ->columnSpanFull(),
+                    ]),
+
+                Forms\Components\Section::make('Mapeo de Celdas')
+                    ->description('Define qué métricas se escribirán en qué celdas')
+                    ->schema([
+                        Forms\Components\KeyValue::make('cell_mapping')
+                            ->label('Mapeo de Métricas')
+                            ->keyLabel('Métrica')
+                            ->valueLabel('Celda')
+                            ->addActionLabel('Agregar Métrica')
+                            ->default([
+                                'impressions' => 'B2',
+                                'clicks' => 'B3',
+                                'spend' => 'B4',
+                                'reach' => 'B5',
+                                'ctr' => 'B6',
+                                'cpm' => 'B7',
+                                'cpc' => 'B8',
+                            ])
+                            ->helperText('Define qué métricas se escribirán en qué celdas del spreadsheet'),
+                    ]),
+
+                Forms\Components\Section::make('Estado')
+                    ->schema([
+                        Forms\Components\Toggle::make('is_active')
+                            ->label('Activo')
+                            ->default(true)
+                            ->helperText('Activa o desactiva esta configuración'),
+                    ]),
+            ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\TextColumn::make('name')
+                    ->label('Nombre')
+                    ->searchable()
+                    ->sortable()
+                    ->weight('bold'),
+                Tables\Columns\TextColumn::make('spreadsheet_id')
+                    ->label('ID del Spreadsheet')
+                    ->searchable()
+                    ->copyable()
+                    ->copyMessage('ID copiado al portapapeles'),
+                Tables\Columns\TextColumn::make('worksheet_name')
+                    ->label('Hoja')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\IconColumn::make('is_active')
+                    ->label('Estado')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->trueColor('success')
+                    ->falseColor('danger'),
+                Tables\Columns\TextColumn::make('created_at')
+                    ->label('Creado')
+                    ->dateTime('d/m/Y H:i')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->filters([
+                Tables\Filters\TernaryFilter::make('is_active')
+                    ->label('Estado')
+                    ->placeholder('Todos')
+                    ->trueLabel('Activos')
+                    ->falseLabel('Inactivos'),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make()
+                    ->label('Editar'),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->label('Eliminar seleccionados'),
+                ]),
+            ])
+            ->defaultSort('created_at', 'desc');
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            //
+        ];
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ListGoogleSheets::route('/'),
+            'create' => Pages\CreateGoogleSheet::route('/create'),
+            'edit' => Pages\EditGoogleSheet::route('/{record}/edit'),
+        ];
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    }
+
+    /**
+     * Consulta las hojas disponibles de un Google Sheet
+     */
+    public static function fetchGoogleSheets($spreadsheetId): array
+    {
+        try {
+            // Usar la URL universal desde las variables de entorno
+            $webappUrl = config('services.google.webapp_url') ?? env('GOOGLE_WEBAPP_URL');
+            
+            if (empty($webappUrl)) {
+                throw new \Exception('URL del Web App Universal no configurada. Verifica GOOGLE_WEBAPP_URL en tu .env');
+            }
+            
+            $response = \Illuminate\Support\Facades\Http::timeout(30)
+                ->withOptions(['allow_redirects' => true])
+                ->get($webappUrl, [
+                    'action' => 'list_sheets',
+                    'spreadsheet_id' => $spreadsheetId
+                ]);
+
+            if ($response->successful()) {
+                $result = $response->json();
+                
+                if (isset($result['success']) && $result['success'] && isset($result['sheets'])) {
+                    return $result['sheets'];
+                }
+            }
+
+            // Si no funciona con el web app, intentar con la API pública
+            return self::fetchSheetsViaPublicAPI($spreadsheetId);
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error consultando hojas de Google Sheet: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Consulta las hojas usando la API pública de Google Sheets
+     */
+    private static function fetchSheetsViaPublicAPI($spreadsheetId): array
+    {
+        try {
+            // Intentar obtener las hojas usando la URL pública
+            $url = "https://docs.google.com/spreadsheets/d/{$spreadsheetId}/gviz/tq?tqx=out:json&tq=SELECT%20*%20LIMIT%201";
+            
+            $response = \Illuminate\Support\Facades\Http::timeout(30)->get($url);
+            
+            if ($response->successful()) {
+                // Extraer información de las hojas del JSON
+                $content = $response->body();
+                
+                // Buscar información de hojas en el contenido
+                if (preg_match('/"sheets":\s*\[(.*?)\]/', $content, $matches)) {
+                    // Parsear las hojas encontradas
+                    $sheetsData = $matches[1];
+                    $sheets = [];
+                    
+                    // Extraer nombres de hojas usando regex
+                    if (preg_match_all('/"name":\s*"([^"]+)"/', $sheetsData, $sheetMatches)) {
+                        $sheets = $sheetMatches[1];
+                    }
+                    
+                    return $sheets;
+                }
+            }
+            
+            return [];
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error consultando hojas via API pública: ' . $e->getMessage());
+            return [];
+        }
+    }
+}
