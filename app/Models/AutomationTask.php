@@ -56,10 +56,8 @@ class AutomationTask extends Model
     public function scopeDueForExecution($query)
     {
         return $query->where('is_active', true)
-                    ->where(function ($q) {
-                        $q->whereNull('next_run')
-                          ->orWhere('next_run', '<=', now());
-                    });
+                    ->whereNotNull('next_run') // Solo tareas que tienen next_run configurado
+                    ->where('next_run', '<=', now());
     }
 
     public function getFrequencyLabelAttribute(): string
@@ -98,15 +96,31 @@ class AutomationTask extends Model
         }
 
         $now = now();
-        $baseTime = $this->scheduled_time ? $now->copy()->setTimeFrom($this->scheduled_time) : $now;
-
+        
+        // Si hay scheduled_time configurado, usarlo como hora específica
+        if ($this->scheduled_time) {
+            $scheduledHour = $this->scheduled_time->hour;
+            $scheduledMinute = $this->scheduled_time->minute;
+            
+            // Calcular la próxima ejecución basada en la frecuencia y hora programada
+            return match($this->frequency) {
+                'hourly' => $now->copy()->addHour()->setTime($scheduledHour, $scheduledMinute),
+                'daily' => $now->copy()->addDay()->setTime($scheduledHour, $scheduledMinute),
+                'weekly' => $now->copy()->addWeek()->setTime($scheduledHour, $scheduledMinute),
+                'monthly' => $now->copy()->addMonth()->setTime($scheduledHour, $scheduledMinute),
+                'custom' => null, // Se maneja manualmente
+                default => $now->copy()->addDay()->setTime($scheduledHour, $scheduledMinute),
+            };
+        }
+        
+        // Si no hay scheduled_time, usar la hora actual + frecuencia
         return match($this->frequency) {
-            'hourly' => $baseTime->addHour(),
-            'daily' => $baseTime->addDay(),
-            'weekly' => $baseTime->addWeek(),
-            'monthly' => $baseTime->addMonth(),
+            'hourly' => $now->copy()->addHour(),
+            'daily' => $now->copy()->addDay(),
+            'weekly' => $now->copy()->addWeek(),
+            'monthly' => $now->copy()->addMonth(),
             'custom' => null, // Se maneja manualmente
-            default => $baseTime->addDay(),
+            default => $now->copy()->addDay(),
         };
     }
 

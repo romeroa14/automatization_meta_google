@@ -9,7 +9,9 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // Configurar el scheduler para tareas de automatización
+// Solo ejecutar tareas que realmente están programadas para ejecutarse
 Schedule::command('automation:run')
-    ->everyFiveMinutes()
+    ->everyMinute() // Verificar cada minuto, pero el comando decide qué ejecutar
     ->withoutOverlapping()
-    ->runInBackground();
+    ->runInBackground()
+    ->description('Verificar y ejecutar tareas de automatización programadas');

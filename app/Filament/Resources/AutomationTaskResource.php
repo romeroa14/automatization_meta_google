@@ -16,6 +16,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Jobs\SyncFacebookAdsToGoogleSheets;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Queue;
+use App\Models\QueueJob;
 
 class AutomationTaskResource extends Resource
 {
@@ -79,10 +81,53 @@ class AutomationTaskResource extends Resource
                                 'custom' => 'Personalizado',
                             ])
                             ->required()
-                            ->default('daily'),
+                            ->default('daily')
+                            ->reactive(),
                         Forms\Components\TimePicker::make('scheduled_time')
                             ->label('Hora Programada')
-                            ->helperText('Hora específica para ejecutar la tarea (opcional)'),
+                            ->helperText('Hora específica para ejecutar la tarea (opcional)')
+                            ->reactive(),
+                        Forms\Components\DateTimePicker::make('next_run')
+                            ->label('Primera Ejecución')
+                            ->helperText('¿Cuándo quieres que se ejecute por primera vez?')
+                            ->placeholder('Dejar vacío para usar hora inteligente automática')
+                            ->displayFormat('d/m/Y H:i')
+                            ->native(false)
+                            ->afterStateHydrated(function ($state, $record) {
+                                // Si no hay next_run configurado, sugerir una hora inteligente
+                                if (!$state && !$record) {
+                                    $suggestedTime = self::calculateSuggestedTimeStatic('daily');
+                                    $suggestedDateTime = now()->copy()->setTime($suggestedTime['hour'], $suggestedTime['minute']);
+                                    
+                                    // Si la hora sugerida ya pasó hoy, sugerir para mañana
+                                    if ($suggestedDateTime->isPast()) {
+                                        $suggestedDateTime = $suggestedDateTime->addDay();
+                                    }
+                                    
+                                    return $suggestedDateTime;
+                                }
+                                return $state;
+                            })
+                            ->afterStateUpdated(function ($state, $record) {
+                                // Si se cambia la frecuencia, actualizar la sugerencia
+                                if ($record && $state) {
+                                    $suggestedTime = self::calculateSuggestedTimeStatic($record->frequency);
+                                    $suggestedDateTime = now()->copy()->setTime($suggestedTime['hour'], $suggestedTime['minute']);
+                                    
+                                    if ($suggestedDateTime->isPast()) {
+                                        $suggestedDateTime = $suggestedDateTime->addDay();
+                                    }
+                                    
+                                    // Actualizar el campo con la nueva sugerencia
+                                    $record->next_run = $suggestedDateTime;
+                                }
+                            }),
+                        Forms\Components\Placeholder::make('last_run_info')
+                            ->label('Última Ejecución')
+                            ->content(fn ($record) => $record && $record->last_run 
+                                ? $record->last_run->format('d/m/Y H:i:s') 
+                                : 'Nunca ejecutada')
+                            ->visible(fn ($record) => $record && $record->exists),
                     ])->columns(2),
 
                 Forms\Components\Section::make('Estado')
@@ -157,6 +202,42 @@ class AutomationTaskResource extends Resource
                     ]),
             ])
             ->actions([
+                Tables\Actions\Action::make('configure_first_run')
+                    ->label('Configurar Primera Ejecución')
+                    ->icon('heroicon-o-clock')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalHeading('Configurar Primera Ejecución')
+                    ->modalSubmitActionLabel('Configurar')
+                    ->action(function (AutomationTask $record) {
+                        // Calcular una hora inteligente basada en la frecuencia
+                        $now = now();
+                        $suggestedTime = self::calculateSuggestedTimeStatic($record->frequency);
+                        
+                        // Calcular la primera ejecución
+                        $firstRun = $now->copy()->setTime($suggestedTime['hour'], $suggestedTime['minute']);
+                        
+                        // Si la hora sugerida ya pasó hoy, programar para mañana
+                        if ($firstRun->isPast()) {
+                            $firstRun = $firstRun->addDay();
+                        }
+                        
+                        // Calcular la próxima ejecución basada en la frecuencia
+                        $nextRun = $record->calculateNextRun() ?? $firstRun->copy()->addDay();
+                        
+                        $record->update([
+                            'next_run' => $firstRun,
+                            'scheduled_time' => $firstRun->copy()
+                        ]);
+                        
+                        Notification::make()
+                            ->title('Primera Ejecución Configurada')
+                            ->body("La tarea se ejecutará por primera vez el {$firstRun->format('d/m/Y H:i')} ({$suggestedTime['description']})")
+                            ->success()
+                            ->send();
+                    })
+                    ->modalDescription(fn (AutomationTask $record) => "¿Configurar la primera ejecución de '{$record->name}' con una hora inteligente basada en la frecuencia '{$record->frequency}'?")
+                    ->visible(fn (AutomationTask $record) => !$record->next_run),
                 Tables\Actions\Action::make('run_now')
                     ->label('Ejecutar Ahora')
                     ->icon('heroicon-o-play')
@@ -215,5 +296,42 @@ class AutomationTaskResource extends Resource
     public static function getNavigationBadge(): ?string
     {
         return static::getModel()::count();
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        $failedCount = QueueJob::failed()->count();
+        return $failedCount > 0 ? 'danger' : 'warning';
+    }
+
+    private static function calculateSuggestedTimeStatic(string $frequency): array
+    {
+        return match($frequency) {
+            'hourly' => [
+                'hour' => now()->addHour()->hour,
+                'minute' => 0,
+                'description' => 'Cada hora en punto'
+            ],
+            'daily' => [
+                'hour' => 8, // 8:00 AM - hora de trabajo
+                'minute' => 0,
+                'description' => 'Diario a las 8:00 AM'
+            ],
+            'weekly' => [
+                'hour' => 9, // 9:00 AM - lunes
+                'minute' => 0,
+                'description' => 'Semanal los lunes a las 9:00 AM'
+            ],
+            'monthly' => [
+                'hour' => 10, // 10:00 AM - primer día del mes
+                'minute' => 0,
+                'description' => 'Mensual el primer día a las 10:00 AM'
+            ],
+            default => [
+                'hour' => 9,
+                'minute' => 0,
+                'description' => 'Diario a las 9:00 AM'
+            ],
+        };
     }
 }

@@ -50,24 +50,36 @@ class RunAutomationTasks extends Command
         } else {
             // Ejecutar todas las tareas programadas
             $tasks = AutomationTask::active()
-                ->where('next_run', '<=', now())
+                ->whereNotNull('next_run') // Solo tareas con next_run configurado
+                ->where('next_run', '<=', now()) // Solo tareas que deberían ejecutarse ahora
                 ->get();
             
+            // Log para debugging
+            Log::info('Scheduler ejecutado', [
+                'timestamp' => now()->toISOString(),
+                'tasks_found' => $tasks->count(),
+                'total_active_tasks' => AutomationTask::active()->count(),
+                'tasks_with_next_run' => AutomationTask::active()->whereNotNull('next_run')->count(),
+                'tasks_due' => $tasks->pluck('name', 'id')->toArray()
+            ]);
+            
             if ($tasks->isEmpty()) {
-                $this->info('No hay tareas programadas para ejecutar.');
+                $this->info('No hay tareas programadas para ejecutar en este momento.');
                 return 0;
             }
             
-            $this->info("Encontradas {$tasks->count()} tarea(s) para ejecutar:");
+            $this->info("Encontradas {$tasks->count()} tarea(s) programadas para ejecutar:");
             
             foreach ($tasks as $task) {
                 $this->line("- {$task->name} (ID: {$task->id})");
+                $this->line("  Programada para: " . $task->next_run->format('Y-m-d H:i:s'));
+                $this->line("  Frecuencia: {$task->frequency}");
             }
             
-            if ($this->confirm('¿Deseas ejecutar estas tareas?')) {
-                foreach ($tasks as $task) {
-                    $this->runTask($task);
-                }
+            // Ejecutar automáticamente todas las tareas encontradas
+            $this->info('Ejecutando tareas automáticamente...');
+            foreach ($tasks as $task) {
+                $this->runTask($task);
             }
         }
         
