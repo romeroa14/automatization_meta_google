@@ -3,7 +3,7 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\FacebookAccountResource\Pages;
-use App\Filament\Resources\FacebookAccountResource\RelationManagers;
+
 use App\Models\FacebookAccount;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -11,7 +11,16 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Filament\Tables\Actions\Action;
+use Filament\Notifications\Notification;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Section;
+use Filament\Forms\Components\Grid;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\BadgeColumn;
+use Filament\Tables\Columns\IconColumn;
+use FacebookAds\Api;
+use FacebookAds\Object\AdAccount;
 
 class FacebookAccountResource extends Resource
 {
@@ -21,9 +30,9 @@ class FacebookAccountResource extends Resource
 
     protected static ?string $navigationLabel = 'Cuentas Facebook';
 
-    protected static ?string $modelLabel = 'Cuenta Facebook';
+    protected static ?string $modelLabel = 'Cuenta de Facebook';
 
-    protected static ?string $pluralModelLabel = 'Cuentas Facebook';
+    protected static ?string $pluralModelLabel = 'Cuentas de Facebook';
 
     protected static ?int $navigationSort = 1;
 
@@ -32,7 +41,7 @@ class FacebookAccountResource extends Resource
         return $form
             ->schema([
                 Forms\Components\Section::make('Información de la Cuenta')
-                    ->description('Configura los datos de tu cuenta de Facebook Ads')
+                    ->description('Configura los datos de acceso a Facebook Ads')
                     ->schema([
                         Forms\Components\TextInput::make('account_name')
                             ->label('Nombre de la Cuenta')
@@ -43,13 +52,7 @@ class FacebookAccountResource extends Resource
                             ->label('ID de la Cuenta')
                             ->required()
                             ->maxLength(255)
-                            ->placeholder('123456789')
-                            ->helperText('El ID de tu cuenta de Facebook Ads Manager'),
-                    ])->columns(2),
-
-                Forms\Components\Section::make('Credenciales de la API')
-                    ->description('Configura las credenciales de la API de Facebook')
-                    ->schema([
+                            ->placeholder('123456789'),
                         Forms\Components\TextInput::make('app_id')
                             ->label('App ID')
                             ->required()
@@ -58,23 +61,21 @@ class FacebookAccountResource extends Resource
                         Forms\Components\TextInput::make('app_secret')
                             ->label('App Secret')
                             ->required()
-                            ->maxLength(255)
                             ->password()
-                            ->placeholder('abcdef123456789...'),
+                            ->maxLength(255),
                         Forms\Components\Textarea::make('access_token')
                             ->label('Access Token')
                             ->required()
                             ->rows(3)
-                            ->placeholder('EAAG...')
-                            ->helperText('El token de acceso de tu aplicación de Facebook'),
+                            ->placeholder('EAA...'),
                     ])->columns(2),
 
                 Forms\Components\Section::make('Estado')
                     ->schema([
                         Forms\Components\Toggle::make('is_active')
-                            ->label('Activo')
+                            ->label('Activa')
                             ->default(true)
-                            ->helperText('Activa o desactiva esta configuración'),
+                            ->helperText('Activa o desactiva esta cuenta'),
                     ]),
             ]);
     }
@@ -93,7 +94,7 @@ class FacebookAccountResource extends Resource
                     ->searchable()
                     ->copyable()
                     ->copyMessage('ID copiado al portapapeles'),
-                Tables\Columns\IconColumn::make('is_active')
+                IconColumn::make('is_active')
                     ->label('Estado')
                     ->boolean()
                     ->trueIcon('heroicon-o-check-circle')
@@ -114,6 +115,16 @@ class FacebookAccountResource extends Resource
                     ->falseLabel('Inactivos'),
             ])
             ->actions([
+                Action::make('view_campaigns')
+                    ->label('Ver Campañas')
+                    ->icon('heroicon-o-chart-bar')
+                    ->color('info')
+                    ->action(function (FacebookAccountResource $record) {
+                        // Redirigir a la página de campañas
+                        return redirect()->route('filament.admin.resources.facebook-accounts.campaigns', $record);
+                    })
+                    ->url(fn (FacebookAccount $record) => route('filament.admin.resources.facebook-accounts.campaigns', $record)),
+                    
                 Tables\Actions\EditAction::make()
                     ->label('Editar'),
             ])
@@ -139,6 +150,7 @@ class FacebookAccountResource extends Resource
             'index' => Pages\ListFacebookAccounts::route('/'),
             'create' => Pages\CreateFacebookAccount::route('/create'),
             'edit' => Pages\EditFacebookAccount::route('/{record}/edit'),
+            'campaigns' => Pages\ViewCampaigns::route('/{record}/campaigns'),
         ];
     }
 
