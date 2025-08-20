@@ -78,7 +78,7 @@
                                         ${{ number_format($ad['spend'], 2) }}
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
-                                        {{ number_format($ad['ctr'] * 100, 2) }}%
+                                        {{ number_format($ad['ctr'], 2) }}%
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-900">
                                         ${{ number_format($ad['cpm'], 2) }}

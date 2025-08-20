@@ -87,7 +87,7 @@ class GoogleSheetsService
                 'action' => 'update',
                 'spreadsheet_id' => $spreadsheetId,
                 'worksheet' => $worksheetName,
-                'updates_data' => json_encode($updates),
+                'updates' => json_encode($updates),
                 'timestamp' => now()->toISOString()
             ];
 

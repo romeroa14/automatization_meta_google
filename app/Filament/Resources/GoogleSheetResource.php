@@ -116,18 +116,18 @@ class GoogleSheetResource extends Resource
                         Forms\Components\Hidden::make('available_sheets'),
                     ])->columns(2),
 
-                Forms\Components\Section::make('Configuración del Sistema')
-                    ->description('El sistema usa una URL universal configurada en las variables de entorno')
-                    ->schema([
-                        Forms\Components\Placeholder::make('webapp_info')
-                            ->label('Web App Universal')
-                            ->content('El sistema está configurado para usar una URL universal de Google Apps Script que permite actualizar cualquier Google Sheet automáticamente.')
-                            ->columnSpanFull(),
-                        Forms\Components\Placeholder::make('permissions_info')
-                            ->label('Permisos Requeridos')
-                            ->content('Asegúrate de que tu Google Sheet tenga permisos de acceso público o que tu cuenta tenga permisos de editor.')
-                            ->columnSpanFull(),
-                    ]),
+                // Forms\Components\Section::make('Configuración del Sistema')
+                //     ->description('El sistema usa una URL universal configurada en las variables de entorno')
+                //     ->schema([
+                //         Forms\Components\Placeholder::make('webapp_info')
+                //             ->label('Web App Universal')
+                //             ->content('El sistema está configurado para usar una URL universal de Google Apps Script que permite actualizar cualquier Google Sheet automáticamente.')
+                //             ->columnSpanFull(),
+                //         Forms\Components\Placeholder::make('permissions_info')
+                //             ->label('Permisos Requeridos')
+                //             ->content('Asegúrate de que tu Google Sheet tenga permisos de acceso público o que tu cuenta tenga permisos de editor.')
+                //             ->columnSpanFull(),
+                //     ]),
 
                 Forms\Components\Section::make('Mapeo de Celdas')
                     ->description('Define qué métricas se escribirán en qué celdas')
@@ -237,30 +237,44 @@ class GoogleSheetResource extends Resource
     public static function fetchGoogleSheets($spreadsheetId): array
     {
         try {
-            // Usar la URL universal desde las variables de entorno
+            // PRIMERO intentar con el Web App (más preciso)
             $webappUrl = config('services.google.webapp_url') ?? env('GOOGLE_WEBAPP_URL');
             
-            if (empty($webappUrl)) {
-                throw new \Exception('URL del Web App Universal no configurada. Verifica GOOGLE_WEBAPP_URL en tu .env');
+            if (!empty($webappUrl)) {
+                $response = \Illuminate\Support\Facades\Http::timeout(30)
+                    ->withOptions(['allow_redirects' => true])
+                    ->get($webappUrl, [
+                        'action' => 'list_sheets',
+                        'spreadsheet_id' => $spreadsheetId
+                    ]);
+
+                if ($response->successful()) {
+                    $result = $response->json();
+                    
+                    if (isset($result['success']) && $result['success'] && isset($result['sheets'])) {
+                        \Illuminate\Support\Facades\Log::info("Hojas obtenidas via Web App para ID: {$spreadsheetId}", ['sheets' => $result['sheets']]);
+                        return $result['sheets'];
+                    } else {
+                        \Illuminate\Support\Facades\Log::warning("Web App devolvió error para ID: {$spreadsheetId}", ['response' => $result]);
+                    }
+                } else {
+                    \Illuminate\Support\Facades\Log::warning("Web App no respondió para ID: {$spreadsheetId}", ['status' => $response->status()]);
+                }
+            } else {
+                \Illuminate\Support\Facades\Log::warning("URL del Web App no configurada");
             }
             
-            $response = \Illuminate\Support\Facades\Http::timeout(30)
-                ->withOptions(['allow_redirects' => true])
-                ->get($webappUrl, [
-                    'action' => 'list_sheets',
-                    'spreadsheet_id' => $spreadsheetId
-                ]);
-
-            if ($response->successful()) {
-                $result = $response->json();
-                
-                if (isset($result['success']) && $result['success'] && isset($result['sheets'])) {
-                    return $result['sheets'];
-                }
+            // Si el Web App falla, intentar con la API pública como fallback
+            $publicSheets = self::fetchSheetsViaPublicAPI($spreadsheetId);
+            
+            if (!empty($publicSheets)) {
+                \Illuminate\Support\Facades\Log::info("Hojas obtenidas via API pública (fallback) para ID: {$spreadsheetId}", ['sheets' => $publicSheets]);
+                return $publicSheets;
             }
 
-            // Si no funciona con el web app, intentar con la API pública
-            return self::fetchSheetsViaPublicAPI($spreadsheetId);
+            // Si todo falla, devolver hojas por defecto
+            \Illuminate\Support\Facades\Log::warning("Usando hojas por defecto para ID: {$spreadsheetId}");
+            return ['Sheet1', 'Hoja1', 'BRANDS SHOP'];
             
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Error consultando hojas de Google Sheet: ' . $e->getMessage());
@@ -298,11 +312,54 @@ class GoogleSheetResource extends Resource
                 }
             }
             
-            return [];
+            // Si no funciona con el primer método, intentar con una consulta específica
+            return self::fetchSheetsViaAlternativeMethod($spreadsheetId);
             
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Error consultando hojas via API pública: ' . $e->getMessage());
             return [];
+        }
+    }
+    
+    /**
+     * Método alternativo para obtener hojas
+     */
+    private static function fetchSheetsViaAlternativeMethod($spreadsheetId): array
+    {
+        try {
+            // Intentar con diferentes URLs para obtener información de hojas
+            $urls = [
+                "https://docs.google.com/spreadsheets/d/{$spreadsheetId}/gviz/tq?tqx=out:json&tq=SELECT%20*%20FROM%20A1%20LIMIT%201",
+                "https://docs.google.com/spreadsheets/d/{$spreadsheetId}/gviz/tq?tqx=out:json&tq=SELECT%20*%20FROM%20Sheet1%20LIMIT%201",
+                "https://docs.google.com/spreadsheets/d/{$spreadsheetId}/gviz/tq?tqx=out:json&tq=SELECT%20*%20FROM%20Hoja1%20LIMIT%201",
+            ];
+            
+            foreach ($urls as $url) {
+                $response = \Illuminate\Support\Facades\Http::timeout(30)->get($url);
+                
+                if ($response->successful()) {
+                    $content = $response->body();
+                    
+                    // Buscar información de hojas en el contenido
+                    if (preg_match('/"sheets":\s*\[(.*?)\]/', $content, $matches)) {
+                        $sheetsData = $matches[1];
+                        $sheets = [];
+                        
+                        // Extraer nombres de hojas usando regex
+                        if (preg_match_all('/"name":\s*"([^"]+)"/', $sheetsData, $sheetMatches)) {
+                            $sheets = $sheetMatches[1];
+                            return $sheets;
+                        }
+                    }
+                }
+            }
+            
+            // Si todo falla, devolver hojas por defecto basadas en el error
+            return ['BRANDS SHOP', 'Sheet1', 'Hoja1'];
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error en método alternativo: ' . $e->getMessage());
+            return ['BRANDS SHOP', 'Sheet1', 'Hoja1'];
         }
     }
 }

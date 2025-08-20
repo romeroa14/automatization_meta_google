@@ -1,5 +1,0 @@
-# Cron job para AdMetricas - Ejecutar cada 5 minutos
-# 1. Verificar tareas programadas y despacharlas a la cola
-# 2. Procesar las colas automáticamente
-
-*/5 * * * * cd /var/www/html/admetricas/data_ia_marketing && php artisan tasks:run-scheduled > /dev/null 2>&1 && php artisan queues:process --timeout=300 > /dev/null 2>&1

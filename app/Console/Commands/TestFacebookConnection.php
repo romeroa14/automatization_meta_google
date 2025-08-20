@@ -43,6 +43,10 @@ class TestFacebookConnection extends Command
             
             if (!$fbAccount) {
                 $this->error('❌ No se encontró ninguna cuenta de Facebook configurada.');
+                $this->info('💡 Para configurar una cuenta:');
+                $this->info('   1. Ve a Facebook Ads Manager');
+                $this->info('   2. Crea una cuenta publicitaria');
+                $this->info('   3. Configura la cuenta en el panel de administración');
                 return 1;
             }
             

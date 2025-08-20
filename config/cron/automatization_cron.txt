@@ -1,0 +1,6 @@
+# Cron job para Automatization FB Google - Ejecutar cada minuto
+# 1. Ejecutar el scheduler de Laravel
+# 2. Procesar las colas automáticamente
+
+* * * * * cd /var/www/html/automatization_fb_google && php artisan schedule:run > /dev/null 2>&1
+* * * * * cd /var/www/html/automatization_fb_google && php artisan queue:work --timeout=300 --stop-when-empty > /dev/null 2>&1
