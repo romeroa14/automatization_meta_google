@@ -339,23 +339,14 @@ class ViewCampaigns extends Page
     }
     
     /**
-     * Obtiene información creativa de los anuncios usando AdCreatives directamente
+     * Obtiene información creativa de los anuncios usando el campo 'creative' directamente
      */
     private function getAdCreatives($account, $adIds): array
     {
         $creatives = [];
         
         try {
-            // Obtener todos los creativos de la cuenta
-            $allCreatives = $account->getAdCreatives(['id', 'name', 'image_url', 'image_hash', 'thumbnail_url', 'body', 'title', 'object_story_spec']);
-            
-            // Crear un mapa de creativos por ID
-            $creativesMap = [];
-            foreach ($allCreatives as $creative) {
-                $creativesMap[$creative->id] = $creative;
-            }
-            
-            // Para cada anuncio, intentar obtener su creative
+            // Para cada anuncio, obtener su creative directamente
             foreach ($adIds as $adId) {
                 try {
                     $ad = new \FacebookAds\Object\Ad($adId);
@@ -363,34 +354,48 @@ class ViewCampaigns extends Page
                     // Obtener información del anuncio incluyendo creative
                     $adData = $ad->getSelf(['id', 'name', 'creative']);
                     
-                    if (isset($adData->creative) && isset($adData->creative['id'])) {
+                    // Debug: Log para ver qué datos obtenemos
+                    Log::info("Datos del anuncio {$adId}:", [
+                        'has_creative' => isset($adData->creative),
+                        'creative_data' => $adData->creative ?? 'no_data'
+                    ]);
+                    
+                    if (isset($adData->creative) && is_array($adData->creative) && isset($adData->creative['id'])) {
                         $creativeId = $adData->creative['id'];
                         
-                        if (isset($creativesMap[$creativeId])) {
-                            $creative = $creativesMap[$creativeId];
+                        // Obtener información completa del creative usando su ID
+                        try {
+                            $creative = new \FacebookAds\Object\AdCreative($creativeId);
+                            $creativeData = $creative->getSelf(['id', 'name', 'image_url', 'image_hash', 'thumbnail_url', 'body', 'title', 'object_story_spec']);
                             
                             $creativeInfo = [
-                                'id' => $creative->id ?? null,
-                                'name' => $creative->name ?? null,
-                                'image_url' => $creative->image_url ?? null,
-                                'image_hash' => $creative->image_hash ?? null,
-                                'thumbnail_url' => $creative->thumbnail_url ?? null,
-                                'body' => $creative->body ?? null,
-                                'title' => $creative->title ?? null,
+                                'id' => $creativeData->id ?? null,
+                                'name' => $creativeData->name ?? null,
+                                'image_url' => $creativeData->image_url ?? null,
+                                'image_hash' => $creativeData->image_hash ?? null,
+                                'thumbnail_url' => $creativeData->thumbnail_url ?? null,
+                                'body' => $creativeData->body ?? null,
+                                'title' => $creativeData->title ?? null,
                                 'local_image_path' => null,
                             ];
                             
                             // Intentar descargar y guardar la imagen localmente
-                            if ($creative->image_url ?? $creative->thumbnail_url) {
-                                $imageUrl = $creative->image_url ?? $creative->thumbnail_url;
+                            $imageUrl = $creativeInfo['image_url'] ?? $creativeInfo['thumbnail_url'];
+                            if ($imageUrl) {
                                 $localPath = $this->downloadAndSaveImage($imageUrl, $adId);
                                 if ($localPath) {
                                     $creativeInfo['local_image_path'] = $localPath;
+                                    Log::info("Imagen descargada para anuncio {$adId}: {$localPath}");
                                 }
                             }
                             
                             $creatives[$adId] = $creativeInfo;
+                            Log::info("Creative completo obtenido para anuncio {$adId}");
+                        } catch (\Exception $e) {
+                            Log::warning("Error obteniendo creative completo para anuncio {$adId}: " . $e->getMessage());
                         }
+                    } else {
+                        Log::warning("Anuncio {$adId} no tiene creative o creative no es un array válido");
                     }
                 } catch (\Exception $e) {
                     Log::warning("Error obteniendo creative para anuncio {$adId}: " . $e->getMessage());
@@ -401,6 +406,7 @@ class ViewCampaigns extends Page
             Log::warning('Error general obteniendo creativos: ' . $e->getMessage());
         }
         
+        Log::info("Total de creativos obtenidos: " . count($creatives));
         return $creatives;
     }
     
