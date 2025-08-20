@@ -132,7 +132,7 @@ class ViewCampaigns extends Page
             
             $account = new AdAccount('act_' . $this->record->account_id);
             
-            // Obtener anuncios de la campaña con métricas
+            // Obtener anuncios de la campaña con métricas expandidas
             $fields = [
                 'ad_id',
                 'ad_name',
@@ -146,6 +146,18 @@ class ViewCampaigns extends Page
                 'ctr',
                 'cpm',
                 'cpc',
+                'actions', // Interacciones detalladas
+                'action_values', // Valores de acciones
+                'video_p25_watched_actions', // Videos vistos al 25%
+                'video_p50_watched_actions', // Videos vistos al 50%
+                'video_p75_watched_actions', // Videos vistos al 75%
+                'video_p100_watched_actions', // Videos vistos al 100%
+                'inline_link_clicks', // Clicks en enlaces
+                'unique_clicks', // Clicks únicos
+                'unique_inline_link_clicks', // Clicks únicos en enlaces
+                'unique_actions', // Acciones únicas
+                'cost_per_action_type', // Costo por tipo de acción
+                'cost_per_unique_action_type', // Costo por acción única
             ];
 
             $params = [
@@ -162,10 +174,30 @@ class ViewCampaigns extends Page
 
             $insights = $account->getInsights($fields, $params);
             
-            $this->ads = collect($insights)->map(function ($insight) {
+            // Obtener información creativa de los anuncios (opcional)
+            $adIds = collect($insights)->pluck('ad_id')->filter()->toArray();
+            $creatives = [];
+            
+            try {
+                $creatives = $this->getAdCreatives($account, $adIds);
+            } catch (\Exception $e) {
+                Log::warning('Error obteniendo creativos, continuando sin imágenes: ' . $e->getMessage());
+            }
+            
+            $this->ads = collect($insights)->map(function ($insight) use ($creatives) {
+                // Procesar interacciones
+                $actions = $insight->actions ?? [];
+                $interactions = $this->processInteractions($actions);
+                
+                // Procesar videos vistos
+                $videoViews = $this->processVideoViews($insight);
+                
+                $creative = $creatives[$insight->ad_id ?? ''] ?? null;
+                
                 return [
                     'ad_id' => $insight->ad_id ?? null,
                     'ad_name' => $insight->ad_name ?? 'Sin nombre',
+                    'creative' => $creative,
                     'impressions' => (int)($insight->impressions ?? 0),
                     'clicks' => (int)($insight->clicks ?? 0),
                     'spend' => (float)($insight->spend ?? 0),
@@ -174,6 +206,13 @@ class ViewCampaigns extends Page
                     'ctr' => (float)($insight->ctr ?? 0),
                     'cpm' => (float)($insight->cpm ?? 0),
                     'cpc' => (float)($insight->cpc ?? 0),
+                    'inline_link_clicks' => (int)($insight->inline_link_clicks ?? 0),
+                    'unique_clicks' => (int)($insight->unique_clicks ?? 0),
+                    'interactions' => $interactions,
+                    'total_interactions' => array_sum(array_column($interactions, 'value')),
+                    'interaction_rate' => $this->calculateInteractionRate($insight->impressions ?? 0, $interactions),
+                    'video_views' => $videoViews,
+                    'video_completion_rate' => $this->calculateVideoCompletionRate($videoViews),
                 ];
             })->toArray();
             
@@ -217,5 +256,190 @@ class ViewCampaigns extends Page
         }
         
         return "Campañas de {$this->record->account_name}";
+    }
+    
+    /**
+     * Procesa las interacciones de un anuncio
+     */
+    private function processInteractions($actions): array
+    {
+        $interactions = [];
+        
+        if (is_array($actions)) {
+            foreach ($actions as $action) {
+                if (isset($action['action_type']) && isset($action['value'])) {
+                    $interactions[] = [
+                        'type' => $action['action_type'],
+                        'value' => (int)$action['value'],
+                        'label' => $this->getInteractionLabel($action['action_type'])
+                    ];
+                }
+            }
+        }
+        
+        return $interactions;
+    }
+    
+    /**
+     * Procesa las vistas de video
+     */
+    private function processVideoViews($insight): array
+    {
+        return [
+            'p25' => (int)($insight->video_p25_watched_actions ?? 0),
+            'p50' => (int)($insight->video_p50_watched_actions ?? 0),
+            'p75' => (int)($insight->video_p75_watched_actions ?? 0),
+            'p100' => (int)($insight->video_p100_watched_actions ?? 0),
+        ];
+    }
+    
+    /**
+     * Calcula la tasa de interacción
+     */
+    private function calculateInteractionRate($impressions, $interactions): float
+    {
+        if ($impressions <= 0) return 0;
+        
+        $totalInteractions = array_sum(array_column($interactions, 'value'));
+        return ($totalInteractions / $impressions) * 100;
+    }
+    
+    /**
+     * Calcula la tasa de finalización de video
+     */
+    private function calculateVideoCompletionRate($videoViews): float
+    {
+        $p100 = $videoViews['p100'] ?? 0;
+        $p25 = $videoViews['p25'] ?? 0;
+        
+        if ($p25 <= 0) return 0;
+        
+        return ($p100 / $p25) * 100;
+    }
+    
+    /**
+     * Obtiene etiquetas legibles para tipos de interacción
+     */
+    private function getInteractionLabel($actionType): string
+    {
+        $labels = [
+            'like' => 'Me gusta',
+            'comment' => 'Comentarios',
+            'share' => 'Compartir',
+            'post_reaction' => 'Reacciones',
+            'post_engagement' => 'Engagement',
+            'link_click' => 'Clicks en enlace',
+            'video_view' => 'Vistas de video',
+            'page_engagement' => 'Engagement de página',
+            'onsite_conversion.messaging_first_reply' => 'Primera respuesta',
+            'onsite_conversion.messaging_conversation_started_7d' => 'Conversación iniciada',
+        ];
+        
+        return $labels[$actionType] ?? ucfirst(str_replace('_', ' ', $actionType));
+    }
+    
+    /**
+     * Obtiene información creativa de los anuncios usando AdCreatives directamente
+     */
+    private function getAdCreatives($account, $adIds): array
+    {
+        $creatives = [];
+        
+        try {
+            // Obtener todos los creativos de la cuenta
+            $allCreatives = $account->getAdCreatives(['id', 'name', 'image_url', 'image_hash', 'thumbnail_url', 'body', 'title', 'object_story_spec']);
+            
+            // Crear un mapa de creativos por ID
+            $creativesMap = [];
+            foreach ($allCreatives as $creative) {
+                $creativesMap[$creative->id] = $creative;
+            }
+            
+            // Para cada anuncio, intentar obtener su creative
+            foreach ($adIds as $adId) {
+                try {
+                    $ad = new \FacebookAds\Object\Ad($adId);
+                    
+                    // Obtener información del anuncio incluyendo creative
+                    $adData = $ad->getSelf(['id', 'name', 'creative']);
+                    
+                    if (isset($adData->creative) && isset($adData->creative['id'])) {
+                        $creativeId = $adData->creative['id'];
+                        
+                        if (isset($creativesMap[$creativeId])) {
+                            $creative = $creativesMap[$creativeId];
+                            
+                            $creativeInfo = [
+                                'id' => $creative->id ?? null,
+                                'name' => $creative->name ?? null,
+                                'image_url' => $creative->image_url ?? null,
+                                'image_hash' => $creative->image_hash ?? null,
+                                'thumbnail_url' => $creative->thumbnail_url ?? null,
+                                'body' => $creative->body ?? null,
+                                'title' => $creative->title ?? null,
+                                'local_image_path' => null,
+                            ];
+                            
+                            // Intentar descargar y guardar la imagen localmente
+                            if ($creative->image_url ?? $creative->thumbnail_url) {
+                                $imageUrl = $creative->image_url ?? $creative->thumbnail_url;
+                                $localPath = $this->downloadAndSaveImage($imageUrl, $adId);
+                                if ($localPath) {
+                                    $creativeInfo['local_image_path'] = $localPath;
+                                }
+                            }
+                            
+                            $creatives[$adId] = $creativeInfo;
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::warning("Error obteniendo creative para anuncio {$adId}: " . $e->getMessage());
+                    continue;
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('Error general obteniendo creativos: ' . $e->getMessage());
+        }
+        
+        return $creatives;
+    }
+    
+    /**
+     * Descarga y guarda una imagen localmente
+     */
+    private function downloadAndSaveImage($imageUrl, $adId): ?string
+    {
+        try {
+            // Crear directorio si no existe
+            $directory = storage_path('app/public/ad-images');
+            if (!file_exists($directory)) {
+                mkdir($directory, 0755, true);
+            }
+            
+            // Generar nombre único para la imagen
+            $extension = pathinfo(parse_url($imageUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+            $filename = "ad_{$adId}_" . time() . ".{$extension}";
+            $localPath = $directory . '/' . $filename;
+            
+            // Verificar si ya existe la imagen
+            $existingFiles = glob($directory . "/ad_{$adId}_*");
+            if (!empty($existingFiles)) {
+                // Usar imagen existente
+                $existingFile = basename($existingFiles[0]);
+                return "storage/ad-images/{$existingFile}";
+            }
+            
+            // Descargar la imagen
+            $imageContent = file_get_contents($imageUrl);
+            
+            if ($imageContent !== false) {
+                file_put_contents($localPath, $imageContent);
+                return "storage/ad-images/{$filename}";
+            }
+        } catch (\Exception $e) {
+            Log::warning("Error descargando imagen para anuncio {$adId}: " . $e->getMessage());
+        }
+        
+        return null;
     }
 } 
