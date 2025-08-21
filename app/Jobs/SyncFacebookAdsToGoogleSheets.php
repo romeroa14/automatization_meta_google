@@ -220,6 +220,9 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
                 // Procesar videos vistos
                 $videoViews = $this->processVideoViews($insight);
                 
+                // Obtener información de la imagen del anuncio
+                $adImage = $this->getAdImage($insight->ad_id ?? null);
+                
                 $ads[] = [
                     'ad_id' => $insight->ad_id ?? null,
                     'ad_name' => $insight->ad_name ?? 'Sin nombre',
@@ -239,6 +242,8 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
                     'interaction_rate' => $this->calculateInteractionRate($insight->impressions ?? 0, $interactions),
                     'video_views' => $videoViews,
                     'video_completion_rate' => $this->calculateVideoCompletionRate($videoViews),
+                    'ad_image_url' => $adImage['url'] ?? null,
+                    'ad_image_local_path' => $adImage['local_path'] ?? null,
                 ];
             }
 
@@ -331,6 +336,80 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
     }
 
     /**
+     * Obtiene la imagen del anuncio
+     */
+    private function getAdImage($adId): array
+    {
+        if (!$adId) {
+            return ['url' => null, 'local_path' => null];
+        }
+
+        try {
+            // Obtener información del anuncio
+            $ad = new \FacebookAds\Object\Ad($adId);
+            $adData = $ad->getSelf(['id', 'name', 'creative']);
+            
+            if (!isset($adData->creative) || !is_array($adData->creative) || !isset($adData->creative['id'])) {
+                return ['url' => null, 'local_path' => null];
+            }
+
+            $creativeId = $adData->creative['id'];
+            $creative = new \FacebookAds\Object\AdCreative($creativeId);
+            $creativeData = $creative->getSelf(['id', 'name', 'image_url', 'image_hash', 'thumbnail_url', 'body', 'title']);
+            
+            $imageUrl = $creativeData->image_url ?? $creativeData->thumbnail_url ?? null;
+            
+            if (!$imageUrl) {
+                return ['url' => null, 'local_path' => null];
+            }
+
+            // Descargar y guardar la imagen localmente
+            $localPath = $this->downloadAndSaveImage($imageUrl, $adId);
+            
+            return [
+                'url' => $imageUrl,
+                'local_path' => $localPath,
+            ];
+
+        } catch (\Exception $e) {
+            Log::warning("Error obteniendo imagen para anuncio {$adId}: " . $e->getMessage());
+            return ['url' => null, 'local_path' => null];
+        }
+    }
+
+    /**
+     * Descarga y guarda una imagen localmente
+     */
+    private function downloadAndSaveImage(string $imageUrl, string $adId): ?string
+    {
+        try {
+            $filename = 'ad_' . $adId . '_' . time() . '.jpg';
+            $path = 'public/ad-images/' . $filename;
+            
+            // Crear directorio si no existe
+            if (!\Illuminate\Support\Facades\Storage::exists('public/ad-images')) {
+                \Illuminate\Support\Facades\Storage::makeDirectory('public/ad-images');
+            }
+            
+            // Descargar imagen
+            $imageContent = file_get_contents($imageUrl);
+            if ($imageContent === false) {
+                return null;
+            }
+            
+            // Guardar imagen
+            \Illuminate\Support\Facades\Storage::put($path, $imageContent);
+            
+            // Retornar ruta relativa para usar con asset()
+            return 'storage/ad-images/' . $filename;
+            
+        } catch (\Exception $e) {
+            Log::warning("Error descargando imagen para anuncio {$adId}: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Actualiza Google Sheets con datos de anuncios individuales usando mapeo de columnas
      */
     private function updateSheetWithIndividualAds($sheetsService, $googleSheet, array $ads): array
@@ -377,9 +456,9 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
             }
 
             // Limitar la cantidad de celdas para evitar errores del Google Apps Script
-            if (count($combinedUpdates) > 100) {
-                Log::warning("⚠️ Demasiadas celdas (" . count($combinedUpdates) . "). Limitando a 100 celdas.");
-                $combinedUpdates = array_slice($combinedUpdates, 0, 100, true);
+            if (count($combinedUpdates) > 200) {
+                Log::warning("⚠️ Demasiadas celdas (" . count($combinedUpdates) . "). Limitando a 200 celdas.");
+                $combinedUpdates = array_slice($combinedUpdates, 0, 200, true);
             }
 
             Log::info("📊 Total de celdas a actualizar: " . count($combinedUpdates));
@@ -463,7 +542,31 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
             'total_interactions' => number_format($ad['total_interactions'] ?? 0),
             'interaction_rate' => number_format($ad['interaction_rate'] ?? 0, 2) . '%',
             'video_views_p100' => number_format($ad['video_views']['p100'] ?? 0),
+            'ad_image_url' => $this->formatImageUrl($ad['ad_image_url'] ?? 'Sin imagen'),
+            'ad_image_local_path' => $this->formatImageUrl($ad['ad_image_local_path'] ?? 'Sin imagen local'),
             default => 'N/A',
         };
+    }
+
+    /**
+     * Formatea la URL de la imagen para evitar problemas con Google Apps Script
+     */
+    private function formatImageUrl(?string $url): string
+    {
+        if (!$url || $url === 'Sin imagen' || $url === 'Sin imagen local') {
+            return 'Sin imagen';
+        }
+
+        // Si es una URL muy larga, acortarla
+        if (strlen($url) > 200) {
+            return 'URL muy larga - Ver en Facebook';
+        }
+
+        // Si es una URL local, convertirla a URL completa
+        if (strpos($url, 'storage/') === 0) {
+            return config('app.url') . '/' . $url;
+        }
+
+        return $url;
     }
 }
