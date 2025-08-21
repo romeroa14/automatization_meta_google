@@ -69,28 +69,34 @@ class GoogleSlidesReportService
     /**
      * Prepara todos los datos necesarios para el reporte
      */
-    protected function prepareReportData(Report $report): array
+    public function prepareReportData(Report $report): array
     {
         $slides = [];
         
         // Slide 1: Portada
         $slides[] = $this->createCoverSlide($report);
         
+        // Slide 2: Resumen general
+        $slides[] = $this->createGeneralSummarySlide($report);
+        
         // Slides por marca
         $brands = $report->brands()->ordered()->get();
         foreach ($brands as $brand) {
-            $brandSlides = $this->createBrandSlides($report, $brand);
-            $slides = array_merge($slides, $brandSlides);
+            // Slide de título de marca
+            $slides[] = $this->createBrandTitleSlide($brand);
+            
+            // Slides de campañas de esta marca
+            $campaigns = $brand->campaigns()->ordered()->get();
+            foreach ($campaigns as $campaign) {
+                $slides[] = $this->createCampaignSlide($campaign);
+            }
         }
         
-        // Slides de gráficas
+        // Slides de gráficas estadísticas
         if (!empty($report->charts_config)) {
             $chartSlides = $this->createChartSlides($report);
             $slides = array_merge($slides, $chartSlides);
         }
-        
-        // Slide de resumen
-        $slides[] = $this->createSummarySlide($report);
         
         return [
             'slides' => $slides,
@@ -119,17 +125,42 @@ class GoogleSlidesReportService
     }
 
     /**
-     * Crea las diapositivas para una marca específica
+     * Crea la diapositiva de resumen general
      */
-    protected function createBrandSlides(Report $report, ReportBrand $brand): array
+    protected function createGeneralSummarySlide(Report $report): array
     {
-        $slides = [];
-        
-        // Slide de título de marca
-        $slides[] = [
+        return [
+            'type' => 'general_summary',
+            'title' => 'Resumen General del Período',
+            'subtitle' => 'Métricas Totales',
+            'content' => [
+                'total_reach' => number_format($report->total_reach),
+                'total_impressions' => number_format($report->total_impressions),
+                'total_clicks' => number_format($report->total_clicks),
+                'total_spend' => '$' . number_format($report->total_spend, 2),
+                'total_brands' => $report->total_brands,
+                'total_campaigns' => $report->total_campaigns,
+                'period_days' => $report->period_days,
+                'average_ctr' => $report->total_impressions > 0 ? 
+                    number_format(($report->total_clicks / $report->total_impressions) * 100, 2) . '%' : '0%',
+                'average_cpm' => $report->total_impressions > 0 ? 
+                    '$' . number_format(($report->total_spend / $report->total_impressions) * 1000, 2) : '$0',
+                'average_cpc' => $report->total_clicks > 0 ? 
+                    '$' . number_format($report->total_spend / $report->total_clicks, 2) : '$0',
+            ],
+            'layout' => 'content',
+        ];
+    }
+
+    /**
+     * Crea la diapositiva de título de marca
+     */
+    protected function createBrandTitleSlide(ReportBrand $brand): array
+    {
+        return [
             'type' => 'brand_title',
             'title' => $brand->brand_name,
-            'subtitle' => "Resumen de Campañas",
+            'subtitle' => 'Resumen de Campañas',
             'content' => [
                 'total_campaigns' => $brand->total_campaigns,
                 'total_reach' => number_format($brand->total_reach),
@@ -142,15 +173,9 @@ class GoogleSlidesReportService
             ],
             'layout' => 'content',
         ];
-        
-        // Slides de campañas individuales
-        $campaigns = $brand->campaigns()->ordered()->get();
-        foreach ($campaigns as $campaign) {
-            $slides[] = $this->createCampaignSlide($campaign);
-        }
-        
-        return $slides;
     }
+
+
 
     /**
      * Crea una diapositiva para una campaña específica
