@@ -21,10 +21,10 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
             $table->json('settings')->nullable();
             $table->string('selected_ad_account_id')->nullable();
-            $table->string('selected_campaign_id')->nullable();
+            $table->json('selected_campaign_ids')->nullable();
             $table->timestamps();
             
-            $table->unique('account_id');
+           
         });
     }
 

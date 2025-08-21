@@ -19,12 +19,13 @@ class FacebookAccount extends Model
         'is_active',
         'settings',
         'selected_ad_account_id',
-        'selected_campaign_id'
+        'selected_campaign_ids'
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'settings' => 'array',
+        'selected_campaign_ids' => 'array',
     ];
 
     protected $hidden = [

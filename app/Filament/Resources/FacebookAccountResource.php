@@ -146,10 +146,11 @@ class FacebookAccountResource extends Resource
                                         }
                                     })
                             ),
-                        Forms\Components\Select::make('selected_campaign_id')
-                            ->label('Campaña Específica (Opcional)')
-                            ->helperText('Si seleccionas una campaña específica, solo se sincronizarán los anuncios de esa campaña')
-                            ->placeholder('Todas las campañas')
+                        Forms\Components\Select::make('selected_campaign_ids')
+                            ->label('Campañas Específicas (Opcional)')
+                            ->helperText('Si seleccionas campañas específicas, solo se sincronizarán los anuncios de esas campañas. Deja vacío para todas las campañas.')
+                            ->placeholder('Selecciona campañas')
+                            ->multiple()
                             ->searchable()
                             ->options(function ($get, $record) {
                                 $adAccountId = $get('selected_ad_account_id');
@@ -169,7 +170,7 @@ class FacebookAccountResource extends Resource
                                     $account = new AdAccount('act_' . $adAccountId);
                                     $campaigns = $account->getCampaigns(['id', 'name', 'status']);
                                     
-                                    $options = ['all' => 'Todas las Campañas'];
+                                    $options = [];
                                     foreach ($campaigns as $campaign) {
                                         if ($campaign->status == 'ACTIVE') {
                                             $options[$campaign->id] = $campaign->name . ' (ID: ' . $campaign->id . ')';
