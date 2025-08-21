@@ -13,11 +13,40 @@ class GoogleSheetsService
     /**
      * Actualiza un Google Sheet usando el web app
      */
-    public function updateSheet($spreadsheetId, $worksheetName, $data, $cellMapping)
+    public function updateSheet($spreadsheetId, $worksheetName, $data, $cellMapping = null)
     {
         try {
             Log::info("🔄 Actualizando Google Sheet: {$spreadsheetId}");
             Log::info("📊 Hoja: {$worksheetName}");
+            
+            // Si no hay cellMapping, verificar si los datos ya vienen con celdas específicas
+            if (!$cellMapping) {
+                // Verificar si $data ya contiene celdas específicas (como A1, B2, etc.)
+                $hasSpecificCells = false;
+                if (is_array($data)) {
+                    foreach (array_keys($data) as $key) {
+                        if (preg_match('/^[A-Z]+\d+$/', $key)) {
+                            $hasSpecificCells = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if ($hasSpecificCells) {
+                    Log::info("📋 Datos con celdas específicas detectados. Actualizando directamente...");
+                    // Los datos ya vienen con celdas específicas, usar directamente
+                    return $this->executeScriptAutomatically($spreadsheetId, $worksheetName, $data);
+                } else {
+                    Log::info("📋 No hay mapeo de celdas. Verificando si es hoja automática...");
+                    return [
+                        'success' => false,
+                        'message' => 'No hay mapeo de celdas configurado. Para hojas automáticas, use el servicio AutoSheetGeneratorService.',
+                        'updated_cells' => 0,
+                        'total_cells' => 0,
+                        'data_synced' => $data
+                    ];
+                }
+            }
             
             // Preparar datos para actualización
             $updates = $this->prepareUpdates($data, $cellMapping);
@@ -82,6 +111,12 @@ class GoogleSheetsService
             }
 
             Log::info("🌐 Ejecutando web app universal: {$webappUrl}");
+            Log::info("📊 Parámetros enviados:", [
+                'spreadsheet_id' => $spreadsheetId,
+                'worksheet' => $worksheetName,
+                'updates_count' => count($updates),
+                'updates_sample' => array_slice($updates, 0, 5, true)
+            ]);
 
             $params = [
                 'action' => 'update',

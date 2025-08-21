@@ -129,24 +129,53 @@ class GoogleSheetResource extends Resource
                 //             ->columnSpanFull(),
                 //     ]),
 
+                Forms\Components\Section::make('Configuración de Datos')
+                    ->description('Elige cómo quieres que se muestren los datos')
+                    ->schema([
+                        Forms\Components\Toggle::make('individual_ads')
+                            ->label('Anuncios Individuales')
+                            ->default(false)
+                            ->helperText('Si activas esto, cada anuncio aparecerá en una fila separada. Si no, se mostrarán totales por campaña.')
+                            ->reactive(),
+                    ]),
+
                 Forms\Components\Section::make('Mapeo de Celdas')
                     ->description('Define qué métricas se escribirán en qué celdas')
                     ->schema([
                         Forms\Components\KeyValue::make('cell_mapping')
                             ->label('Mapeo de Métricas')
                             ->keyLabel('Métrica')
-                            ->valueLabel('Celda')
+                            ->valueLabel('Celda Base')
                             ->addActionLabel('Agregar Métrica')
                             ->default([
-                                'impressions' => 'B2',
-                                'clicks' => 'B3',
-                                'spend' => 'B4',
-                                'reach' => 'B5',
-                                'ctr' => 'B6',
-                                'cpm' => 'B7',
-                                'cpc' => 'B8',
+                                'ad_name' => 'A',
+                                'ad_id' => 'B',
+                                'campaign_name' => 'C',
+                                'impressions' => 'D',
+                                'clicks' => 'E',
+                                'spend' => 'F',
+                                'reach' => 'G',
+                                'ctr' => 'H',
+                                'cpm' => 'I',
+                                'cpc' => 'J',
+                                'total_interactions' => 'K',
+                                'interaction_rate' => 'L',
+                                'video_views_p100' => 'M',
                             ])
-                            ->helperText('Define qué métricas se escribirán en qué celdas del spreadsheet'),
+                            ->helperText(function ($get) {
+                                if ($get('individual_ads')) {
+                                    return 'Define las columnas donde se mostrarán los datos. Los anuncios se desplegarán en filas consecutivas empezando desde la fila 2.';
+                                } else {
+                                    return 'Define qué métricas se escribirán en qué celdas específicas del spreadsheet.';
+                                }
+                            }),
+                        Forms\Components\TextInput::make('start_row')
+                            ->label('Fila de Inicio')
+                            ->default('2')
+                            ->helperText('Fila donde comenzarán los datos (la fila 1 se usa para headers)')
+                            ->visible(fn ($get) => $get('individual_ads'))
+                            ->numeric()
+                            ->minValue(2),
                     ]),
 
                 Forms\Components\Section::make('Estado')

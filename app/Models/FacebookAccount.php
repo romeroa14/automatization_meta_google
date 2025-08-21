@@ -17,7 +17,9 @@ class FacebookAccount extends Model
         'app_secret',
         'access_token',
         'is_active',
-        'settings'
+        'settings',
+        'selected_ad_account_id',
+        'selected_campaign_id'
     ];
 
     protected $casts = [

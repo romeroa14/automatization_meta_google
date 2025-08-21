@@ -20,6 +20,8 @@ return new class extends Migration
             $table->text('access_token');
             $table->boolean('is_active')->default(true);
             $table->json('settings')->nullable();
+            $table->string('selected_ad_account_id')->nullable();
+            $table->string('selected_campaign_id')->nullable();
             $table->timestamps();
             
             $table->unique('account_id');

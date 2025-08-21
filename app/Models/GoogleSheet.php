@@ -16,7 +16,9 @@ class GoogleSheet extends Model
         'worksheet_name',
         'cell_mapping',
         'is_active',
-        'settings'
+        'settings',
+        'individual_ads',
+        'start_row'
     ];
 
     protected $rules = [
@@ -26,12 +28,15 @@ class GoogleSheet extends Model
         'cell_mapping' => 'required|array',
         'is_active' => 'required|boolean',
         'settings' => 'nullable|array',
+        'individual_ads' => 'boolean',
+        'start_row' => 'nullable|integer|min:2',
     ];
 
     protected $casts = [
         'cell_mapping' => 'array',
         'is_active' => 'boolean',
         'settings' => 'array',
+        'individual_ads' => 'boolean',
     ];
 
     public function automationTasks(): HasMany

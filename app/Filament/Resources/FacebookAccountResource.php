@@ -11,7 +11,8 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Filament\Tables\Actions\Action;
+use Filament\Tables\Actions\Action as TableAction;
+use Filament\Forms\Components\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Section;
@@ -67,7 +68,169 @@ class FacebookAccountResource extends Resource
                             ->label('Access Token')
                             ->required()
                             ->rows(3)
-                            ->placeholder('EAA...'),
+                            ->placeholder('EAA...')
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, $set) {
+                                // Limpiar campaña seleccionada cuando cambie el token
+                                $set('selected_campaign_id', null);
+                            }),
+                    ])->columns(2),
+
+                Forms\Components\Section::make('Configuración de Automatización')
+                    ->description('Configura qué datos se sincronizarán')
+                    ->schema([
+                        Forms\Components\TextInput::make('selected_ad_account_id')
+                            ->label('Cuenta Publicitaria para Sincronización')
+                            ->helperText('ID de la cuenta publicitaria específica (dejar vacío para usar la cuenta principal)')
+                            ->placeholder('Ej: 658326730301827')
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, $set) {
+                                if ($state) {
+                                    $set('selected_campaign_id', null);
+                                }
+                            })
+                            ->suffixAction(
+                                Action::make('test_connection')
+                                    ->label('Probar Conexión')
+                                    ->icon('heroicon-o-arrow-path')
+                                    ->color('primary')
+                                    ->action(function ($state, $set, $get) {
+                                        if (empty($state)) {
+                                            Notification::make()
+                                                ->title('Error')
+                                                ->body('Primero ingresa el ID de la cuenta publicitaria')
+                                                ->danger()
+                                                ->send();
+                                            return;
+                                        }
+                                        
+                                        $appId = $get('app_id');
+                                        $appSecret = $get('app_secret');
+                                        $accessToken = $get('access_token');
+                                        
+                                        if (!$appId || !$appSecret || !$accessToken) {
+                                            Notification::make()
+                                                ->title('Error')
+                                                ->body('Completa App ID, App Secret y Access Token antes de probar la conexión.')
+                                                ->danger()
+                                                ->send();
+                                            return;
+                                        }
+                                        
+                                        try {
+                                            // Inicializar Facebook API con datos del formulario
+                                            Api::init($appId, $appSecret, $accessToken);
+                                            
+                                            $account = new AdAccount('act_' . $state);
+                                            $campaigns = $account->getCampaigns(['id', 'name', 'status']);
+                                            
+                                            $activeCampaigns = 0;
+                                            foreach ($campaigns as $campaign) {
+                                                if ($campaign->status == 'ACTIVE') {
+                                                    $activeCampaigns++;
+                                                }
+                                            }
+                                            
+                                            Notification::make()
+                                                ->title('Conexión Exitosa')
+                                                ->body("Se encontraron {$activeCampaigns} campañas activas en la cuenta publicitaria {$state}")
+                                                ->success()
+                                                ->send();
+                                                
+                                        } catch (\Exception $e) {
+                                            Notification::make()
+                                                ->title('Error de Conexión')
+                                                ->body('Error conectando con Facebook: ' . $e->getMessage())
+                                                ->danger()
+                                                ->send();
+                                        }
+                                    })
+                            ),
+                        Forms\Components\Select::make('selected_campaign_id')
+                            ->label('Campaña Específica (Opcional)')
+                            ->helperText('Si seleccionas una campaña específica, solo se sincronizarán los anuncios de esa campaña')
+                            ->placeholder('Todas las campañas')
+                            ->searchable()
+                            ->options(function ($get, $record) {
+                                $adAccountId = $get('selected_ad_account_id');
+                                $appId = $get('app_id');
+                                $appSecret = $get('app_secret');
+                                $accessToken = $get('access_token');
+                                
+                                // Verificar que tengamos todos los datos necesarios
+                                if (!$adAccountId || !$appId || !$appSecret || !$accessToken) {
+                                    return [];
+                                }
+                                
+                                try {
+                                    // Inicializar Facebook API con datos del formulario
+                                    Api::init($appId, $appSecret, $accessToken);
+                                    
+                                    $account = new AdAccount('act_' . $adAccountId);
+                                    $campaigns = $account->getCampaigns(['id', 'name', 'status']);
+                                    
+                                    $options = ['all' => 'Todas las Campañas'];
+                                    foreach ($campaigns as $campaign) {
+                                        if ($campaign->status == 'ACTIVE') {
+                                            $options[$campaign->id] = $campaign->name . ' (ID: ' . $campaign->id . ')';
+                                        }
+                                    }
+                                    
+                                    return $options;
+                                } catch (\Exception $e) {
+                                    \Illuminate\Support\Facades\Log::error('Error obteniendo campañas: ' . $e->getMessage());
+                                    return ['error' => 'Error conectando con Facebook: ' . $e->getMessage()];
+                                }
+                            })
+                            ->visible(fn ($get) => !empty($get('selected_ad_account_id')))
+                            ->reactive()
+                            ->suffixAction(
+                                Action::make('refresh_campaigns')
+                                    ->label('Refrescar')
+                                    ->icon('heroicon-o-arrow-path')
+                                    ->color('info')
+                                    ->action(function ($state, $set, $get) {
+                                        $adAccountId = $get('selected_ad_account_id');
+                                        $appId = $get('app_id');
+                                        $appSecret = $get('app_secret');
+                                        $accessToken = $get('access_token');
+                                        
+                                        if (!$adAccountId || !$appId || !$appSecret || !$accessToken) {
+                                            Notification::make()
+                                                ->title('Error')
+                                                ->body('Completa todos los campos antes de refrescar las campañas.')
+                                                ->danger()
+                                                ->send();
+                                            return;
+                                        }
+                                        
+                                        try {
+                                            Api::init($appId, $appSecret, $accessToken);
+                                            $account = new AdAccount('act_' . $adAccountId);
+                                            $campaigns = $account->getCampaigns(['id', 'name', 'status']);
+                                            
+                                            $activeCampaigns = 0;
+                                            foreach ($campaigns as $campaign) {
+                                                if ($campaign->status == 'ACTIVE') {
+                                                    $activeCampaigns++;
+                                                }
+                                            }
+                                            
+                                            Notification::make()
+                                                ->title('Campañas Actualizadas')
+                                                ->body("Se encontraron {$activeCampaigns} campañas activas")
+                                                ->success()
+                                                ->send();
+                                                
+                                        } catch (\Exception $e) {
+                                            Notification::make()
+                                                ->title('Error')
+                                                ->body('Error obteniendo campañas: ' . $e->getMessage())
+                                                ->danger()
+                                                ->send();
+                                        }
+                                    })
+                            ),
                     ])->columns(2),
 
                 Forms\Components\Section::make('Estado')
@@ -115,7 +278,7 @@ class FacebookAccountResource extends Resource
                     ->falseLabel('Inactivos'),
             ])
             ->actions([
-                Action::make('view_campaigns')
+                TableAction::make('view_campaigns')
                     ->label('Ver Campañas')
                     ->icon('heroicon-o-chart-bar')
                     ->color('info')

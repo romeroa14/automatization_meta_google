@@ -19,6 +19,8 @@ return new class extends Migration
             $table->json('cell_mapping');
             $table->boolean('is_active')->default(true);
             $table->json('settings')->nullable();
+            $table->boolean('individual_ads')->default(false);
+            $table->integer('start_row')->default(2);
             $table->timestamps();
         });
     }
