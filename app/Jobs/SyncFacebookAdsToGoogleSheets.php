@@ -71,12 +71,12 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
                 Log::info("📋 Usando totales por campaña...");
                 // Calcular totales de todos los anuncios
                 $totals = $this->calculateTotals($ads);
-                $result = $sheetsService->updateSheet(
-                    $googleSheet->spreadsheet_id,
-                    $googleSheet->worksheet_name,
+                            $result = $sheetsService->updateSheet(
+                $googleSheet->spreadsheet_id,
+                $googleSheet->worksheet_name,
                     $totals,
-                    $googleSheet->cell_mapping
-                );
+                $googleSheet->formatted_cell_mapping
+            );
             }
             
             // 5. Actualizar log con resultado
@@ -102,7 +102,7 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
                     $report .= "Anuncio " . ($index + 1) . ": {$ad['ad_name']}\n";
                     $report .= "  - Impresiones: " . number_format($ad['impressions']) . "\n";
                     $report .= "  - Clicks: " . number_format($ad['clicks']) . "\n";
-                    $report .= "  - Gasto: $" . number_format($ad['spend'], 2) . "\n";
+                    // $report .= "  - Gasto: $" . number_format($ad['spend'], 2) . "\n";
                     $report .= "  - CTR: " . number_format($ad['ctr'], 2) . "%\n";
                     $report .= "  - Interacciones: " . number_format($ad['total_interactions']) . "\n\n";
                 }
@@ -167,7 +167,7 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
             'campaign_name',
             'impressions',
             'clicks',
-            'spend',
+            // 'spend',
             'reach',
             'frequency',
             'ctr',
@@ -194,6 +194,27 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
                 'until' => date('Y-m-d'),
             ],
         ];
+
+        // Agregar breakdowns geográficos SOLO si están configurados en el mapeo
+        $googleSheet = $this->task->googleSheet;
+        $cellMapping = $googleSheet->formatted_cell_mapping ?? [];
+        
+        $geographicMetrics = ['country', 'region', 'country_region'];
+        $hasGeographicData = false;
+        
+        foreach ($geographicMetrics as $metric) {
+            if (array_key_exists($metric, $cellMapping)) {
+                $hasGeographicData = true;
+                break;
+            }
+        }
+        
+        if ($hasGeographicData) {
+            $params['breakdowns'] = ['country', 'region'];
+            Log::info("🌍 Agregando breakdowns geográficos: country, region");
+        } else {
+            Log::info("📊 Sin breakdowns geográficos - datos por anuncio únicamente");
+        }
 
         // Si hay una campaña específica configurada, filtrar por ella
         $fbAccount = $this->task->facebookAccount;
@@ -223,13 +244,16 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
                 // Obtener información de la imagen del anuncio
                 $adImage = $this->getAdImage($insight->ad_id ?? null);
                 
+                // Procesar información geográfica
+                $geographicData = $this->processGeographicData($insight);
+                
                 $ads[] = [
                     'ad_id' => $insight->ad_id ?? null,
                     'ad_name' => $insight->ad_name ?? 'Sin nombre',
                     'campaign_name' => $insight->campaign_name ?? 'Sin campaña',
                     'impressions' => (int)($insight->impressions ?? 0),
                     'clicks' => (int)($insight->clicks ?? 0),
-                    'spend' => (float)($insight->spend ?? 0),
+                    // 'spend' => (float)($insight->spend ?? 0),
                     'reach' => (int)($insight->reach ?? 0),
                     'frequency' => (float)($insight->frequency ?? 0),
                     'ctr' => (float)($insight->ctr ?? 0),
@@ -244,6 +268,7 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
                     'video_completion_rate' => $this->calculateVideoCompletionRate($videoViews),
                     'ad_image_url' => $adImage['url'] ?? null,
                     'ad_image_local_path' => $adImage['local_path'] ?? null,
+                    'geographic_data' => $geographicData,
                 ];
             }
 
@@ -336,6 +361,31 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
     }
 
     /**
+     * Procesa los datos geográficos del insight
+     */
+    private function processGeographicData($insight): array
+    {
+        $geographicData = [
+            'country' => $insight->country ?? 'Desconocido',
+            'region' => $insight->region ?? 'Desconocido',
+            'country_region' => '',
+            'top_countries' => [],
+            'top_regions' => [],
+        ];
+
+        // Crear combinación país-región
+        if ($geographicData['country'] !== 'Desconocido' && $geographicData['region'] !== 'Desconocido') {
+            $geographicData['country_region'] = $geographicData['country'] . ' - ' . $geographicData['region'];
+        } elseif ($geographicData['country'] !== 'Desconocido') {
+            $geographicData['country_region'] = $geographicData['country'];
+        } else {
+            $geographicData['country_region'] = 'Desconocido';
+        }
+
+        return $geographicData;
+    }
+
+    /**
      * Obtiene la imagen del anuncio
      */
     private function getAdImage($adId): array
@@ -415,7 +465,7 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
     private function updateSheetWithIndividualAds($sheetsService, $googleSheet, array $ads): array
     {
         try {
-            $cellMapping = $googleSheet->cell_mapping ?? [];
+            $cellMapping = $googleSheet->formatted_cell_mapping ?? [];
             $startRow = $googleSheet->start_row ?? 2;
             
             if (empty($cellMapping)) {
@@ -510,16 +560,16 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
         $totalVideoViews = array_sum(array_column($ads, 'video_views.p100'));
 
         return [
+            'cpc' => $totalClicks > 0 ? $totalSpend / $totalClicks : 0,
             'impressions' => $totalImpressions,
-            'clicks' => $totalClicks,
-            'spend' => $totalSpend,
             'reach' => $totalReach,
             'ctr' => $totalImpressions > 0 ? ($totalClicks / $totalImpressions) * 100 : 0,
-            'cpm' => $totalImpressions > 0 ? ($totalSpend / $totalImpressions) * 1000 : 0,
-            'cpc' => $totalClicks > 0 ? $totalSpend / $totalClicks : 0,
             'total_interactions' => $totalInteractions,
             'interaction_rate' => $totalImpressions > 0 ? ($totalInteractions / $totalImpressions) * 100 : 0,
             'video_views_p100' => $totalVideoViews,
+            'clicks' => $totalClicks,
+            'cpm' => $totalImpressions > 0 ? ($totalSpend / $totalImpressions) * 1000 : 0,
+            // 'spend' => $totalSpend,
         ];
     }
 
@@ -534,7 +584,7 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
             'campaign_name' => $ad['campaign_name'] ?? 'Sin campaña',
             'impressions' => number_format($ad['impressions'] ?? 0),
             'clicks' => number_format($ad['clicks'] ?? 0),
-            'spend' => '$' . number_format($ad['spend'] ?? 0, 2),
+            // 'spend' => '$' . number_format($ad['spend'] ?? 0, 2),
             'reach' => number_format($ad['reach'] ?? 0),
             'ctr' => number_format($ad['ctr'] ?? 0, 2) . '%',
             'cpm' => '$' . number_format($ad['cpm'] ?? 0, 2),
@@ -544,6 +594,9 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
             'video_views_p100' => number_format($ad['video_views']['p100'] ?? 0),
             'ad_image_url' => $this->formatImageUrl($ad['ad_image_url'] ?? 'Sin imagen'),
             'ad_image_local_path' => $this->formatImageUrl($ad['ad_image_local_path'] ?? 'Sin imagen local'),
+            'country' => $ad['geographic_data']['country'] ?? 'Desconocido',
+            'region' => $ad['geographic_data']['region'] ?? 'Desconocido',
+            'country_region' => $ad['geographic_data']['country_region'] ?? 'Desconocido',
             default => 'N/A',
         };
     }

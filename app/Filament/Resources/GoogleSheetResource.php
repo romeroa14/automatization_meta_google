@@ -142,26 +142,111 @@ class GoogleSheetResource extends Resource
                 Forms\Components\Section::make('Mapeo de Celdas')
                     ->description('Define qué métricas se escribirán en qué celdas')
                     ->schema([
-                        Forms\Components\KeyValue::make('cell_mapping')
+                        Forms\Components\Repeater::make('cell_mapping')
                             ->label('Mapeo de Métricas')
-                            ->keyLabel('Métrica')
-                            ->valueLabel('Celda Base')
-                            ->addActionLabel('Agregar Métrica')
-                            ->default([
-                                'ad_name' => 'A',
-                                'ad_id' => 'B',
-                                'campaign_name' => 'C',
-                                'impressions' => 'D',
-                                'clicks' => 'E',
-                                'spend' => 'F',
-                                'reach' => 'G',
-                                'ctr' => 'H',
-                                'cpm' => 'I',
-                                'cpc' => 'J',
-                                'total_interactions' => 'K',
-                                'interaction_rate' => 'L',
-                                'video_views_p100' => 'M',
+                            ->default(function ($record) {
+                                if ($record) {
+                                    return $record->form_mapping;
+                                }
+                                return [
+                                    ['metric' => 'ad_name', 'column' => 'A'],
+                                    ['metric' => 'ad_id', 'column' => 'B'],
+                                    ['metric' => 'campaign_name', 'column' => 'C'],
+                                    ['metric' => 'impressions', 'column' => 'D'],
+                                    ['metric' => 'clicks', 'column' => 'E'],
+                                    ['metric' => 'spend', 'column' => 'F'],
+                                    ['metric' => 'reach', 'column' => 'G'],
+                                    ['metric' => 'ctr', 'column' => 'H'],
+                                    ['metric' => 'cpm', 'column' => 'I'],
+                                    ['metric' => 'cpc', 'column' => 'J'],
+                                ];
+                            })
+                            ->afterStateHydrated(function ($state, $record) {
+                                // Asegurar que se carguen los datos correctamente al editar
+                                if ($record && $record->form_mapping) {
+                                    return $record->form_mapping;
+                                }
+                                return $state;
+                            })
+                            ->schema([
+                                Forms\Components\Select::make('metric')
+                                    ->label('Métrica')
+                                    ->options([
+                                        // Métricas básicas
+                                        'ad_name' => 'Nombre del Anuncio',
+                                        'ad_id' => 'ID del Anuncio',
+                                        'campaign_name' => 'Nombre de la Campaña',
+                                        
+                                        // Métricas de rendimiento
+                                        'impressions' => 'Impresiones',
+                                        'clicks' => 'Clicks',
+                                        'spend' => 'Gasto',
+                                        'reach' => 'Alcance',
+                                        'ctr' => 'CTR (Tasa de Clicks)',
+                                        'cpm' => 'CPM (Costo por Mil Impresiones)',
+                                        'cpc' => 'CPC (Costo por Click)',
+                                        
+                                        // Métricas de engagement
+                                        'total_interactions' => 'Total de Interacciones',
+                                        'interaction_rate' => 'Tasa de Interacción',
+                                        'video_views_p100' => 'Vistas de Video al 100%',
+                                        
+                                        // Métricas geográficas
+                                        'country' => 'País',
+                                        'region' => 'Región/Estado',
+                                        'country_region' => 'País - Región',
+                                        
+                                        // Métricas adicionales
+                                        'frequency' => 'Frecuencia',
+                                        'inline_link_clicks' => 'Clicks en Enlaces',
+                                        'unique_clicks' => 'Clicks Únicos',
+                                        'video_completion_rate' => 'Tasa de Finalización de Video',
+                                    ])
+                                    ->required()
+                                    ->searchable()
+                                    ->placeholder('Selecciona una métrica'),
+                                
+                                Forms\Components\Select::make('column')
+                                    ->label('Columna')
+                                    ->options([
+                                        'A' => 'A',
+                                        'B' => 'B',
+                                        'C' => 'C',
+                                        'D' => 'D',
+                                        'E' => 'E',
+                                        'F' => 'F',
+                                        'G' => 'G',
+                                        'H' => 'H',
+                                        'I' => 'I',
+                                        'J' => 'J',
+                                        'K' => 'K',
+                                        'L' => 'L',
+                                        'M' => 'M',
+                                        'N' => 'N',
+                                        'O' => 'O',
+                                        'P' => 'P',
+                                        'Q' => 'Q',
+                                        'R' => 'R',
+                                        'S' => 'S',
+                                        'T' => 'T',
+                                        'U' => 'U',
+                                        'V' => 'V',
+                                        'W' => 'W',
+                                        'X' => 'X',
+                                        'Y' => 'Y',
+                                        'Z' => 'Z',
+                                    ])
+                                    ->required()
+                                    ->placeholder('Selecciona una columna'),
                             ])
+                            ->columns(2)
+                            ->defaultItems(10)
+                            ->addActionLabel('Agregar Métrica')
+                            ->reorderable(false)
+                            ->collapsible()
+                            ->itemLabel(fn (array $state): ?string => 
+                                isset($state['metric']) ? self::getMetricLabel($state['metric']) : null
+                            )
                             ->helperText(function ($get) {
                                 if ($get('individual_ads')) {
                                     return 'Define las columnas donde se mostrarán los datos. Los anuncios se desplegarán en filas consecutivas empezando desde la fila 2.';
@@ -390,5 +475,45 @@ class GoogleSheetResource extends Resource
             \Illuminate\Support\Facades\Log::error('Error en método alternativo: ' . $e->getMessage());
             return ['BRANDS SHOP', 'Sheet1', 'Hoja1'];
         }
+    }
+
+    /**
+     * Obtiene la etiqueta en español para una métrica
+     */
+    public static function getMetricLabel(string $metric): string
+    {
+        return match($metric) {
+            // Métricas básicas
+            'ad_name' => 'Nombre del Anuncio',
+            'ad_id' => 'ID del Anuncio',
+            'campaign_name' => 'Nombre de la Campaña',
+            
+            // Métricas de rendimiento
+            'impressions' => 'Impresiones',
+            'clicks' => 'Clicks',
+            'spend' => 'Gasto',
+            'reach' => 'Alcance',
+            'ctr' => 'CTR (Tasa de Clicks)',
+            'cpm' => 'CPM (Costo por Mil Impresiones)',
+            'cpc' => 'CPC (Costo por Click)',
+            
+            // Métricas de engagement
+            'total_interactions' => 'Total de Interacciones',
+            'interaction_rate' => 'Tasa de Interacción',
+            'video_views_p100' => 'Vistas de Video al 100%',
+            
+            // Métricas geográficas
+            'country' => 'País',
+            'region' => 'Región/Estado',
+            'country_region' => 'País - Región',
+            
+            // Métricas adicionales
+            'frequency' => 'Frecuencia',
+            'inline_link_clicks' => 'Clicks en Enlaces',
+            'unique_clicks' => 'Clicks Únicos',
+            'video_completion_rate' => 'Tasa de Finalización de Video',
+            
+            default => ucfirst(str_replace('_', ' ', $metric)),
+        };
     }
 }
