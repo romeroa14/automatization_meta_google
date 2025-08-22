@@ -355,19 +355,19 @@ class GoogleSheetResource extends Resource
             $webappUrl = config('services.google.webapp_url') ?? env('GOOGLE_WEBAPP_URL');
             
             if (!empty($webappUrl)) {
-                $response = \Illuminate\Support\Facades\Http::timeout(30)
-                    ->withOptions(['allow_redirects' => true])
-                    ->get($webappUrl, [
-                        'action' => 'list_sheets',
-                        'spreadsheet_id' => $spreadsheetId
-                    ]);
+            $response = \Illuminate\Support\Facades\Http::timeout(30)
+                ->withOptions(['allow_redirects' => true])
+                ->get($webappUrl, [
+                    'action' => 'list_sheets',
+                    'spreadsheet_id' => $spreadsheetId
+                ]);
 
-                if ($response->successful()) {
-                    $result = $response->json();
-                    
-                    if (isset($result['success']) && $result['success'] && isset($result['sheets'])) {
+            if ($response->successful()) {
+                $result = $response->json();
+                
+                if (isset($result['success']) && $result['success'] && isset($result['sheets'])) {
                         \Illuminate\Support\Facades\Log::info("Hojas obtenidas via Web App para ID: {$spreadsheetId}", ['sheets' => $result['sheets']]);
-                        return $result['sheets'];
+                    return $result['sheets'];
                     } else {
                         \Illuminate\Support\Facades\Log::warning("Web App devolvió error para ID: {$spreadsheetId}", ['response' => $result]);
                     }

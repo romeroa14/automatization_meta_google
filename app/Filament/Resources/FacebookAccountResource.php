@@ -86,7 +86,9 @@ class FacebookAccountResource extends Resource
                             ->reactive()
                             ->afterStateUpdated(function ($state, $set) {
                                 if ($state) {
-                                    $set('selected_campaign_id', null);
+                                    $set('selected_page_id', null);
+                                    $set('selected_campaign_ids', []);
+                                    $set('selected_ad_ids', []);
                                 }
                             })
                             ->suffixAction(
@@ -122,7 +124,7 @@ class FacebookAccountResource extends Resource
                                             Api::init($appId, $appSecret, $accessToken);
                                             
                                             $account = new AdAccount('act_' . $state);
-                                            $campaigns = $account->getCampaigns(['id', 'name', 'status']);
+                                            $campaigns = $account->getCampaigns(['id', 'name', 'status'], ['limit' => 250]);
                                             
                                             $activeCampaigns = 0;
                                             foreach ($campaigns as $campaign) {
@@ -146,6 +148,95 @@ class FacebookAccountResource extends Resource
                                         }
                                     })
                             ),
+                        
+                        Forms\Components\Select::make('selected_page_id')
+                            ->label('Fan Page (Opcional)')
+                            ->helperText('Selecciona una fan page específica para filtrar campañas. Deja vacío para todas las páginas.')
+                            ->placeholder('Selecciona una fan page')
+                            ->searchable()
+                            ->options(function ($get, $record) {
+                                $appId = $get('app_id');
+                                $appSecret = $get('app_secret');
+                                $accessToken = $get('access_token');
+                                
+                                // Verificar que tengamos todos los datos necesarios
+                                if (!$appId || !$appSecret || !$accessToken) {
+                                    return [];
+                                }
+                                
+                                try {
+                                    // Usar API de Graph directamente para evitar problemas con appsecret_proof
+                                    $userId = '10232575857351584'; // ID del usuario obtenido
+                                    $url = "https://graph.facebook.com/v18.0/{$userId}/accounts?type=page&limit=250&access_token={$accessToken}";
+                                    $response = file_get_contents($url);
+                                    $data = json_decode($response, true);
+                                    
+                                    $options = [];
+                                    if (isset($data['data'])) {
+                                        foreach ($data['data'] as $page) {
+                                            $options[$page['id']] = $page['name'] . ' (' . $page['category'] . ')';
+                                        }
+                                    }
+                                    
+                                    return $options;
+                                } catch (\Exception $e) {
+                                    \Illuminate\Support\Facades\Log::error('Error obteniendo páginas: ' . $e->getMessage());
+                                    return ['error' => 'Error conectando con Facebook: ' . $e->getMessage()];
+                                }
+                            })
+                            ->visible(fn ($get) => !empty($get('selected_ad_account_id')))
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, $set) {
+                                // Limpiar campañas y anuncios cuando cambie la página
+                                $set('selected_campaign_ids', []);
+                                $set('selected_ad_ids', []);
+                            })
+                            ->suffixAction(
+                                Action::make('refresh_pages')
+                                    ->label('Refrescar')
+                                    ->icon('heroicon-o-arrow-path')
+                                    ->color('info')
+                                    ->action(function ($state, $set, $get) {
+                                        $appId = $get('app_id');
+                                        $appSecret = $get('app_secret');
+                                        $accessToken = $get('access_token');
+                                        
+                                        if (!$appId || !$appSecret || !$accessToken) {
+                                            Notification::make()
+                                                ->title('Error')
+                                                ->body('Completa App ID, App Secret y Access Token antes de refrescar las páginas.')
+                                                ->danger()
+                                                ->send();
+                                            return;
+                                        }
+                                        
+                                        try {
+                                            // Usar API de Graph directamente
+                                            $userId = '10232575857351584';
+                                            $url = "https://graph.facebook.com/v18.0/{$userId}/accounts?type=page&limit=250&access_token={$accessToken}";
+                                            $response = file_get_contents($url);
+                                            $data = json_decode($response, true);
+                                            
+                                            $pagesCount = 0;
+                                            if (isset($data['data'])) {
+                                                $pagesCount = count($data['data']);
+                                            }
+                                            
+                                            Notification::make()
+                                                ->title('Páginas Actualizadas')
+                                                ->body("Se encontraron {$pagesCount} páginas en tu cuenta de Facebook")
+                                                ->success()
+                                                ->send();
+                                                
+                                        } catch (\Exception $e) {
+                                            Notification::make()
+                                                ->title('Error')
+                                                ->body('Error obteniendo páginas: ' . $e->getMessage())
+                                                ->danger()
+                                                ->send();
+                                        }
+                                    })
+                            ),
                         Forms\Components\Select::make('selected_campaign_ids')
                             ->label('Campañas Específicas (Opcional)')
                             ->helperText('Si seleccionas campañas específicas, solo se sincronizarán los anuncios de esas campañas. Deja vacío para todas las campañas.')
@@ -154,6 +245,7 @@ class FacebookAccountResource extends Resource
                             ->searchable()
                             ->options(function ($get, $record) {
                                 $adAccountId = $get('selected_ad_account_id');
+                                $pageId = $get('selected_page_id');
                                 $appId = $get('app_id');
                                 $appSecret = $get('app_secret');
                                 $accessToken = $get('access_token');
@@ -168,11 +260,22 @@ class FacebookAccountResource extends Resource
                                     Api::init($appId, $appSecret, $accessToken);
                                     
                                     $account = new AdAccount('act_' . $adAccountId);
-                                    $campaigns = $account->getCampaigns(['id', 'name', 'status']);
+                                    
+                                    // Si hay una página seleccionada, filtrar campañas por esa página
+                                    $params = ['id', 'name', 'status'];
+                                    if ($pageId) {
+                                        $params[] = 'page_id';
+                                    }
+                                    
+                                    $campaigns = $account->getCampaigns($params);
                                     
                                     $options = [];
                                     foreach ($campaigns as $campaign) {
                                         if ($campaign->status == 'ACTIVE') {
+                                            // Si hay página seleccionada, solo mostrar campañas de esa página
+                                            if ($pageId && isset($campaign->page_id) && $campaign->page_id != $pageId) {
+                                                continue;
+                                            }
                                             $options[$campaign->id] = $campaign->name . ' (ID: ' . $campaign->id . ')';
                                         }
                                     }
@@ -185,6 +288,10 @@ class FacebookAccountResource extends Resource
                             })
                             ->visible(fn ($get) => !empty($get('selected_ad_account_id')))
                             ->reactive()
+                            ->afterStateUpdated(function ($state, $set) {
+                                // Limpiar anuncios seleccionados cuando cambien las campañas
+                                $set('selected_ad_ids', []);
+                            })
                             ->suffixAction(
                                 Action::make('refresh_campaigns')
                                     ->label('Refrescar')
@@ -208,7 +315,7 @@ class FacebookAccountResource extends Resource
                                         try {
                                             Api::init($appId, $appSecret, $accessToken);
                                             $account = new AdAccount('act_' . $adAccountId);
-                                            $campaigns = $account->getCampaigns(['id', 'name', 'status']);
+                                            $campaigns = $account->getCampaigns(['id', 'name', 'status'], ['limit' => 250]);
                                             
                                             $activeCampaigns = 0;
                                             foreach ($campaigns as $campaign) {
@@ -227,6 +334,125 @@ class FacebookAccountResource extends Resource
                                             Notification::make()
                                                 ->title('Error')
                                                 ->body('Error obteniendo campañas: ' . $e->getMessage())
+                                                ->danger()
+                                                ->send();
+                                        }
+                                    })
+                            ),
+                        
+                        Forms\Components\Select::make('selected_ad_ids')
+                            ->label('Anuncios Específicos (Opcional)')
+                            ->helperText('Selecciona anuncios específicos de las campañas elegidas. Deja vacío para todos los anuncios.')
+                            ->placeholder('Selecciona anuncios')
+                            ->multiple()
+                            ->searchable()
+                            ->options(function ($get, $record) {
+                                $adAccountId = $get('selected_ad_account_id');
+                                $campaignIds = $get('selected_campaign_ids');
+                                $appId = $get('app_id');
+                                $appSecret = $get('app_secret');
+                                $accessToken = $get('access_token');
+                                
+                                // Verificar que tengamos todos los datos necesarios
+                                if (!$adAccountId || !$campaignIds || !$appId || !$appSecret || !$accessToken) {
+                                    return [];
+                                }
+                                
+                                try {
+                                    // Inicializar Facebook API con datos del formulario
+                                    Api::init($appId, $appSecret, $accessToken);
+                                    
+                                    $account = new AdAccount('act_' . $adAccountId);
+                                    
+                                    $fields = ['ad_id', 'ad_name', 'campaign_id'];
+                                    $params = [
+                                        'level' => 'ad',
+                                        'limit' => 250,
+                                        'time_range' => [
+                                            'since' => date('Y-m-d', strtotime('-30 days')),
+                                            'until' => date('Y-m-d'),
+                                        ],
+                                        'filtering' => [
+                                            [
+                                                'field' => 'campaign.id',
+                                                'operator' => 'IN',
+                                                'value' => $campaignIds,
+                                            ],
+                                        ],
+                                    ];
+                                    
+                                    $insights = $account->getInsights($fields, $params);
+                                    
+                                    $options = [];
+                                    foreach ($insights as $insight) {
+                                        $options[$insight->ad_id] = $insight->ad_name . ' (ID: ' . $insight->ad_id . ')';
+                                    }
+                                    
+                                    return $options;
+                                } catch (\Exception $e) {
+                                    \Illuminate\Support\Facades\Log::error('Error obteniendo anuncios: ' . $e->getMessage());
+                                    return ['error' => 'Error conectando con Facebook: ' . $e->getMessage()];
+                                }
+                            })
+                            ->visible(fn ($get) => !empty($get('selected_ad_account_id')) && !empty($get('selected_campaign_ids')))
+                            ->reactive()
+                            ->suffixAction(
+                                Action::make('refresh_ads')
+                                    ->label('Refrescar')
+                                    ->icon('heroicon-o-arrow-path')
+                                    ->color('info')
+                                    ->action(function ($state, $set, $get) {
+                                        $adAccountId = $get('selected_ad_account_id');
+                                        $campaignIds = $get('selected_campaign_ids');
+                                        $appId = $get('app_id');
+                                        $appSecret = $get('app_secret');
+                                        $accessToken = $get('access_token');
+                                        
+                                        if (!$adAccountId || !$campaignIds || !$appId || !$appSecret || !$accessToken) {
+                                            Notification::make()
+                                                ->title('Error')
+                                                ->body('Completa todos los campos antes de refrescar los anuncios.')
+                                                ->danger()
+                                                ->send();
+                                            return;
+                                        }
+                                        
+                                        try {
+                                            Api::init($appId, $appSecret, $accessToken);
+                                            $account = new AdAccount('act_' . $adAccountId);
+                                            
+                                            $fields = ['ad_id', 'ad_name', 'campaign_id'];
+                                            $params = [
+                                                'level' => 'ad',
+                                                'time_range' => [
+                                                    'since' => date('Y-m-d', strtotime('-30 days')),
+                                                    'until' => date('Y-m-d'),
+                                                ],
+                                                'filtering' => [
+                                                    [
+                                                        'field' => 'campaign.id',
+                                                        'operator' => 'IN',
+                                                        'value' => $campaignIds,
+                                                    ],
+                                                ],
+                                            ];
+                                            
+                                            $insights = $account->getInsights($fields, $params);
+                                            $adsCount = 0;
+                                            foreach ($insights as $insight) {
+                                                $adsCount++;
+                                            }
+                                            
+                                            Notification::make()
+                                                ->title('Anuncios Actualizados')
+                                                ->body("Se encontraron {$adsCount} anuncios en las campañas seleccionadas")
+                                                ->success()
+                                                ->send();
+                                                
+                                        } catch (\Exception $e) {
+                                            Notification::make()
+                                                ->title('Error')
+                                                ->body('Error obteniendo anuncios: ' . $e->getMessage())
                                                 ->danger()
                                                 ->send();
                                         }

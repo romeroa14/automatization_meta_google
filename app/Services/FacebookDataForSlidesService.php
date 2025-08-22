@@ -50,14 +50,14 @@ class FacebookDataForSlidesService
 
         $brandData = [
             'name' => $brand->brand_name,
-            'campaigns' => [],
+            'ads' => [],
             'statistics' => [],
         ];
 
-        // Obtener datos de cada campaña
+        // Obtener datos de cada campaña y sus anuncios
         foreach ($campaigns as $campaign) {
-            $campaignData = $this->getCampaignData($campaign);
-            $brandData['campaigns'][] = $campaignData;
+            $adsData = $this->getCampaignAdsData($campaign);
+            $brandData['ads'] = array_merge($brandData['ads'], $adsData);
         }
 
         // Calcular estadísticas de la marca
@@ -84,6 +84,40 @@ class FacebookDataForSlidesService
 
         // Si no, obtenemos datos frescos de Facebook
         return $this->getFreshCampaignData($campaign);
+    }
+
+    /**
+     * Obtiene datos de los anuncios de una campaña específica
+     */
+    private function getCampaignAdsData(ReportCampaign $campaign): array
+    {
+        try {
+            // Configurar Facebook API
+            $facebookAccount = $this->getFacebookAccountForCampaign($campaign);
+            
+            if (!$facebookAccount) {
+                Log::warning("No se encontró cuenta de Facebook para campaña: {$campaign->campaign_id}");
+                return [];
+            }
+
+            Api::init(
+                $facebookAccount->app_id,
+                $facebookAccount->app_secret,
+                $facebookAccount->access_token
+            );
+
+            $adAccountId = $facebookAccount->selected_ad_account_id ?: $facebookAccount->account_id;
+            $account = new AdAccount('act_' . $adAccountId);
+
+            // Obtener anuncios de la campaña
+            $ads = $this->getCampaignAds($account, $campaign->campaign_id);
+            
+            return $ads;
+
+        } catch (\Exception $e) {
+            Log::error("Error obteniendo anuncios para campaña {$campaign->campaign_id}: " . $e->getMessage());
+            return [];
+        }
     }
 
     /**
@@ -161,6 +195,7 @@ class FacebookDataForSlidesService
 
         $params = [
             'level' => 'campaign',
+            'limit' => 250,
             'time_range' => [
                 'since' => date('Y-m-d', strtotime('-7 days')),
                 'until' => date('Y-m-d'),
@@ -179,6 +214,96 @@ class FacebookDataForSlidesService
             return $insights->getData();
         } catch (\Exception $e) {
             Log::error("Error obteniendo insights para campaña {$campaignId}: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Obtiene anuncios de una campaña específica
+     */
+    private function getCampaignAds(AdAccount $account, string $campaignId): array
+    {
+        $fields = [
+            'ad_id',
+            'ad_name',
+            'adset_id',
+            'campaign_id',
+            'impressions',
+            'clicks',
+            'spend',
+            'reach',
+            'frequency',
+            'ctr',
+            'cpm',
+            'cpc',
+            'actions',
+            'action_values',
+            'video_p25_watched_actions',
+            'video_p50_watched_actions',
+            'video_p75_watched_actions',
+            'video_p100_watched_actions',
+            'inline_link_clicks',
+            'unique_clicks',
+            'unique_inline_link_clicks',
+            'unique_actions',
+            'cost_per_action_type',
+            'cost_per_unique_action_type',
+        ];
+
+        $params = [
+            'level' => 'ad',
+            'limit' => 250,
+            'time_range' => [
+                'since' => date('Y-m-d', strtotime('-7 days')),
+                'until' => date('Y-m-d'),
+            ],
+            'filtering' => [
+                [
+                    'field' => 'campaign.id',
+                    'operator' => 'EQ',
+                    'value' => $campaignId,
+                ],
+            ],
+        ];
+
+        try {
+            $insights = $account->getInsights($fields, $params);
+            $adsData = [];
+            foreach ($insights as $insight) {
+                $adsData[] = $insight;
+            }
+            
+            // Obtener creativos de los anuncios (simplificado por ahora)
+            $adIds = collect($adsData)->pluck('ad_id')->filter()->toArray();
+            $creatives = [];
+            
+            // Procesar cada anuncio
+            return collect($adsData)->map(function ($insight) use ($creatives) {
+                $creative = $creatives[$insight->ad_id ?? ''] ?? null;
+                
+                return [
+                    'name' => $insight->ad_name ?? 'Sin nombre',
+                    'id' => $insight->ad_id ?? null,
+                    'campaign_id' => $insight->campaign_id ?? null,
+                    'statistics' => [
+                        'impressions' => (int)($insight->impressions ?? 0),
+                        'clicks' => (int)($insight->clicks ?? 0),
+                        'spend' => (float)($insight->spend ?? 0),
+                        'reach' => (int)($insight->reach ?? 0),
+                        'frequency' => (float)($insight->frequency ?? 0),
+                        'ctr' => (float)($insight->ctr ?? 0),
+                        'cpm' => (float)($insight->cpm ?? 0),
+                        'cpc' => (float)($insight->cpc ?? 0),
+                        'inline_link_clicks' => (int)($insight->inline_link_clicks ?? 0),
+                        'unique_clicks' => (int)($insight->unique_clicks ?? 0),
+                    ],
+                    'image_url' => $creative['image_url'] ?? null,
+                    'image_local_path' => $creative['local_path'] ?? null,
+                ];
+            })->toArray();
+            
+        } catch (\Exception $e) {
+            Log::error("Error obteniendo anuncios para campaña {$campaignId}: " . $e->getMessage());
             return [];
         }
     }
