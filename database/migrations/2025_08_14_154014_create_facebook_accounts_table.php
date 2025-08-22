@@ -14,7 +14,6 @@ return new class extends Migration
         Schema::create('facebook_accounts', function (Blueprint $table) {
             $table->id();
             $table->string('account_name');
-            $table->string('account_id');
             $table->string('app_id');
             $table->string('app_secret');
             $table->text('access_token');

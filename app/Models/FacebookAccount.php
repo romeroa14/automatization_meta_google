@@ -19,18 +19,20 @@ class FacebookAccount extends Model
         'is_active',
         'settings',
         'selected_ad_account_id',
-        'selected_campaign_ids'
+        'selected_page_id',
+        'selected_campaign_ids',
+        'selected_ad_ids'
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'settings' => 'array',
         'selected_campaign_ids' => 'array',
+        'selected_ad_ids' => 'array',
     ];
 
     protected $hidden = [
-        'app_secret',
-        'access_token',
+        // Removemos app_secret y access_token para que aparezcan en el formulario
     ];
 
     public function automationTasks(): HasMany
@@ -65,13 +67,13 @@ class FacebookAccount extends Model
     {
         return !empty($this->app_id) && 
                !empty($this->app_secret) && 
-               !empty($this->access_token) && 
-               !empty($this->account_id);
+               !empty($this->access_token);
     }
 
     public function getFullNameAttribute(): string
     {
-        return "{$this->account_name} (ID: {$this->account_id})";
+        $accountId = $this->account_id ? " (ID: {$this->account_id})" : '';
+        return "{$this->account_name}{$accountId}";
     }
 
     public function getStatusLabelAttribute(): string
