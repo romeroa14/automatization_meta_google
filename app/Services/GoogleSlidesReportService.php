@@ -6,6 +6,7 @@ use App\Models\Report;
 use App\Models\ReportBrand;
 use App\Models\ReportCampaign;
 use App\Models\FacebookAccount;
+use App\Services\FacebookDataForSlidesService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -15,10 +16,12 @@ class GoogleSlidesReportService
 {
     protected string $webAppUrl;
     protected array $defaultSlideLayouts;
+    protected FacebookDataForSlidesService $facebookDataService;
 
     public function __construct()
     {
         $this->webAppUrl = env('GOOGLE_WEBAPP_URL_slides');
+        $this->facebookDataService = new FacebookDataForSlidesService();
         $this->defaultSlideLayouts = [
             'title' => 'TITLE_AND_SUBTITLE',
             'content' => 'TITLE_AND_BODY',
@@ -71,54 +74,54 @@ class GoogleSlidesReportService
      */
     public function prepareReportData(Report $report): array
     {
+        // Obtener datos reales de Facebook
+        $facebookData = $this->facebookDataService->getFacebookDataForReport($report);
+        
         $slides = [];
         
         // Slide 1: Portada
-        $slides[] = $this->createCoverSlide($report);
+        $slides[] = $this->createCoverSlide($report, $facebookData);
         
         // Slide 2: Resumen general
-        $slides[] = $this->createGeneralSummarySlide($report);
+        $slides[] = $this->createGeneralSummarySlide($report, $facebookData);
         
         // Slides por marca
-        $brands = $report->brands()->ordered()->get();
-        foreach ($brands as $brand) {
+        foreach ($facebookData['brands'] as $brandData) {
             // Slide de título de marca
-            $slides[] = $this->createBrandTitleSlide($brand);
+            $slides[] = $this->createBrandTitleSlide($brandData);
             
             // Slides de campañas de esta marca
-            $campaigns = $brand->campaigns()->ordered()->get();
-            foreach ($campaigns as $campaign) {
-                $slides[] = $this->createCampaignSlide($campaign);
+            foreach ($brandData['campaigns'] as $campaignData) {
+                $slides[] = $this->createCampaignSlide($campaignData);
             }
         }
         
         // Slides de gráficas estadísticas
         if (!empty($report->charts_config)) {
-            $chartSlides = $this->createChartSlides($report);
+            $chartSlides = $this->createChartSlides($report, $facebookData);
             $slides = array_merge($slides, $chartSlides);
         }
         
         return [
             'slides' => $slides,
             'report' => $report,
-            'brands' => $brands,
+            'facebook_data' => $facebookData,
         ];
     }
 
     /**
      * Crea la diapositiva de portada
      */
-    protected function createCoverSlide(Report $report): array
+    protected function createCoverSlide(Report $report, array $facebookData): array
     {
         return [
             'type' => 'cover',
-            'title' => $report->name,
-            'subtitle' => "Período: " . $report->period_start->format('d/m/Y') . " - " . $report->period_end->format('d/m/Y'),
+            'title' => $facebookData['title'],
+            'subtitle' => "Período: " . $facebookData['period']['start'] . " - " . $facebookData['period']['end'],
             'content' => [
-                'description' => $report->description,
-                'total_days' => $report->period_days,
-                'total_brands' => $report->total_brands,
-                'total_campaigns' => $report->total_campaigns,
+                'description' => $facebookData['subtitle'],
+                'total_brands' => $facebookData['statistics']['brands_count'] ?? 0,
+                'total_campaigns' => $facebookData['statistics']['campaigns_count'] ?? 0,
             ],
             'layout' => 'title',
         ];
@@ -127,26 +130,23 @@ class GoogleSlidesReportService
     /**
      * Crea la diapositiva de resumen general
      */
-    protected function createGeneralSummarySlide(Report $report): array
+    protected function createGeneralSummarySlide(Report $report, array $facebookData): array
     {
+        $stats = $facebookData['statistics'];
+        
         return [
             'type' => 'general_summary',
             'title' => 'Resumen General del Período',
             'subtitle' => 'Métricas Totales',
             'content' => [
-                'total_reach' => number_format($report->total_reach),
-                'total_impressions' => number_format($report->total_impressions),
-                'total_clicks' => number_format($report->total_clicks),
-                'total_spend' => '$' . number_format($report->total_spend, 2),
-                'total_brands' => $report->total_brands,
-                'total_campaigns' => $report->total_campaigns,
-                'period_days' => $report->period_days,
-                'average_ctr' => $report->total_impressions > 0 ? 
-                    number_format(($report->total_clicks / $report->total_impressions) * 100, 2) . '%' : '0%',
-                'average_cpm' => $report->total_impressions > 0 ? 
-                    '$' . number_format(($report->total_spend / $report->total_impressions) * 1000, 2) : '$0',
-                'average_cpc' => $report->total_clicks > 0 ? 
-                    '$' . number_format($report->total_spend / $report->total_clicks, 2) : '$0',
+                'total_reach' => number_format($stats['reach'] ?? 0),
+                'total_impressions' => number_format($stats['impressions'] ?? 0),
+                'total_clicks' => number_format($stats['clicks'] ?? 0),
+                'total_interactions' => number_format($stats['total_interactions'] ?? 0),
+                'total_brands' => $stats['brands_count'] ?? 0,
+                'total_campaigns' => $stats['campaigns_count'] ?? 0,
+                'average_ctr' => number_format($stats['ctr'] ?? 0, 2) . '%',
+                'average_interaction_rate' => number_format($stats['interaction_rate'] ?? 0, 2) . '%',
             ],
             'layout' => 'content',
         ];
@@ -155,21 +155,22 @@ class GoogleSlidesReportService
     /**
      * Crea la diapositiva de título de marca
      */
-    protected function createBrandTitleSlide(ReportBrand $brand): array
+    protected function createBrandTitleSlide(array $brandData): array
     {
+        $stats = $brandData['statistics'];
+        
         return [
             'type' => 'brand_title',
-            'title' => $brand->brand_name,
+            'title' => $brandData['name'],
             'subtitle' => 'Resumen de Campañas',
             'content' => [
-                'total_campaigns' => $brand->total_campaigns,
-                'total_reach' => number_format($brand->total_reach),
-                'total_impressions' => number_format($brand->total_impressions),
-                'total_clicks' => number_format($brand->total_clicks),
-                'total_spend' => '$' . number_format($brand->total_spend, 2),
-                'average_ctr' => number_format($brand->average_ctr, 2) . '%',
-                'average_cpm' => '$' . number_format($brand->average_cpm, 2),
-                'average_cpc' => '$' . number_format($brand->average_cpc, 2),
+                'total_campaigns' => $stats['campaigns_count'] ?? 0,
+                'total_reach' => number_format($stats['reach'] ?? 0),
+                'total_impressions' => number_format($stats['impressions'] ?? 0),
+                'total_clicks' => number_format($stats['clicks'] ?? 0),
+                'total_interactions' => number_format($stats['total_interactions'] ?? 0),
+                'average_ctr' => number_format($stats['ctr'] ?? 0, 2) . '%',
+                'average_interaction_rate' => number_format($stats['interaction_rate'] ?? 0, 2) . '%',
             ],
             'layout' => 'content',
         ];
@@ -180,34 +181,36 @@ class GoogleSlidesReportService
     /**
      * Crea una diapositiva para una campaña específica
      */
-    protected function createCampaignSlide(ReportCampaign $campaign): array
+    protected function createCampaignSlide(array $campaignData): array
     {
+        $stats = $campaignData['statistics'];
+        
         $slide = [
             'type' => 'campaign',
-            'title' => $campaign->campaign_name,
-            'subtitle' => "Campaña ID: {$campaign->campaign_id}",
+            'title' => $campaignData['name'],
+            'subtitle' => "Campaña ID: {$campaignData['id']}",
             'content' => [
-                'reach' => number_format($campaign->reach),
-                'impressions' => number_format($campaign->impressions),
-                'clicks' => number_format($campaign->clicks),
-                'spend' => $campaign->formatted_spend,
-                'ctr' => $campaign->formatted_ctr,
-                'cpm' => $campaign->formatted_cpm,
-                'cpc' => $campaign->formatted_cpc,
-                'frequency' => $campaign->formatted_frequency,
-                'total_interactions' => number_format($campaign->total_interactions),
-                'interaction_rate' => $campaign->formatted_interaction_rate,
-                'video_views' => number_format($campaign->video_views),
-                'video_completion_rate' => $campaign->formatted_video_completion_rate,
+                'reach' => number_format($stats['reach'] ?? 0),
+                'impressions' => number_format($stats['impressions'] ?? 0),
+                'clicks' => number_format($stats['clicks'] ?? 0),
+                'ctr' => number_format($stats['ctr'] ?? 0, 2) . '%',
+                'cpm' => '$' . number_format($stats['cpm'] ?? 0, 2),
+                'cpc' => '$' . number_format($stats['cpc'] ?? 0, 2),
+                'frequency' => number_format($stats['frequency'] ?? 0, 2),
+                'total_interactions' => number_format($stats['total_interactions'] ?? 0),
+                'interaction_rate' => number_format($stats['interaction_rate'] ?? 0, 2) . '%',
+                'video_views_p100' => number_format($stats['video_views']['p100'] ?? 0),
+                'video_completion_rate' => number_format($stats['video_completion_rate'] ?? 0, 2) . '%',
             ],
             'layout' => 'image',
         ];
         
         // Agregar imagen si existe
-        if ($campaign->hasLocalImage()) {
+        if (!empty($campaignData['image_url']) || !empty($campaignData['image_local_path'])) {
+            $imageUrl = $campaignData['image_local_path'] ?? $campaignData['image_url'];
             $slide['image'] = [
-                'url' => $campaign->ad_image_path,
-                'alt' => "Imagen de campaña: {$campaign->campaign_name}",
+                'url' => $imageUrl,
+                'alt' => "Imagen de campaña: {$campaignData['name']}",
             ];
         }
         
@@ -217,12 +220,12 @@ class GoogleSlidesReportService
     /**
      * Crea las diapositivas de gráficas
      */
-    protected function createChartSlides(Report $report): array
+    protected function createChartSlides(Report $report, array $facebookData): array
     {
         $slides = [];
         
         foreach ($report->charts_config as $chartConfig) {
-            $chartData = $this->prepareChartData($report, $chartConfig);
+            $chartData = $this->prepareChartData($facebookData, $chartConfig);
             
             $slides[] = [
                 'type' => 'chart',
@@ -270,7 +273,7 @@ class GoogleSlidesReportService
     /**
      * Prepara datos para las gráficas
      */
-    protected function prepareChartData(Report $report, array $chartConfig): array
+    protected function prepareChartData(array $facebookData, array $chartConfig): array
     {
         $metric = $chartConfig['metric'];
         $groupBy = $chartConfig['group_by'];
@@ -279,11 +282,10 @@ class GoogleSlidesReportService
         
         switch ($groupBy) {
             case 'brand':
-                $brands = $report->brands()->ordered()->get();
-                foreach ($brands as $brand) {
-                    $value = $this->getBrandMetricValue($brand, $metric);
+                foreach ($facebookData['brands'] as $brandData) {
+                    $value = $this->getBrandMetricValue($brandData, $metric);
                     $data[] = [
-                        'label' => $brand->brand_name,
+                        'label' => $brandData['name'],
                         'value' => $value,
                         'formatted_value' => $this->formatMetricValue($metric, $value),
                     ];
@@ -291,14 +293,15 @@ class GoogleSlidesReportService
                 break;
                 
             case 'campaign':
-                $campaigns = $report->campaigns()->ordered()->get();
-                foreach ($campaigns as $campaign) {
-                    $value = $this->getCampaignMetricValue($campaign, $metric);
-                    $data[] = [
-                        'label' => $campaign->campaign_name,
-                        'value' => $value,
-                        'formatted_value' => $this->formatMetricValue($metric, $value),
-                    ];
+                foreach ($facebookData['brands'] as $brandData) {
+                    foreach ($brandData['campaigns'] as $campaignData) {
+                        $value = $this->getCampaignMetricValue($campaignData, $metric);
+                        $data[] = [
+                            'label' => $campaignData['name'],
+                            'value' => $value,
+                            'formatted_value' => $this->formatMetricValue($metric, $value),
+                        ];
+                    }
                 }
                 break;
                 
@@ -313,28 +316,18 @@ class GoogleSlidesReportService
     /**
      * Obtiene el valor de una métrica para una marca
      */
-    protected function getBrandMetricValue(ReportBrand $brand, string $metric): float
+    protected function getBrandMetricValue(array $brandData, string $metric): float
     {
+        $stats = $brandData['statistics'];
+        
         return match($metric) {
-            'reach' => $brand->total_reach,
-            'impressions' => $brand->total_impressions,
-            'clicks' => $brand->total_clicks,
-            'spend' => $brand->total_spend,
-            'ctr' => $brand->average_ctr,
-            'cpm' => $brand->average_cpm,
-            'cpc' => $brand->average_cpc,
-            'total_interactions' => $brand->campaigns()->get()->sum(function($campaign) {
-                return $campaign->statistics['total_interactions'] ?? 0;
-            }),
-            'interaction_rate' => $brand->campaigns()->get()->avg(function($campaign) {
-                return $campaign->statistics['interaction_rate'] ?? 0;
-            }),
-            'video_views_p100' => $brand->campaigns()->get()->sum(function($campaign) {
-                return $campaign->statistics['video_views_p100'] ?? 0;
-            }),
-            'video_completion_rate' => $brand->campaigns()->get()->avg(function($campaign) {
-                return $campaign->statistics['video_completion_rate'] ?? 0;
-            }),
+            'reach' => $stats['reach'] ?? 0,
+            'impressions' => $stats['impressions'] ?? 0,
+            'clicks' => $stats['clicks'] ?? 0,
+            'ctr' => $stats['ctr'] ?? 0,
+            'total_interactions' => $stats['total_interactions'] ?? 0,
+            'interaction_rate' => $stats['interaction_rate'] ?? 0,
+            'campaigns_count' => $stats['campaigns_count'] ?? 0,
             default => 0,
         };
     }
@@ -342,20 +335,21 @@ class GoogleSlidesReportService
     /**
      * Obtiene el valor de una métrica para una campaña
      */
-    protected function getCampaignMetricValue(ReportCampaign $campaign, string $metric): float
+    protected function getCampaignMetricValue(array $campaignData, string $metric): float
     {
+        $stats = $campaignData['statistics'];
+        
         return match($metric) {
-            'reach' => $campaign->reach,
-            'impressions' => $campaign->impressions,
-            'clicks' => $campaign->clicks,
-            'spend' => $campaign->spend,
-            'ctr' => $campaign->ctr,
-            'cpm' => $campaign->cpm,
-            'cpc' => $campaign->cpc,
-            'total_interactions' => $campaign->total_interactions,
-            'interaction_rate' => $campaign->interaction_rate,
-            'video_views_p100' => $campaign->video_views,
-            'video_completion_rate' => $campaign->video_completion_rate,
+            'reach' => $stats['reach'] ?? 0,
+            'impressions' => $stats['impressions'] ?? 0,
+            'clicks' => $stats['clicks'] ?? 0,
+            'ctr' => $stats['ctr'] ?? 0,
+            'cpm' => $stats['cpm'] ?? 0,
+            'cpc' => $stats['cpc'] ?? 0,
+            'total_interactions' => $stats['total_interactions'] ?? 0,
+            'interaction_rate' => $stats['interaction_rate'] ?? 0,
+            'video_views_p100' => $stats['video_views']['p100'] ?? 0,
+            'video_completion_rate' => $stats['video_completion_rate'] ?? 0,
             default => 0,
         };
     }
