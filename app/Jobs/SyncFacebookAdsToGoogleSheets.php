@@ -216,9 +216,20 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
             Log::info("📊 Sin breakdowns geográficos - datos por anuncio únicamente");
         }
 
-        // Si hay campañas específicas configuradas, filtrar por ellas
+        // Si hay anuncios específicos configurados, filtrar por ellos (jerarquía correcta)
         $fbAccount = $this->task->facebookAccount;
-        if ($fbAccount->selected_campaign_ids && is_array($fbAccount->selected_campaign_ids) && !empty($fbAccount->selected_campaign_ids)) {
+        if ($fbAccount->selected_ad_ids && is_array($fbAccount->selected_ad_ids) && !empty($fbAccount->selected_ad_ids)) {
+            $params['filtering'] = [
+                [
+                    'field' => 'ad.id',
+                    'operator' => 'IN',
+                    'value' => $fbAccount->selected_ad_ids,
+                ],
+            ];
+            $adCount = count($fbAccount->selected_ad_ids);
+            Log::info("🎯 Filtrando por {$adCount} anuncios específicos: " . implode(', ', $fbAccount->selected_ad_ids));
+        } elseif ($fbAccount->selected_campaign_ids && is_array($fbAccount->selected_campaign_ids) && !empty($fbAccount->selected_campaign_ids)) {
+            // Fallback: si no hay anuncios específicos, usar campañas
             $params['filtering'] = [
                 [
                     'field' => 'campaign.id',

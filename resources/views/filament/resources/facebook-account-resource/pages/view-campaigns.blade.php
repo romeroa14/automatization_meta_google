@@ -15,16 +15,22 @@
             </div>
         @endif
 
-        <!-- Tabla de anuncios -->
+        <!-- Tabla de anuncios configurados -->
         @if(!empty($this->ads))
             <div class="bg-white rounded-lg shadow overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-200">
                     <h3 class="text-lg font-medium text-gray-900">
-                        Anuncios de la Campaña
+                        Anuncios Configurados - Estadísticas
                     </h3>
                     <p class="text-sm text-gray-600">
-                        {{ count($this->ads) }} anuncios encontrados
+                        {{ count($this->ads) }} anuncios configurados con estadísticas del período seleccionado
                     </p>
+                    @if(!empty($this->selectedCampaignIds))
+                        <p class="text-xs text-gray-500 mt-1">
+                            Campañas configuradas: {{ count($this->selectedCampaignIds) }} | 
+                            Anuncios configurados: {{ count($this->selectedAdIds) }}
+                        </p>
+                    @endif
                 </div>
 
                 <div class="overflow-x-auto">
@@ -262,13 +268,13 @@
         @endif
 
         <!-- Mensaje cuando no hay anuncios -->
-        @if($this->selectedCampaign && empty($this->ads) && !$this->isLoading)
+        @if(!empty($this->selectedAdIds) && empty($this->ads) && !$this->isLoading)
             <div class="bg-white rounded-lg shadow p-6">
                 <div class="text-center">
                     <div class="text-gray-400 text-6xl mb-4">📊</div>
                     <h3 class="text-lg font-medium text-gray-900 mb-2">No se encontraron anuncios</h3>
                     <p class="text-gray-600">
-                        No hay anuncios con datos para la campaña seleccionada en el período especificado.
+                        No hay anuncios con datos para los anuncios configurados en el período especificado.
                     </p>
                 </div>
             </div>

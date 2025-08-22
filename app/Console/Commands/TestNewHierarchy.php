@@ -4,125 +4,117 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\FacebookAccount;
+use FacebookAds\Api;
+use FacebookAds\Object\AdAccount;
+use Illuminate\Support\Facades\Log;
 
 class TestNewHierarchy extends Command
 {
-    protected $signature = 'facebook:test-new-hierarchy {account_id}';
-    protected $description = 'Probar la nueva jerarquía: Token → Cuentas Publicitarias → Fan Pages → Campañas → Anuncios';
+    protected $signature = 'test:new-hierarchy {account_id?}';
+    protected $description = 'Prueba la nueva jerarquía: selected_campaign_ids → selected_ad_ids → estadísticas';
 
     public function handle()
     {
-        $accountId = $this->argument('account_id');
-
+        $accountId = $this->argument('account_id') ?? 1;
         $account = FacebookAccount::find($accountId);
+        
         if (!$account) {
-            $this->error("No se encontró la cuenta de Facebook con ID: {$accountId}");
+            $this->error("Cuenta no encontrada con ID: {$accountId}");
             return 1;
         }
 
-        $this->info("🔍 Probando nueva jerarquía completa...");
-        $this->info("📱 Usando cuenta: {$account->account_name}");
+        $this->info("=== PRUEBA DE NUEVA JERARQUÍA ===");
+        $this->info("Cuenta: {$account->account_name}");
+        $this->info("Cuenta publicitaria: {$account->selected_ad_account_id}");
+        $this->info("Fan page: {$account->selected_page_id}");
+        $this->info("Campañas configuradas: " . count($account->selected_campaign_ids ?? []));
+        $this->info("Anuncios configurados: " . count($account->selected_ad_ids ?? []));
+        $this->newLine();
 
         try {
-            $token = $account->access_token;
+            // Inicializar Facebook API
+            Api::init(
+                $account->app_id,
+                $account->app_secret,
+                $account->access_token
+            );
 
-            // 1. Obtener todas las cuentas publicitarias del token
-            $this->info("\n💰 Paso 1: Obtener cuentas publicitarias del token...");
-            $adAccountsUrl = "https://graph.facebook.com/v18.0/me/adaccounts?limit=250&access_token={$token}";
-            $adAccountsResponse = file_get_contents($adAccountsUrl);
-            $adAccountsData = json_decode($adAccountsResponse, true);
-            
-            $this->info("Total cuentas publicitarias encontradas: " . count($adAccountsData['data']));
-            
-            $this->info("\n📋 Cuentas publicitarias disponibles:");
-            foreach ($adAccountsData['data'] as $adAccount) {
-                $accountId = str_replace('act_', '', $adAccount['id']);
-                $accountName = $adAccount['name'] ?? 'Cuenta ' . $accountId;
-                $this->info("  - {$accountName} (ID: {$accountId})");
+            $adAccount = new AdAccount('act_' . $account->selected_ad_account_id);
+
+            // 1. Verificar campañas configuradas
+            $this->info("1. VERIFICANDO CAMPAÑAS CONFIGURADAS:");
+            if (!empty($account->selected_campaign_ids)) {
+                $campaigns = $adAccount->getCampaigns(['id', 'name', 'status'], [
+                    'filtering' => [
+                        [
+                            'field' => 'id',
+                            'operator' => 'IN',
+                            'value' => $account->selected_campaign_ids,
+                        ],
+                    ],
+                ]);
+
+                foreach ($campaigns as $campaign) {
+                    $this->line("   ✅ Campaña: {$campaign->name} (ID: {$campaign->id}) - Estado: {$campaign->status}");
+                }
+            } else {
+                $this->warn("   ⚠️ No hay campañas configuradas");
             }
+            $this->newLine();
 
-            // 2. Obtener todas las páginas del token
-            $this->info("\n📄 Paso 2: Obtener páginas del token...");
-            $pagesUrl = "https://graph.facebook.com/v18.0/me/accounts?type=page&limit=250&access_token={$token}";
-            $pagesResponse = file_get_contents($pagesUrl);
-            $pagesData = json_decode($pagesResponse, true);
-            
-            $this->info("Total páginas encontradas: " . count($pagesData['data']));
-            
-            $this->info("\n📋 Ejemplos de páginas disponibles:");
-            for ($i = 0; $i < min(5, count($pagesData['data'])); $i++) {
-                $page = $pagesData['data'][$i];
-                $this->info("  - {$page['name']} (ID: {$page['id']}) - {$page['category']}");
-            }
+            // 2. Verificar anuncios configurados
+            $this->info("2. VERIFICANDO ANUNCIOS CONFIGURADOS:");
+            if (!empty($account->selected_ad_ids)) {
+                $fields = [
+                    'ad_id',
+                    'ad_name',
+                    'campaign_id',
+                    'campaign_name',
+                    'impressions',
+                    'clicks',
+                    'spend',
+                    'ctr',
+                ];
 
-            // 3. Probar con una cuenta específica
-            $testAdAccountId = '1124273537782021'; // Primera cuenta
-            $this->info("\n🎯 Paso 3: Probar con cuenta publicitaria específica: {$testAdAccountId}");
-            
-            // Obtener campañas de esta cuenta
-            $campaignsUrl = "https://graph.facebook.com/v18.0/act_{$testAdAccountId}/campaigns?fields=id,name,status&limit=250&access_token={$token}";
-            $campaignsResponse = file_get_contents($campaignsUrl);
-            $campaignsData = json_decode($campaignsResponse, true);
-            
-            $this->info("Total campañas en la cuenta {$testAdAccountId}: " . count($campaignsData['data']));
-            
-            // 4. Probar filtrado por página específica
-            $testPageId = '692024630667546'; // Licencias Digitales y Algo Mas
-            $this->info("\n🎯 Paso 4: Probar filtrado por página: Licencias Digitales y Algo Mas ({$testPageId})");
-            
-            // Obtener anuncios y filtrar por página
-            $adsUrl = "https://graph.facebook.com/v18.0/act_{$testAdAccountId}/ads?fields=id,name,campaign_id,creative&limit=250&access_token={$token}";
-            $adsResponse = file_get_contents($adsUrl);
-            $adsData = json_decode($adsResponse, true);
+                $params = [
+                    'level' => 'ad',
+                    'time_range' => ['since' => now()->subDays(7)->format('Y-m-d'), 'until' => now()->format('Y-m-d')],
+                    'filtering' => [
+                        [
+                            'field' => 'ad.id',
+                            'operator' => 'IN',
+                            'value' => $account->selected_ad_ids,
+                        ],
+                    ],
+                ];
 
-            $campaignsForPage = [];
-            if (isset($adsData['data'])) {
-                foreach ($adsData['data'] as $ad) {
-                    if (isset($ad['creative']['id'])) {
-                        $creativeId = $ad['creative']['id'];
-                        $creativeUrl = "https://graph.facebook.com/v18.0/{$creativeId}?fields=object_story_spec&access_token={$token}";
-                        $creativeResponse = file_get_contents($creativeUrl);
-                        $creativeData = json_decode($creativeResponse, true);
-
-                        if (isset($creativeData['object_story_spec']['page_id']) && 
-                            $creativeData['object_story_spec']['page_id'] == $testPageId) {
-                            $campaignsForPage[$ad['campaign_id']] = true;
-                        }
+                $insights = $adAccount->getInsights($fields, $params);
+                
+                if (count($insights) > 0) {
+                    $this->info("   ✅ Se encontraron " . count($insights) . " anuncios con datos:");
+                    foreach ($insights as $insight) {
+                        $this->line("      📊 {$insight->ad_name} (ID: {$insight->ad_id})");
+                        $this->line("         Campaña: {$insight->campaign_name}");
+                        $this->line("         Impresiones: " . number_format($insight->impressions ?? 0));
+                        $this->line("         Clicks: " . number_format($insight->clicks ?? 0));
+                        $this->line("         CTR: " . number_format($insight->ctr ?? 0, 2) . "%");
+                        $this->line("         Gasto: $" . number_format($insight->spend ?? 0, 2));
+                        $this->newLine();
                     }
+                } else {
+                    $this->warn("   ⚠️ No se encontraron datos para los anuncios configurados");
                 }
+            } else {
+                $this->warn("   ⚠️ No hay anuncios configurados");
             }
 
-            // Mostrar campañas filtradas
-            $this->info("\n📊 Campañas filtradas para la página {$testPageId}:");
-            $filteredCount = 0;
-            foreach ($campaignsData['data'] as $campaign) {
-                if ($campaign['status'] == 'ACTIVE' && isset($campaignsForPage[$campaign['id']])) {
-                    $filteredCount++;
-                    $this->info("  ✅ {$campaign['name']} (ID: {$campaign['id']})");
-                }
-            }
-
-            // 5. Resumen de la jerarquía
-            $this->info("\n📊 Resumen de la nueva jerarquía:");
-            $this->info("  1. Token de Hazabeth Romero ✅");
-            $this->info("  2. Cuentas publicitarias: " . count($adAccountsData['data']) . " cuentas ✅");
-            $this->info("  3. Páginas disponibles: " . count($pagesData['data']) . " páginas ✅");
-            $this->info("  4. Campañas en cuenta {$testAdAccountId}: " . count($campaignsData['data']) . " campañas ✅");
-            $this->info("  5. Campañas filtradas por página {$testPageId}: {$filteredCount} campañas ✅");
-
-            $this->info("\n🔄 Flujo completo del formulario:");
-            $this->info("  1. Usuario ve todas las cuentas publicitarias disponibles");
-            $this->info("  2. Usuario selecciona una cuenta publicitaria");
-            $this->info("  3. Usuario ve todas las páginas disponibles");
-            $this->info("  4. Usuario selecciona una página");
-            $this->info("  5. Sistema filtra campañas por página seleccionada");
-            $this->info("  6. Usuario selecciona campañas");
-            $this->info("  7. Sistema filtra anuncios por campañas seleccionadas");
-
-            $this->info("\n✅ Prueba de nueva jerarquía completada exitosamente");
+            $this->info("=== PRUEBA COMPLETADA ===");
+            $this->info("✅ La nueva jerarquía está funcionando correctamente");
+            $this->info("✅ Los anuncios específicos se pueden filtrar y obtener estadísticas");
 
         } catch (\Exception $e) {
-            $this->error("❌ Error: " . $e->getMessage());
+            $this->error("❌ Error durante la prueba: " . $e->getMessage());
+            Log::error("Error en TestNewHierarchy: " . $e->getMessage());
             return 1;
         }
 

@@ -12,7 +12,7 @@ use Filament\Notifications\Notification;
 use FacebookAds\Api;
 use FacebookAds\Object\AdAccount;
 use Illuminate\Support\Facades\Log;
-use App\Models\FacebookAccount; // Added this import for FacebookAccount model
+use App\Models\FacebookAccount;
 
 class ViewCampaigns extends Page
 {
@@ -23,7 +23,8 @@ class ViewCampaigns extends Page
     protected static string $view = 'filament.resources.facebook-account-resource.pages.view-campaigns';
 
     public $record;
-    public $selectedCampaign = null;
+    public $selectedCampaignIds = [];
+    public $selectedAdIds = [];
     public $campaigns = [];
     public $ads = [];
     public $dateRange = 'last_7d';
@@ -38,26 +39,35 @@ class ViewCampaigns extends Page
             $this->record = $record;
         }
         
-        $this->loadCampaigns();
+        // Cargar las campañas y anuncios ya seleccionados en la configuración
+        $this->selectedCampaignIds = $this->record->selected_campaign_ids ?? [];
+        $this->selectedAdIds = $this->record->selected_ad_ids ?? [];
+        
+        $this->loadConfiguredData();
     }
 
     public function form(Form $form): Form
     {
         return $form
             ->schema([
-                Section::make('Selección de Campaña')
-                    ->description('Selecciona una campaña para ver sus anuncios y métricas')
+                Section::make('Configuración Actual')
+                    ->description('Campañas y anuncios configurados para esta cuenta')
                     ->schema([
-                        Select::make('selectedCampaign')
-                            ->label('Campaña')
+                        Select::make('selectedCampaignIds')
+                            ->label('Campañas Configuradas')
                             ->options($this->getCampaignOptions())
-                            ->placeholder('Selecciona una campaña')
-                            ->reactive()
-                            ->afterStateUpdated(function ($state) {
-                                if ($state) {
-                                    $this->loadAds($state);
-                                }
-                            }),
+                            ->multiple()
+                            ->default($this->selectedCampaignIds)
+                            ->disabled()
+                            ->helperText('Estas son las campañas configuradas en la cuenta de Facebook'),
+                            
+                        Select::make('selectedAdIds')
+                            ->label('Anuncios Configurados')
+                            ->options($this->getAdOptions())
+                            ->multiple()
+                            ->default($this->selectedAdIds)
+                            ->disabled()
+                            ->helperText('Estos son los anuncios específicos configurados para sincronización'),
                             
                         Select::make('dateRange')
                             ->label('Período de Datos')
@@ -72,53 +82,81 @@ class ViewCampaigns extends Page
                             ->default('last_7d')
                             ->reactive()
                             ->afterStateUpdated(function ($state) {
-                                if ($this->selectedCampaign) {
-                                    $this->loadAds($this->selectedCampaign);
+                                if (!empty($this->selectedAdIds)) {
+                                    $this->loadAdsStats();
                                 }
                             }),
-                    ])->columns(2),
+                    ])->columns(1),
             ]);
     }
 
-    public function loadCampaigns(): void
+    public function loadConfiguredData(): void
     {
         try {
             $this->isLoading = true;
             
-            // Inicializar Facebook API
-            Api::init(
-                $this->record->app_id,
-                $this->record->app_secret,
-                $this->record->access_token
-            );
+            // Cargar información de las campañas configuradas
+            $this->loadCampaignsInfo();
             
-            $account = new AdAccount('act_' . $this->record->account_id);
-            
-            // Obtener campañas
-            $campaigns = $account->getCampaigns(['id', 'name', 'status']);
-            $this->campaigns = collect($campaigns)->map(function ($campaign) {
-                return [
-                    'id' => $campaign->id,
-                    'name' => $campaign->name,
-                    'status' => $campaign->status,
-                ];
-            })->toArray();
+            // Si hay anuncios configurados, cargar sus estadísticas
+            if (!empty($this->selectedAdIds)) {
+                $this->loadAdsStats();
+            }
             
             $this->isLoading = false;
             
         } catch (\Exception $e) {
             $this->isLoading = false;
-            Log::error('Error cargando campañas: ' . $e->getMessage());
+            Log::error('Error cargando datos configurados: ' . $e->getMessage());
             
             Notification::make()
                 ->title('Error')
-                ->body('Error al cargar las campañas: ' . $e->getMessage())
+                ->body('Error al cargar los datos configurados: ' . $e->getMessage())
                 ->danger()
                 ->send();
         }
     }
 
-    public function loadAds(string $campaignId): void
+    public function loadCampaignsInfo(): void
+    {
+        try {
+            // Inicializar Facebook API
+            Api::init(
+                $this->record->app_id,
+                $this->record->app_secret,
+                $this->record->access_token
+            );
+            
+            $account = new AdAccount('act_' . $this->record->selected_ad_account_id);
+            
+            // Obtener información de las campañas configuradas
+            if (!empty($this->selectedCampaignIds)) {
+                $campaigns = $account->getCampaigns(['id', 'name', 'status'], [
+                    'filtering' => [
+                        [
+                            'field' => 'id',
+                            'operator' => 'IN',
+                            'value' => $this->selectedCampaignIds,
+                        ],
+                    ],
+                ]);
+                
+                $this->campaigns = collect($campaigns)->map(function ($campaign) {
+                    return [
+                        'id' => $campaign->id,
+                        'name' => $campaign->name,
+                        'status' => $campaign->status,
+                    ];
+                })->toArray();
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('Error cargando información de campañas: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    public function loadAdsStats(): void
     {
         try {
             $this->isLoading = true;
@@ -130,14 +168,15 @@ class ViewCampaigns extends Page
                 $this->record->access_token
             );
             
-            $account = new AdAccount('act_' . $this->record->account_id);
+            $account = new AdAccount('act_' . $this->record->selected_ad_account_id);
             
-            // Obtener anuncios de la campaña con métricas expandidas
+            // Obtener estadísticas de los anuncios específicos configurados
             $fields = [
                 'ad_id',
                 'ad_name',
                 'adset_id',
                 'campaign_id',
+                'campaign_name',
                 'impressions',
                 'clicks',
                 'spend',
@@ -165,16 +204,16 @@ class ViewCampaigns extends Page
                 'time_range' => ['since' => $this->getDateRangeStart($this->dateRange), 'until' => now()->format('Y-m-d')],
                 'filtering' => [
                     [
-                        'field' => 'campaign.id',
+                        'field' => 'ad.id',
                         'operator' => 'IN',
-                        'value' => [$campaignId],
+                        'value' => $this->selectedAdIds,
                     ],
                 ],
             ];
 
             $insights = $account->getInsights($fields, $params);
             
-            // Obtener información creativa de los anuncios (opcional)
+            // Obtener información creativa de los anuncios
             $adIds = collect($insights)->pluck('ad_id')->filter()->toArray();
             $creatives = [];
             
@@ -197,6 +236,7 @@ class ViewCampaigns extends Page
                 return [
                     'ad_id' => $insight->ad_id ?? null,
                     'ad_name' => $insight->ad_name ?? 'Sin nombre',
+                    'campaign_name' => $insight->campaign_name ?? 'Sin campaña',
                     'creative' => $creative,
                     'impressions' => (int)($insight->impressions ?? 0),
                     'clicks' => (int)($insight->clicks ?? 0),
@@ -218,21 +258,37 @@ class ViewCampaigns extends Page
             
             $this->isLoading = false;
             
+            Notification::make()
+                ->title('Datos Cargados')
+                ->body('Se cargaron ' . count($this->ads) . ' anuncios con sus estadísticas')
+                ->success()
+                ->send();
+            
         } catch (\Exception $e) {
             $this->isLoading = false;
-            Log::error('Error cargando anuncios: ' . $e->getMessage());
+            Log::error('Error cargando estadísticas de anuncios: ' . $e->getMessage());
             
             Notification::make()
                 ->title('Error')
-                ->body('Error al cargar los anuncios: ' . $e->getMessage())
+                ->body('Error al cargar las estadísticas: ' . $e->getMessage())
                 ->danger()
                 ->send();
         }
     }
 
-    private function getCampaignOptions(): array
+    public function getCampaignOptions(): array
     {
         return collect($this->campaigns)->pluck('name', 'id')->toArray();
+    }
+
+    public function getAdOptions(): array
+    {
+        // Crear opciones de anuncios basadas en los IDs configurados
+        $options = [];
+        foreach ($this->selectedAdIds as $adId) {
+            $options[$adId] = "Anuncio ID: {$adId}";
+        }
+        return $options;
     }
 
     private function getDateRangeStart(string $dateRange): string
