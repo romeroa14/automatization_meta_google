@@ -166,8 +166,7 @@ class FacebookAccountResource extends Resource
                                 
                                 try {
                                     // Usar API de Graph directamente para evitar problemas con appsecret_proof
-                                    $userId = '10232575857351584'; // ID del usuario obtenido
-                                    $url = "https://graph.facebook.com/v18.0/{$userId}/accounts?type=page&limit=250&access_token={$accessToken}";
+                                    $url = "https://graph.facebook.com/v18.0/me/accounts?type=page&limit=250&access_token={$accessToken}";
                                     $response = file_get_contents($url);
                                     $data = json_decode($response, true);
                                     
@@ -212,8 +211,7 @@ class FacebookAccountResource extends Resource
                                         
                                         try {
                                             // Usar API de Graph directamente
-                                            $userId = '10232575857351584';
-                                            $url = "https://graph.facebook.com/v18.0/{$userId}/accounts?type=page&limit=250&access_token={$accessToken}";
+                                            $url = "https://graph.facebook.com/v18.0/me/accounts?type=page&limit=250&access_token={$accessToken}";
                                             $response = file_get_contents($url);
                                             $data = json_decode($response, true);
                                             
@@ -349,6 +347,7 @@ class FacebookAccountResource extends Resource
                             ->options(function ($get, $record) {
                                 $adAccountId = $get('selected_ad_account_id');
                                 $campaignIds = $get('selected_campaign_ids');
+                                $pageId = $get('selected_page_id');
                                 $appId = $get('app_id');
                                 $appSecret = $get('app_secret');
                                 $accessToken = $get('access_token');
@@ -359,33 +358,43 @@ class FacebookAccountResource extends Resource
                                 }
                                 
                                 try {
-                                    // Inicializar Facebook API con datos del formulario
-                                    Api::init($appId, $appSecret, $accessToken);
-                                    
-                                    $account = new AdAccount('act_' . $adAccountId);
-                                    
-                                    $fields = ['ad_id', 'ad_name', 'campaign_id'];
+                                    // Usar API de Graph directamente para obtener anuncios y filtrar por página
+                                    $baseUrl = "https://graph.facebook.com/v18.0/act_{$adAccountId}/ads";
+                                    $fields = 'id,name,campaign_id,creative';
                                     $params = [
-                                        'level' => 'ad',
+                                        'fields' => $fields,
                                         'limit' => 250,
-                                        'time_range' => [
-                                            'since' => date('Y-m-d', strtotime('-30 days')),
-                                            'until' => date('Y-m-d'),
-                                        ],
-                                        'filtering' => [
-                                            [
-                                                'field' => 'campaign.id',
-                                                'operator' => 'IN',
-                                                'value' => $campaignIds,
-                                            ],
-                                        ],
+                                        'access_token' => $accessToken
                                     ];
                                     
-                                    $insights = $account->getInsights($fields, $params);
+                                    $url = $baseUrl . '?' . http_build_query($params);
+                                    $response = file_get_contents($url);
+                                    $adsData = json_decode($response, true);
                                     
                                     $options = [];
-                                    foreach ($insights as $insight) {
-                                        $options[$insight->ad_id] = $insight->ad_name . ' (ID: ' . $insight->ad_id . ')';
+                                    if (isset($adsData['data'])) {
+                                        foreach ($adsData['data'] as $ad) {
+                                            // Verificar que el anuncio pertenezca a las campañas seleccionadas
+                                            if (!in_array($ad['campaign_id'], $campaignIds)) {
+                                                continue;
+                                            }
+                                            
+                                            // Si hay página seleccionada, verificar que el anuncio pertenezca a esa página
+                                            if ($pageId && isset($ad['creative']['id'])) {
+                                                $creativeId = $ad['creative']['id'];
+                                                $creativeUrl = "https://graph.facebook.com/v18.0/{$creativeId}?fields=object_story_spec&access_token={$accessToken}";
+                                                $creativeResponse = file_get_contents($creativeUrl);
+                                                $creativeData = json_decode($creativeResponse, true);
+                                                
+                                                // Verificar si el creativo pertenece a la página seleccionada
+                                                if (isset($creativeData['object_story_spec']['page_id']) && 
+                                                    $creativeData['object_story_spec']['page_id'] != $pageId) {
+                                                    continue;
+                                                }
+                                            }
+                                            
+                                            $options[$ad['id']] = $ad['name'] . ' (ID: ' . $ad['id'] . ')';
+                                        }
                                     }
                                     
                                     return $options;
@@ -418,34 +427,57 @@ class FacebookAccountResource extends Resource
                                         }
                                         
                                         try {
-                                            Api::init($appId, $appSecret, $accessToken);
-                                            $account = new AdAccount('act_' . $adAccountId);
-                                            
-                                            $fields = ['ad_id', 'ad_name', 'campaign_id'];
+                                            // Usar API de Graph directamente para obtener anuncios y filtrar por página
+                                            $pageId = $get('selected_page_id');
+                                            $baseUrl = "https://graph.facebook.com/v18.0/act_{$adAccountId}/ads";
+                                            $fields = 'id,name,campaign_id,creative';
                                             $params = [
-                                                'level' => 'ad',
-                                                'time_range' => [
-                                                    'since' => date('Y-m-d', strtotime('-30 days')),
-                                                    'until' => date('Y-m-d'),
-                                                ],
-                                                'filtering' => [
-                                                    [
-                                                        'field' => 'campaign.id',
-                                                        'operator' => 'IN',
-                                                        'value' => $campaignIds,
-                                                    ],
-                                                ],
+                                                'fields' => $fields,
+                                                'limit' => 250,
+                                                'access_token' => $accessToken
                                             ];
                                             
-                                            $insights = $account->getInsights($fields, $params);
+                                            $url = $baseUrl . '?' . http_build_query($params);
+                                            $response = file_get_contents($url);
+                                            $adsData = json_decode($response, true);
+                                            
                                             $adsCount = 0;
-                                            foreach ($insights as $insight) {
-                                                $adsCount++;
+                                            $filteredAdsCount = 0;
+                                            
+                                            if (isset($adsData['data'])) {
+                                                foreach ($adsData['data'] as $ad) {
+                                                    $adsCount++;
+                                                    
+                                                    // Verificar que el anuncio pertenezca a las campañas seleccionadas
+                                                    if (!in_array($ad['campaign_id'], $campaignIds)) {
+                                                        continue;
+                                                    }
+                                                    
+                                                    // Si hay página seleccionada, verificar que el anuncio pertenezca a esa página
+                                                    if ($pageId && isset($ad['creative']['id'])) {
+                                                        $creativeId = $ad['creative']['id'];
+                                                        $creativeUrl = "https://graph.facebook.com/v18.0/{$creativeId}?fields=object_story_spec&access_token={$accessToken}";
+                                                        $creativeResponse = file_get_contents($creativeUrl);
+                                                        $creativeData = json_decode($creativeResponse, true);
+                                                        
+                                                        // Verificar si el creativo pertenece a la página seleccionada
+                                                        if (isset($creativeData['object_story_spec']['page_id']) && 
+                                                            $creativeData['object_story_spec']['page_id'] != $pageId) {
+                                                            continue;
+                                                        }
+                                                    }
+                                                    
+                                                    $filteredAdsCount++;
+                                                }
                                             }
+                                            
+                                            $message = $pageId 
+                                                ? "Se encontraron {$filteredAdsCount} anuncios filtrados por página de {$adsCount} totales"
+                                                : "Se encontraron {$filteredAdsCount} anuncios en las campañas seleccionadas";
                                             
                                             Notification::make()
                                                 ->title('Anuncios Actualizados')
-                                                ->body("Se encontraron {$adsCount} anuncios en las campañas seleccionadas")
+                                                ->body($message)
                                                 ->success()
                                                 ->send();
                                                 
