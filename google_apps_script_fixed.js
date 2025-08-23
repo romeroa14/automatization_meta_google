@@ -297,15 +297,46 @@ function createAdSlide(slide, slideData) {
   titleShape.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
   
   // 2. ANUNCIO/IMAGEN
-  const adShape = slide.insertTextBox('📱 ANUNCIO\n' + (slideData.title || 'ANUNCIO'));
-  adShape.setLeft(50);
-  adShape.setTop(150);
-  adShape.setWidth(300);
-  adShape.setHeight(200);
-  adShape.getText().getTextStyle().setFontSize(16).setBold(true);
-  adShape.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
-  adShape.getBorder().setTransparent();
-  adShape.getFill().setSolidFill('#E3F2FD');
+  console.log('Procesando imagen del anuncio:', slideData.ad_image_url);
+  
+  if (slideData.ad_image_url) {
+    try {
+      // Intentar insertar imagen del anuncio
+      console.log('Intentando insertar imagen desde:', slideData.ad_image_url);
+      const imageShape = slide.insertImage(slideData.ad_image_url);
+      imageShape.setLeft(50);
+      imageShape.setTop(150);
+      imageShape.setWidth(300);
+      imageShape.setHeight(200);
+      console.log('✅ Imagen del anuncio insertada exitosamente');
+    } catch (error) {
+      console.error('❌ Error insertando imagen:', error.message);
+      console.log('🔧 Usando fallback con texto...');
+      
+      // Fallback: crear shape con texto y mostrar URL de la imagen
+      const adShape = slide.insertTextBox('📱 ANUNCIO\n' + (slideData.title || 'ANUNCIO') + '\n\n🖼️ Imagen disponible\n(Ver logs para detalles)');
+      adShape.setLeft(50);
+      adShape.setTop(150);
+      adShape.setWidth(300);
+      adShape.setHeight(200);
+      adShape.getText().getTextStyle().setFontSize(14).setBold(true);
+      adShape.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+      adShape.getBorder().setTransparent();
+      adShape.getFill().setSolidFill('#E3F2FD');
+    }
+  } else {
+    console.log('⚠️ No hay URL de imagen disponible');
+    // Crear shape con texto si no hay imagen
+    const adShape = slide.insertTextBox('📱 ANUNCIO\n' + (slideData.title || 'ANUNCIO') + '\n\n❌ Sin imagen');
+    adShape.setLeft(50);
+    adShape.setTop(150);
+    adShape.setWidth(300);
+    adShape.setHeight(200);
+    adShape.getText().getTextStyle().setFontSize(16).setBold(true);
+    adShape.getText().getParagraphStyle().setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+    adShape.getBorder().setTransparent();
+    adShape.getFill().setSolidFill('#E3F2FD');
+  }
   
   // 3-14. MÉTRICAS EN TABLA (12 shapes)
   const metrics = slideData.metrics || {};

@@ -776,12 +776,59 @@ class GoogleSlidesReportService
                 ];
             }
 
+            // Obtener imágenes de los anuncios
+            $adsData = $this->addAdImages($adsData, $account);
+            
             return $adsData;
 
         } catch (\Exception $e) {
             Log::error("Error obteniendo datos de anuncios para cuenta {$account->id}: " . $e->getMessage());
             return [];
         }
+    }
+
+    /**
+     * Agrega las imágenes de los anuncios a los datos
+     */
+    protected function addAdImages(array $adsData, FacebookAccount $account): array
+    {
+        try {
+            \FacebookAds\Api::init(
+                $account->app_id,
+                $account->app_secret,
+                $account->access_token
+            );
+
+            foreach ($adsData as &$adData) {
+                $adId = $adData['ad_id'];
+                
+                // Obtener el anuncio completo para acceder a los creativos
+                $ad = new \FacebookAds\Object\Ad($adId);
+                $ad->read(['creative']);
+                
+                if ($ad->creative) {
+                    $creative = new \FacebookAds\Object\AdCreative($ad->creative['id']);
+                    $creative->read(['image_url', 'image_hash', 'thumbnail_url']);
+                    
+                    // Usar thumbnail_url si está disponible, sino image_url
+                    $imageUrl = $creative->thumbnail_url ?? $creative->image_url ?? null;
+                    
+                    if ($imageUrl) {
+                        $adData['ad_image_url'] = $imageUrl;
+                        Log::info("Imagen obtenida para anuncio {$adId}: {$imageUrl}");
+                    } else {
+                        Log::warning("No se encontró imagen para anuncio {$adId}");
+                    }
+                } else {
+                    Log::warning("No se encontró creative para anuncio {$adId}");
+                }
+            }
+
+        } catch (\Exception $e) {
+            Log::warning("Error obteniendo imágenes de anuncios: " . $e->getMessage());
+        }
+
+        return $adsData;
     }
 
     /**
@@ -938,24 +985,35 @@ class GoogleSlidesReportService
      */
     protected function createAdSlide(array $adData): array
     {
-        return [
+        $slide = [
             'type' => 'ad',
             'title' => $adData['ad_name'],
             'subtitle' => "Anuncio ID: {$adData['ad_id']}",
-            'content' => [
-                'impressions' => number_format($adData['impressions']),
+            'metrics' => [
+                'alcance' => number_format($adData['reach']),
+                'impresiones' => number_format($adData['impressions']),
+                'frecuencia' => number_format($adData['frequency'], 2),
                 'clicks' => number_format($adData['clicks']),
                 'ctr' => number_format($adData['ctr'], 2) . '%',
-                'spend' => '$' . number_format($adData['spend'], 2),
-                'reach' => number_format($adData['reach']),
+                'costo_por_resultado' => '$' . number_format($adData['cpc'], 2),
+                'importe_gastado' => '$' . number_format($adData['spend'], 2),
+                'resultados' => number_format($adData['clicks']),
                 'cpm' => '$' . number_format($adData['cpm'], 2),
                 'cpc' => '$' . number_format($adData['cpc'], 2),
-                'total_interactions' => number_format($adData['total_interactions']),
-                'interaction_rate' => number_format($adData['interaction_rate'], 2) . '%',
-                'video_views_p100' => number_format($adData['video_views']['p100'] ?? 0),
-                'video_completion_rate' => number_format($adData['video_completion_rate'], 1) . '%',
+                'frecuencia_media' => number_format($adData['frequency'], 2),
+                'alcance_neto' => number_format($adData['reach']),
             ],
-            'image_url' => $adData['ad_image_url'] ?? null,
+            'followers' => [
+                'facebook' => number_format($adData['followers']['facebook'] ?? 0),
+                'instagram' => number_format($adData['followers']['instagram'] ?? 0),
+            ],
         ];
+
+        // Agregar imagen del anuncio si está disponible
+        if (!empty($adData['ad_image_url'])) {
+            $slide['ad_image_url'] = $adData['ad_image_url'];
+        }
+
+        return $slide;
     }
 }

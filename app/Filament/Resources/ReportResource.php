@@ -28,6 +28,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Artisan;
 use App\Services\GoogleSlidesReportService;
+use App\Services\PdfReportService;
 
 class ReportResource extends Resource
 {
@@ -355,7 +356,7 @@ class ReportResource extends Resource
                 Tables\Actions\EditAction::make(),
                 
                 Action::make('generate')
-                    ->label('Generar')
+                    ->label('Generar Slides')
                     ->icon('heroicon-o-play')
                     ->color('success')
                     ->visible(fn (Report $record) => $record->status === 'draft' || $record->status === 'failed')
@@ -395,7 +396,7 @@ class ReportResource extends Resource
                                 
                                 // Mostrar notificación de error
                                 Notification::make()
-                                    ->title('Error al Generar')
+                                    ->title('Error al Generar Slides')
                                     ->body('Error: ' . ($result['error'] ?? 'Error desconocido'))
                                     ->danger()
                                     ->send();
@@ -407,7 +408,40 @@ class ReportResource extends Resource
                             
                             // Mostrar notificación de error
                             Notification::make()
-                                ->title('Error')
+                                ->title('Error al Generar Slides')
+                                ->body('Error: ' . $e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+                
+                Action::make('generate_pdf')
+                    ->label('Generar PDF')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->color('warning')
+                    ->action(function (Report $record) {
+                        try {
+                            $pdfService = new PdfReportService();
+                            $result = $pdfService->generateReport($record);
+                            
+                            if ($result['success']) {
+                                Notification::make()
+                                    ->title('PDF Generado Exitosamente')
+                                    ->body('El reporte PDF se ha generado correctamente.')
+                                    ->success()
+                                    ->send();
+                                
+                                return redirect()->away($result['file_url']);
+                            } else {
+                                Notification::make()
+                                    ->title('Error Generando PDF')
+                                    ->body($result['error'])
+                                    ->danger()
+                                    ->send();
+                            }
+                        } catch (\Exception $e) {
+                            Notification::make()
+                                ->title('Error Generando PDF')
                                 ->body('Error: ' . $e->getMessage())
                                 ->danger()
                                 ->send();
