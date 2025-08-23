@@ -26,6 +26,8 @@ use Filament\Tables\Actions\Action;
 use Filament\Notifications\Notification;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Artisan;
+use App\Services\GoogleSlidesReportService;
 
 class ReportResource extends Resource
 {
@@ -88,12 +90,12 @@ class ReportResource extends Resource
                             ->placeholder('Selecciona las cuentas de Facebook')
                             ->helperText('Selecciona las cuentas de Facebook que quieres incluir en el reporte'),
                         
-                        Forms\Components\Select::make('selected_campaigns')
-                            ->label('Campañas Específicas (Opcional)')
+                        Forms\Components\Select::make('selected_ads')
+                            ->label('Anuncios Específicos (Opcional)')
                             ->multiple()
                             ->searchable()
-                            ->placeholder('Deja vacío para incluir todas las campañas')
-                            ->helperText('Si seleccionas campañas específicas, solo se incluirán esas en el reporte')
+                            ->placeholder('Deja vacío para incluir todos los anuncios configurados')
+                            ->helperText('Si seleccionas anuncios específicos, solo se incluirán esos en el reporte')
                             ->options(function ($get) {
                                 $accountIds = $get('selected_facebook_accounts');
                                 if (empty($accountIds)) {
@@ -101,24 +103,24 @@ class ReportResource extends Resource
                                 }
                                 
                                 $accounts = FacebookAccount::whereIn('id', $accountIds)->get();
-                                $campaigns = [];
+                                $ads = [];
                                 
                                 foreach ($accounts as $account) {
-                                    if ($account->selected_campaign_ids) {
-                                        foreach ($account->selected_campaign_ids as $campaignId) {
-                                            $campaigns[$campaignId] = "Campaña {$campaignId} - {$account->account_name}";
+                                    if ($account->selected_ad_ids) {
+                                        foreach ($account->selected_ad_ids as $adId) {
+                                            $ads[$adId] = "Anuncio {$adId} - {$account->account_name}";
                                         }
                                     }
                                 }
                                 
-                                return $campaigns;
+                                return $ads;
                             })
                             ->visible(fn ($get) => !empty($get('selected_facebook_accounts'))),
                     ])
                     ->collapsible(),
 
                 Section::make('Configuración de Marcas')
-                    ->description('Organiza las campañas por marcas para el reporte')
+                    ->description('Organiza los anuncios por marcas para el reporte')
                     ->schema([
                         Repeater::make('brands_config')
                             ->label('Marcas')
@@ -132,11 +134,11 @@ class ReportResource extends Resource
                                     ->label('Identificador')
                                     ->placeholder('Ej: SKYTEX_MAIN'),
                                 
-                                Forms\Components\Select::make('campaign_ids')
-                                    ->label('Campañas de esta Marca')
+                                Forms\Components\Select::make('ad_ids')
+                                    ->label('Anuncios de esta Marca')
                                     ->multiple()
                                     ->searchable()
-                                    ->placeholder('Selecciona las campañas de esta marca')
+                                    ->placeholder('Selecciona los anuncios de esta marca')
                                     ->options(function ($get) {
                                         $accountIds = $get('../../selected_facebook_accounts');
                                         if (empty($accountIds)) {
@@ -144,17 +146,17 @@ class ReportResource extends Resource
                                         }
                                         
                                         $accounts = FacebookAccount::whereIn('id', $accountIds)->get();
-                                        $campaigns = [];
+                                        $ads = [];
                                         
                                         foreach ($accounts as $account) {
-                                            if ($account->selected_campaign_ids) {
-                                                foreach ($account->selected_campaign_ids as $campaignId) {
-                                                    $campaigns[$campaignId] = "Campaña {$campaignId} - {$account->account_name}";
+                                            if ($account->selected_ad_ids) {
+                                                foreach ($account->selected_ad_ids as $adId) {
+                                                    $ads[$adId] = "Anuncio {$adId} - {$account->account_name}";
                                                 }
                                             }
                                         }
                                         
-                                        return $campaigns;
+                                        return $ads;
                                     }),
                                 
                                 Forms\Components\TextInput::make('slide_order')
@@ -318,8 +320,8 @@ class ReportResource extends Resource
                     ->label('Marcas')
                     ->sortable(),
                 
-                TextColumn::make('total_campaigns')
-                    ->label('Campañas')
+                TextColumn::make('total_ads')
+                    ->label('Anuncios')
                     ->sortable(),
                 
                 TextColumn::make('generated_at')
@@ -378,38 +380,56 @@ class ReportResource extends Resource
                     ->icon('heroicon-o-play')
                     ->color('success')
                     ->visible(fn (Report $record) => $record->status === 'draft' || $record->status === 'failed')
-                    // ->loadingMessage('Generando reporte...')
-                    ->successNotification(
-                        Notification::make()
-                            ->success()
-                            ->title('Reporte Generado')
-                            ->body('El reporte se ha generado exitosamente.')
-                    )
                     ->action(function (Report $record) {
                         try {
-                            $response = Http::timeout(120)->post(route('reports.generate', $record));
-                            $data = $response->json();
+                            // Actualizar el estado a "generating"
+                            $record->update(['status' => 'generating']);
                             
-                            if ($data['success']) {
+                            // Instanciar el servicio directamente
+                            $googleSlidesService = new GoogleSlidesReportService();
+                            
+                            // Generar el reporte usando el servicio
+                            $result = $googleSlidesService->generateReport($record);
+                            
+                            // Verificar si fue exitoso
+                            if ($result['success']) {
+                                // Actualizar el reporte con la URL de la presentación
+                                $record->update([
+                                    'status' => 'completed',
+                                    'google_slides_url' => $result['presentation_url'],
+                                    'generated_at' => now(),
+                                ]);
+                                
+                                // Mostrar notificación de éxito
                                 Notification::make()
-                                    ->title('Reporte Generado')
-                                    ->body("El reporte se ha generado exitosamente con {$data['slides_count']} diapositivas.")
+                                    ->title('Reporte Generado Exitosamente')
+                                    ->body("Se generaron {$result['slides_count']} diapositivas.")
                                     ->success()
                                     ->send();
-                                    
+                                
                                 // Redirigir a la presentación
-                                return redirect()->away($data['presentation_url']);
+                                return redirect()->away($result['presentation_url']);
+                                
                             } else {
+                                // Actualizar el estado a "failed"
+                                $record->update(['status' => 'failed']);
+                                
+                                // Mostrar notificación de error
                                 Notification::make()
-                                    ->title('Error')
-                                    ->body('Error generando el reporte: ' . ($data['error'] ?? 'Error desconocido'))
+                                    ->title('Error al Generar')
+                                    ->body('Error: ' . ($result['error'] ?? 'Error desconocido'))
                                     ->danger()
                                     ->send();
                             }
+                            
                         } catch (\Exception $e) {
+                            // Actualizar el estado a "failed"
+                            $record->update(['status' => 'failed']);
+                            
+                            // Mostrar notificación de error
                             Notification::make()
                                 ->title('Error')
-                                ->body('Error de conexión: ' . $e->getMessage())
+                                ->body('Error: ' . $e->getMessage())
                                 ->danger()
                                 ->send();
                         }
@@ -448,5 +468,15 @@ class ReportResource extends Resource
             'view' => Pages\ViewReport::route('/{record}'),
             'edit' => Pages\EditReport::route('/{record}/edit'),
         ];
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return static::getModel()::count() > 10 ? 'warning' : 'primary';
     }
 }

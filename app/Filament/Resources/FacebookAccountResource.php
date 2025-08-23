@@ -391,7 +391,7 @@ class FacebookAccountResource extends Resource
                         Forms\Components\Hidden::make('ad_options'),
                         
                         Forms\Components\Select::make('selected_ad_ids')
-                            ->label('Anuncios Específicos (Opcional)')
+                            ->label('Anuncios Específicos')
                             ->helperText('Selecciona anuncios específicos de las campañas elegidas. Deja vacío para todos los anuncios.')
                             ->placeholder('Selecciona anuncios')
                             ->multiple()
