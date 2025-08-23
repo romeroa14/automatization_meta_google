@@ -78,10 +78,9 @@ class GoogleSlidesReportService
      */
     public function prepareReportDataOptimized(Report $report): array
     {
-        // Versión simplificada para evitar timeout
         $slides = [];
         
-        // Slide 1: Portada simplificada
+        // Slide 1: Portada
         $slides[] = [
             'type' => 'title',
             'title' => $report->name,
@@ -99,16 +98,79 @@ class GoogleSlidesReportService
             ],
         ];
         
-        // Slide 3: Resumen
+        // Obtener datos reales de Facebook por Fan Page
+        $facebookData = $this->getFacebookDataByFanPages($report);
+        
+        // Slide 3: Resumen general
         $slides[] = [
             'type' => 'content',
-            'title' => 'Resumen',
+            'title' => 'Resumen General',
             'content' => [
-                'Total de marcas' => 'Procesando...',
-                'Total de anuncios' => 'Procesando...',
-                'Estado' => 'En progreso',
+                'Total de Fan Pages' => count($facebookData['fan_pages']),
+                'Total de anuncios' => $facebookData['total_ads'],
+                'Período analizado' => $report->period_start . ' - ' . $report->period_end,
             ],
         ];
+        
+        // Ordenar Fan Pages según la configuración del reporte
+        $orderedFanPages = $facebookData['fan_pages'];
+        if (!empty($report->fan_pages_order)) {
+            $orderedFanPages = [];
+            foreach ($report->fan_pages_order as $accountId) {
+                foreach ($facebookData['fan_pages'] as $fanPage) {
+                    if ($fanPage['page_id'] == $accountId) {
+                        $orderedFanPages[] = $fanPage;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Generar slides por Fan Page en el orden especificado
+        foreach ($orderedFanPages as $fanPage) {
+            // Slide de título de Fan Page
+            $slides[] = [
+                'type' => 'brand_title',
+                'title' => $fanPage['page_name'],
+                'subtitle' => 'Fan Page - Resumen de Anuncios',
+                'metrics' => [
+                    'seguidores_facebook' => number_format($fanPage['followers_facebook']),
+                    'seguidores_instagram' => number_format($fanPage['followers_instagram']),
+                    'total_anuncios' => count($fanPage['ads']),
+                    'alcance_total' => number_format($fanPage['total_reach']),
+                    'impresiones_totales' => number_format($fanPage['total_impressions']),
+                    'clicks_totales' => number_format($fanPage['total_clicks']),
+                    'gasto_total' => '$' . number_format($fanPage['total_spend'], 2),
+                ],
+            ];
+            
+            // Slides de estadísticas por anuncio
+            foreach ($fanPage['ads'] as $ad) {
+                $slides[] = [
+                    'type' => 'ad',
+                    'title' => $ad['ad_name'],
+                    'subtitle' => "Anuncio ID: {$ad['ad_id']}",
+                    'metrics' => [
+                        'alcance' => number_format($ad['reach']),
+                        'impresiones' => number_format($ad['impressions']),
+                        'frecuencia' => number_format($ad['frequency'], 2),
+                        'clicks' => number_format($ad['clicks']),
+                        'ctr' => number_format($ad['ctr'], 2) . '%',
+                        'costo_por_resultado' => '$' . number_format($ad['cpc'], 2),
+                        'importe_gastado' => '$' . number_format($ad['spend'], 2),
+                        'resultados' => number_format($ad['clicks']),
+                        'cpm' => '$' . number_format($ad['cpm'], 2),
+                        'cpc' => '$' . number_format($ad['cpc'], 2),
+                        'frecuencia_media' => number_format($ad['frequency'], 2),
+                        'alcance_neto' => number_format($ad['reach']),
+                    ],
+                    'followers' => [
+                        'facebook' => number_format($ad['followers']['facebook']),
+                        'instagram' => number_format($ad['followers']['instagram']),
+                    ],
+                ];
+            }
+        }
         
         return [
             'slides' => $slides,
@@ -412,8 +474,8 @@ class GoogleSlidesReportService
         $data = $response->json();
         
         // Verificar la estructura de la respuesta
-        if (!isset($data['success']) || !$data['success']) {
-            throw new Exception("Error en respuesta del Google Apps Script: " . ($data['error'] ?? 'Error desconocido'));
+        if (!isset($data['status']) || $data['status'] !== 'success') {
+            throw new Exception("Error en respuesta del Google Apps Script: " . ($data['message'] ?? 'Error desconocido'));
         }
         
         if (!isset($data['data']['presentation_id'])) {
@@ -428,15 +490,26 @@ class GoogleSlidesReportService
      */
     protected function generateSlidesOptimized(string $presentationId, array $reportData): void
     {
-        // Procesar solo las primeras 5 diapositivas para evitar timeout
-        $slidesToProcess = array_slice($reportData['slides'], 0, 5);
+        // Enviar todas las diapositivas de una vez usando la nueva función
+        $response = Http::timeout(300)->post($this->webAppUrl, [
+            'action' => 'create_multiple_slides',
+            'presentation_id' => $presentationId,
+            'slides' => $reportData['slides'],
+        ]);
         
-        foreach ($slidesToProcess as $index => $slide) {
-            $this->createSlide($presentationId, $slide, $index);
-            
-            // Pequeña pausa para evitar sobrecarga
-            usleep(100000); // 0.1 segundos
+        if (!$response->successful()) {
+            Log::error("Error creando múltiples diapositivas: " . $response->body());
+            throw new \Exception("Error creando diapositivas: " . $response->body());
         }
+        
+        $result = $response->json();
+        
+        // Verificar la estructura de la respuesta
+        if (!isset($result['status']) || $result['status'] !== 'success') {
+            throw new \Exception("Error en respuesta del Google Apps Script: " . ($result['message'] ?? 'Error desconocido'));
+        }
+        
+        Log::info("Diapositivas creadas exitosamente: " . ($result['data']['slides_created'] ?? 0) . " slides");
     }
 
     /**
@@ -484,6 +557,73 @@ class GoogleSlidesReportService
         } else {
             $report->markAsFailed();
         }
+    }
+
+    /**
+     * Obtiene datos de Facebook organizados por Fan Pages
+     */
+    public function getFacebookDataByFanPages(Report $report): array
+    {
+        $facebookAccounts = FacebookAccount::whereIn('id', $report->selected_facebook_accounts ?? [])->get();
+        $fanPagesData = [];
+        $totalAds = 0;
+
+        foreach ($facebookAccounts as $account) {
+            // Obtener la Fan Page seleccionada
+            $pageId = $account->selected_page_id;
+            if (!$pageId) {
+                continue;
+            }
+
+            // Obtener anuncios específicos configurados para esta cuenta
+            $adIds = $account->selected_ad_ids ?? [];
+            
+            if (empty($adIds)) {
+                continue;
+            }
+
+            // Filtrar por anuncios específicos si están configurados en el reporte
+            if (!empty($report->selected_ads)) {
+                $adIds = array_intersect($adIds, $report->selected_ads);
+            }
+
+            if (empty($adIds)) {
+                continue;
+            }
+
+            // Obtener datos de los anuncios
+            $adsData = $this->getAdsDataForAccount($account, $adIds, $report->period_start, $report->period_end);
+            
+            if (!empty($adsData)) {
+                // Calcular totales de la Fan Page
+                $totalReach = array_sum(array_column($adsData, 'reach'));
+                $totalImpressions = array_sum(array_column($adsData, 'impressions'));
+                $totalClicks = array_sum(array_column($adsData, 'clicks'));
+                $totalSpend = array_sum(array_column($adsData, 'spend'));
+
+                // Obtener seguidores de la página
+                $followers = $this->getPageFollowers($account);
+                
+                $fanPagesData[] = [
+                    'page_id' => $pageId,
+                    'page_name' => $account->account_name, // Usar el nombre de la cuenta como nombre de la página
+                    'ads' => $adsData,
+                    'total_reach' => $totalReach,
+                    'total_impressions' => $totalImpressions,
+                    'total_clicks' => $totalClicks,
+                    'total_spend' => $totalSpend,
+                    'followers_facebook' => $followers['facebook'],
+                    'followers_instagram' => $followers['instagram'],
+                ];
+
+                $totalAds += count($adsData);
+            }
+        }
+
+        return [
+            'fan_pages' => $fanPagesData,
+            'total_ads' => $totalAds,
+        ];
     }
 
     /**
@@ -552,6 +692,10 @@ class GoogleSlidesReportService
     protected function getAdsDataForAccount(FacebookAccount $account, array $adIds, string $startDate, string $endDate): array
     {
         try {
+            Log::info("🔍 Obteniendo datos para cuenta {$account->id}");
+            Log::info("📅 Período: {$startDate} - {$endDate}");
+            Log::info("🎯 Anuncios a buscar: " . implode(', ', $adIds));
+            
             // Inicializar Facebook API
             \FacebookAds\Api::init(
                 $account->app_id,
@@ -579,13 +723,14 @@ class GoogleSlidesReportService
                 'video_p50_watched_actions',
                 'video_p75_watched_actions',
                 'video_p100_watched_actions',
+                'conversions', // Cantidad de conversiones generadas
             ];
 
             $params = [
                 'level' => 'ad',
                 'time_range' => [
-                    'since' => $startDate,
-                    'until' => $endDate,
+                    'since' => date('Y-m-d', strtotime($startDate)),
+                    'until' => date('Y-m-d', strtotime($endDate)),
                 ],
                 'filtering' => [
                     [
@@ -625,6 +770,9 @@ class GoogleSlidesReportService
                     'interaction_rate' => $this->calculateInteractionRate($insight->impressions ?? 0, $interactions),
                     'video_views' => $videoViews,
                     'video_completion_rate' => $this->calculateVideoCompletionRate($videoViews),
+                    'conversions' => (int)($insight->conversions ?? 0), // Cantidad de conversiones generadas
+                    'followers' => $this->getPageFollowers($account), // Seguidores de Facebook e Instagram
+                    'region_data' => $this->getDefaultRegionData($insight), // Alcance según región (placeholder)
                 ];
             }
 
@@ -710,6 +858,79 @@ class GoogleSlidesReportService
             'page_engagement' => 'Engagement de página',
             default => ucfirst(str_replace('_', ' ', $actionType)),
         };
+    }
+
+    /**
+     * Obtiene el número de seguidores de Facebook e Instagram
+     */
+    protected function getPageFollowers(FacebookAccount $account): array
+    {
+        $followers = [
+            'facebook' => 0,
+            'instagram' => 0,
+        ];
+
+        try {
+            // Usar Http client en lugar de file_get_contents para mejor manejo de errores
+            $http = Http::timeout(30);
+            
+            // 1. Obtener información de la página de Facebook
+            $fbResponse = $http->get("https://graph.facebook.com/v18.0/{$account->selected_page_id}", [
+                'fields' => 'followers_count,fan_count',
+                'access_token' => $account->access_token
+            ]);
+            
+            if ($fbResponse->successful()) {
+                $fbData = $fbResponse->json();
+                // Usar followers_count o fan_count como fallback
+                $followers['facebook'] = (int)($fbData['followers_count'] ?? $fbData['fan_count'] ?? 0);
+            }
+
+            // 2. Obtener Instagram Business Account ID
+            $igResponse = $http->get("https://graph.facebook.com/v18.0/{$account->selected_page_id}", [
+                'fields' => 'instagram_business_account',
+                'access_token' => $account->access_token
+            ]);
+            
+            if ($igResponse->successful()) {
+                $igData = $igResponse->json();
+                
+                if (isset($igData['instagram_business_account']['id'])) {
+                    $instagramAccountId = $igData['instagram_business_account']['id'];
+                    
+                    // 3. Obtener seguidores de Instagram
+                    $igFollowersResponse = $http->get("https://graph.facebook.com/v18.0/{$instagramAccountId}", [
+                        'fields' => 'followers_count',
+                        'access_token' => $account->access_token
+                    ]);
+                    
+                    if ($igFollowersResponse->successful()) {
+                        $igFollowersData = $igFollowersResponse->json();
+                        $followers['instagram'] = (int)($igFollowersData['followers_count'] ?? 0);
+                    }
+                }
+            }
+            
+            Log::info("Seguidores obtenidos para cuenta {$account->id}: Facebook={$followers['facebook']}, Instagram={$followers['instagram']}");
+            
+        } catch (\Exception $e) {
+            Log::warning("No se pudo obtener seguidores para la cuenta {$account->id}: " . $e->getMessage());
+        }
+        
+        return $followers;
+    }
+
+    /**
+     * Obtiene datos de región por defecto (placeholder)
+     */
+    protected function getDefaultRegionData($insight): array
+    {
+        return [
+            'Sin datos de región' => [
+                'reach' => $insight->reach ?? 0,
+                'impressions' => $insight->impressions ?? 0,
+            ]
+        ];
     }
 
     /**

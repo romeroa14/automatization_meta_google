@@ -72,7 +72,7 @@ class ReportResource extends Resource
                                 Forms\Components\DatePicker::make('period_end')
                                     ->label('Fecha de Fin')
                                     ->required()
-                                    ->default(now()->endOfMonth())
+                                    ->default(now())
                                     ->minDate(fn ($get) => $get('period_start'))
                                     ->maxDate(now()),
                             ]),
@@ -88,7 +88,13 @@ class ReportResource extends Resource
                             ->options(FacebookAccount::active()->pluck('account_name', 'id'))
                             ->searchable()
                             ->placeholder('Selecciona las cuentas de Facebook')
-                            ->helperText('Selecciona las cuentas de Facebook que quieres incluir en el reporte'),
+                            ->helperText('Selecciona las cuentas de Facebook que quieres incluir en el reporte')
+                            ->live()
+                            ->afterStateUpdated(function ($state, $set) {
+                                // Limpiar campos dependientes cuando cambian las cuentas
+                                $set('selected_ads', []);
+                                $set('fan_pages_order', []);
+                            }),
                         
                         Forms\Components\Select::make('selected_ads')
                             ->label('Anuncios Específicos (Opcional)')
@@ -115,64 +121,37 @@ class ReportResource extends Resource
                                 
                                 return $ads;
                             })
+                            ->live()
                             ->visible(fn ($get) => !empty($get('selected_facebook_accounts'))),
                     ])
                     ->collapsible(),
 
-                Section::make('Configuración de Marcas')
-                    ->description('Organiza los anuncios por marcas para el reporte')
+                Section::make('Configuración de Orden')
+                    ->description('Define el orden de las Fan Pages en el reporte')
                     ->schema([
-                        Repeater::make('brands_config')
-                            ->label('Marcas')
-                            ->schema([
-                                Forms\Components\TextInput::make('brand_name')
-                                    ->label('Nombre de la Marca')
-                                    ->required()
-                                    ->placeholder('Ej: SKYTEX'),
+                        Forms\Components\Select::make('fan_pages_order')
+                            ->label('Orden de Fan Pages')
+                            ->multiple()
+                            ->options(function ($get) {
+                                $accountIds = $get('selected_facebook_accounts');
+                                if (empty($accountIds)) {
+                                    return [];
+                                }
                                 
-                                Forms\Components\TextInput::make('brand_identifier')
-                                    ->label('Identificador')
-                                    ->placeholder('Ej: SKYTEX_MAIN'),
+                                $accounts = FacebookAccount::whereIn('id', $accountIds)->get();
+                                $options = [];
                                 
-                                Forms\Components\Select::make('ad_ids')
-                                    ->label('Anuncios de esta Marca')
-                                    ->multiple()
-                                    ->searchable()
-                                    ->placeholder('Selecciona los anuncios de esta marca')
-                                    ->options(function ($get) {
-                                        $accountIds = $get('../../selected_facebook_accounts');
-                                        if (empty($accountIds)) {
-                                            return [];
-                                        }
-                                        
-                                        $accounts = FacebookAccount::whereIn('id', $accountIds)->get();
-                                        $ads = [];
-                                        
-                                        foreach ($accounts as $account) {
-                                            if ($account->selected_ad_ids) {
-                                                foreach ($account->selected_ad_ids as $adId) {
-                                                    $ads[$adId] = "Anuncio {$adId} - {$account->account_name}";
-                                                }
-                                            }
-                                        }
-                                        
-                                        return $ads;
-                                    }),
+                                foreach ($accounts as $account) {
+                                    $options[$account->id] = $account->account_name;
+                                }
                                 
-                                Forms\Components\TextInput::make('slide_order')
-                                    ->label('Orden en Diapositivas')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->helperText('Orden de aparición en las diapositivas (0 = primero)'),
-                            ])
-                            ->columns(2)
-                            ->defaultItems(1)
-                            ->addActionLabel('Agregar Marca')
-                            ->reorderable()
-                            ->collapsible()
-                            ->itemLabel(fn (array $state): ?string => 
-                                $state['brand_name'] ?? 'Nueva Marca'
-                            ),
+                                return $options;
+                            })
+                            ->searchable()
+                            ->placeholder('Selecciona el orden de las Fan Pages')
+                            ->helperText('El orden en que aparecerán las Fan Pages en el reporte (primero = primera)')
+                            ->live()
+                            ->visible(fn ($get) => !empty($get('selected_facebook_accounts'))),
                     ])
                     ->collapsible(),
 
@@ -247,7 +226,7 @@ class ReportResource extends Resource
                                     ->default(true),
                             ])
                             ->columns(2)
-                            ->defaultItems(3)
+                            ->defaultItems(1)
                             ->addActionLabel('Agregar Gráfica')
                             ->reorderable()
                             ->collapsible()
@@ -407,7 +386,7 @@ class ReportResource extends Resource
                                     ->success()
                                     ->send();
                                 
-                                // Redirigir a la presentación
+                                // Abrir en nueva pestaña usando JavaScript
                                 return redirect()->away($result['presentation_url']);
                                 
                             } else {
