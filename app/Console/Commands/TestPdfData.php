@@ -8,41 +8,63 @@ use App\Services\PdfReportService;
 
 class TestPdfData extends Command
 {
-    protected $signature = 'test:pdf-data {reportId}';
-    protected $description = 'Prueba los datos que se envían al template PDF';
+    protected $signature = 'test:pdf-data';
+    protected $description = 'Prueba los datos que se pasan al template PDF';
 
     public function handle()
     {
-        $reportId = $this->argument('reportId');
-        $report = Report::findOrFail($reportId);
+        $this->info("🧪 Probando datos del template PDF...");
         
-        $this->info("🔍 Verificando datos para reporte: {$report->name}");
+        // Obtener el primer reporte
+        $report = Report::first();
         
+        if (!$report) {
+            $this->error("❌ No hay reportes en la base de datos");
+            return;
+        }
+        
+        $this->info("📄 Reporte encontrado: {$report->name}");
+        
+        // Crear instancia del servicio
         $pdfService = new PdfReportService();
         
         // Obtener datos de Facebook
+        $this->info("\n📊 Obteniendo datos de Facebook...");
         $facebookData = $pdfService->getFacebookDataByFanPages($report);
         
-        $this->info("\n📊 Datos obtenidos:");
-        $this->info("Total Fan Pages: " . count($facebookData['fan_pages']));
-        $this->info("Total Anuncios: " . $facebookData['total_ads']);
+        $this->info("✅ Datos obtenidos:");
+        $this->info("   - Fan Pages: " . count($facebookData['fan_pages']));
+        $this->info("   - Total Anuncios: " . $facebookData['total_ads']);
+        $this->info("   - Total Alcance: " . $facebookData['total_reach']);
         
-        foreach ($facebookData['fan_pages'] as $index => $fanPage) {
-            $this->info("\n🏢 Fan Page " . ($index + 1) . ": " . $fanPage['page_name']);
-            $this->info("   - Total Ads: {$fanPage['total_ads']}");
-            $this->info("   - Total Reach: " . number_format($fanPage['total_reach']));
-            $this->info("   - Total Impressions: " . number_format($fanPage['total_impressions']));
-            $this->info("   - Total Spend: $" . number_format($fanPage['total_spend'], 2));
-            $this->info("   - Anuncios: " . count($fanPage['ads']));
-            
-            foreach ($fanPage['ads'] as $adIndex => $ad) {
-                $this->info("     📱 Ad " . ($adIndex + 1) . ": " . $ad['ad_name']);
-                $this->info("        - ID: {$ad['ad_id']}");
-                $this->info("        - Reach: " . number_format($ad['reach']));
-                $this->info("        - Image URL: " . ($ad['ad_image_url'] ?? 'No disponible'));
+        // Preparar datos para el template
+        $reportData = [
+            'report' => $report,
+            'facebook_data' => $facebookData,
+            'generated_at' => now()->format('d/m/Y H:i:s'),
+            'period' => [
+                'start' => $report->period_start->format('d/m/Y'),
+                'end' => $report->period_end->format('d/m/Y'),
+            ],
+        ];
+        
+        $this->info("\n📋 Datos que se pasan al template:");
+        $this->info("   - Report Name: " . $reportData['report']->name);
+        $this->info("   - Generated At: " . $reportData['generated_at']);
+        $this->info("   - Period Start: " . $reportData['period']['start']);
+        $this->info("   - Period End: " . $reportData['period']['end']);
+        $this->info("   - Facebook Data Keys: " . implode(', ', array_keys($reportData['facebook_data'])));
+        
+        // Verificar si hay datos de fan pages
+        if (empty($facebookData['fan_pages'])) {
+            $this->warn("⚠️  No hay datos de fan pages. Esto puede causar que la portada no se muestre correctamente.");
+        } else {
+            $this->info("\n📄 Fan Pages encontradas:");
+            foreach ($facebookData['fan_pages'] as $index => $fanPage) {
+                $this->info("   " . ($index + 1) . ". {$fanPage['page_name']} - {$fanPage['total_ads']} anuncios");
             }
         }
         
-        $this->info("\n✅ Verificación completada");
+        $this->info("\n✅ Prueba completada");
     }
 }

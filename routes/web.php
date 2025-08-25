@@ -13,3 +13,7 @@ Route::prefix('api/reports')->group(function () {
     Route::get('{report}/status', [ReportController::class, 'getReportStatus'])->name('reports.status');
     Route::get('{report}/stats', [ReportController::class, 'getReportStats'])->name('reports.stats');
 });
+
+// Ruta para generar PDF de reportes
+Route::get('/reports/{report}/generate-pdf', [App\Http\Controllers\ReportPdfController::class, 'generatePdf'])
+    ->name('reports.generate-pdf');

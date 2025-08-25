@@ -34,40 +34,52 @@
         }
         
         .cover-logo {
-            font-size: 48px;
-            margin-bottom: 20px;
-        }
-        
-        .cover-title {
-            font-size: 36px;
-            font-weight: bold;
-            margin-bottom: 20px;
+            font-size: 72px;
+            margin-bottom: 30px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
         
+        .cover-title {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.4);
+            line-height: 1.2;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
         .cover-subtitle {
-            font-size: 18px;
-            margin-bottom: 40px;
+            font-size: 24px;
+            margin-bottom: 50px;
             opacity: 0.9;
+            font-weight: 300;
+            letter-spacing: 1px;
         }
         
         .cover-info {
-            background: rgba(255,255,255,0.1);
-            padding: 30px;
-            border-radius: 15px;
-            backdrop-filter: blur(10px);
-            margin-bottom: 40px;
+            background: rgba(255,255,255,0.15);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(15px);
+            margin-bottom: 50px;
+            border: 2px solid rgba(255,255,255,0.2);
         }
         
         .cover-info-item {
-            margin: 10px 0;
-            font-size: 16px;
+            margin: 15px 0;
+            font-size: 18px;
+            font-weight: 500;
         }
         
         .cover-footer {
-            font-size: 14px;
-            opacity: 0.8;
+            font-size: 16px;
+            opacity: 0.9;
             margin-top: auto;
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
         }
         
         /* Página de resumen */
@@ -415,21 +427,22 @@
 </head>
 <body>
     <!-- Portada -->
-    <div class="cover-page">
-        <div class="cover-logo">📊</div>
-        <h1 class="cover-title">{{ $report->name }}</h1>
-        <div class="cover-subtitle">Reporte de Campañas de Facebook</div>
+    <div style="page-break-before: always; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-align: center; padding: 40px; box-sizing: border-box;">
+        <div style="font-size: 72px; margin-bottom: 30px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">📊</div>
+        <h1 style="font-size: 48px; font-weight: bold; margin-bottom: 30px; text-shadow: 3px 3px 6px rgba(0,0,0,0.4); line-height: 1.2; text-transform: uppercase; letter-spacing: 2px;">{{ $report->name }}</h1>
+        <div style="font-size: 24px; margin-bottom: 50px; opacity: 0.9; font-weight: 300; letter-spacing: 1px;">Reporte de Campañas de Facebook</div>
         
-        <div class="cover-info">
-            <div class="cover-info-item">📅 Período: {{ $period['start'] }} - {{ $period['end'] }}</div>
-            <div class="cover-info-item">🏢 Fan Pages: {{ count($facebook_data['fan_pages']) }}</div>
-            <div class="cover-info-item">📊 Total Anuncios: {{ number_format($facebook_data['total_ads']) }}</div>
-            <div class="cover-info-item">👥 Alcance Total: {{ number_format($facebook_data['total_reach']) }}</div>
+        <div style="background: rgba(255,255,255,0.15); padding: 40px; border-radius: 20px; backdrop-filter: blur(15px); margin-bottom: 50px; border: 2px solid rgba(255,255,255,0.2);">
+            <div style="margin: 15px 0; font-size: 18px; font-weight: 500;">📅 Período: {{ $period['start'] }} - {{ $period['end'] }}</div>
+            <div style="margin: 15px 0; font-size: 18px; font-weight: 500;">🏢 Fan Pages: {{ count($facebook_data['fan_pages']) }}</div>
+            <div style="margin: 15px 0; font-size: 18px; font-weight: 500;">📊 Total Anuncios: {{ number_format($facebook_data['total_ads']) }}</div>
+            <div style="margin: 15px 0; font-size: 18px; font-weight: 500;">👥 Alcance Total: {{ number_format($facebook_data['total_reach']) }}</div>
         </div>
         
-        <div class="cover-footer">
+        <div style="font-size: 16px; opacity: 0.9; margin-top: auto; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px; backdrop-filter: blur(10px);">
             Generado el {{ $generated_at }}<br>
-            Sistema de Automatización de Facebook Ads
+            <strong>Alfredo Romero</strong><br>
+            <strong>alfredoromero.io</strong>
         </div>
     </div>
     
@@ -575,7 +588,7 @@
     <!-- Pie de página -->
     <div class="footer">
         <div class="footer-text">
-            Reporte generado automáticamente por el sistema de automatización de Facebook Ads<br>
+            Reporte generado automáticamente por el sistema de automatización de Facebook Ads <strong>alfredoromero.io</strong><br>
             {{ $generated_at }} | {{ $report->name }}
         </div>
     </div>

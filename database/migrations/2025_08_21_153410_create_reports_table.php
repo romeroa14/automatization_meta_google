@@ -28,6 +28,8 @@ return new class extends Migration
             $table->timestamp('generated_at')->nullable(); // Cuándo se generó el reporte
             $table->json('settings')->nullable(); // Configuraciones adicionales
             $table->boolean('is_active')->default(true);
+            $table->boolean('pdf_generated')->default(false); // Si el PDF ha sido generado
+            $table->string('pdf_url')->nullable(); // URL del PDF generado
             $table->timestamps();
         });
     }

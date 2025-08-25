@@ -416,37 +416,16 @@ class ReportResource extends Resource
                     }),
                 
                 Action::make('generate_pdf')
-                    ->label('Generar PDF')
-                    ->icon('heroicon-o-document-arrow-down')
-                    ->color('warning')
-                    ->action(function (Report $record) {
-                        try {
-                            $pdfService = new PdfReportService();
-                            $result = $pdfService->generateReport($record);
-                            
-                            if ($result['success']) {
-                                Notification::make()
-                                    ->title('PDF Generado Exitosamente')
-                                    ->body('El reporte PDF se ha generado correctamente.')
-                                    ->success()
-                                    ->send();
-                                
-                                return redirect()->away($result['file_url']);
-                            } else {
-                                Notification::make()
-                                    ->title('Error Generando PDF')
-                                    ->body($result['error'])
-                                    ->danger()
-                                    ->send();
-                            }
-                        } catch (\Exception $e) {
-                            Notification::make()
-                                ->title('Error Generando PDF')
-                                ->body('Error: ' . $e->getMessage())
-                                ->danger()
-                                ->send();
-                        }
-                    }),
+                    ->label(fn (Report $record): string => $record->pdf_generated ? 'Ver PDF' : 'Generar PDF')
+                    ->icon(fn (Report $record): string => $record->pdf_generated ? 'heroicon-o-eye' : 'heroicon-o-document-arrow-down')
+                    ->color(fn (Report $record): string => $record->pdf_generated ? 'success' : 'warning')
+                    ->url(fn (Report $record): string => 
+                        $record->pdf_generated 
+                            ? $record->pdf_url 
+                            : route('reports.generate-pdf', $record)
+                    )
+                    ->openUrlInNewTab()
+                    ->visible(fn (Report $record): bool => true),
                 
                 Action::make('view_slides')
                     ->label('Ver Presentación')

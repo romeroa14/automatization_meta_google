@@ -25,6 +25,8 @@ class Report extends Model
         'generated_at',
         'settings',
         'is_active',
+        'pdf_generated',
+        'pdf_url',
     ];
 
     protected $casts = [
@@ -39,6 +41,7 @@ class Report extends Model
         'settings' => 'array',
         'is_active' => 'boolean',
         'generated_at' => 'datetime',
+        'pdf_generated' => 'boolean',
     ];
 
     // Relaciones
