@@ -446,6 +446,113 @@
         </div>
     </div>
     
+    <!-- Análisis de IA -->
+    <div style="page-break-before: always; padding: 40px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);">
+        <h2 style="color: #1e293b; font-size: 36px; font-weight: bold; margin-bottom: 30px; text-align: center; text-transform: uppercase; letter-spacing: 2px;">🤖 Análisis Inteligente</h2>
+        
+        <!-- Resumen Ejecutivo -->
+        <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); margin-bottom: 30px;">
+            <h3 style="color: #1e293b; font-size: 28px; font-weight: bold; margin-bottom: 25px; text-align: center;">📋 Resumen Ejecutivo</h3>
+            <div style="font-size: 16px; line-height: 1.8; color: #374151; text-align: justify;">
+                {{ $ai_analysis['resumen_ejecutivo'] ?? 'Análisis automático de métricas de campaña de Facebook Ads.' }}
+            </div>
+        </div>
+        
+        <!-- Métricas Clave -->
+        @if(isset($ai_analysis['metricas_clave']) && !empty($ai_analysis['metricas_clave']))
+        <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); margin-bottom: 30px;">
+            <h3 style="color: #1e293b; font-size: 28px; font-weight: bold; margin-bottom: 25px; text-align: center;">🎯 Métricas Clave</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 25px;">
+                @foreach($ai_analysis['metricas_clave'] as $key => $analysis)
+                <div style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 25px; border-radius: 15px; border-left: 5px solid #3b82f6;">
+                    <h4 style="color: #1e293b; font-size: 18px; font-weight: bold; margin-bottom: 15px; text-transform: capitalize;">{{ str_replace('_', ' ', $key) }}</h4>
+                    <div style="font-size: 14px; line-height: 1.6; color: #374151;">{{ $analysis }}</div>
+                </div>
+                @endforeach
+            </div>
+        </div>
+        @endif
+        
+        <!-- Fortalezas y Áreas de Mejora -->
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 30px; margin-bottom: 30px;">
+            @if(isset($ai_analysis['fortalezas']) && !empty($ai_analysis['fortalezas']))
+            <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1);">
+                <h3 style="color: #1e293b; font-size: 28px; font-weight: bold; margin-bottom: 25px; text-align: center;">✅ Fortalezas</h3>
+                <ul style="list-style: none; padding: 0;">
+                    @foreach($ai_analysis['fortalezas'] as $fortaleza)
+                    <li style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); margin-bottom: 15px; padding: 15px; border-radius: 10px; border-left: 5px solid #10b981;">
+                        <div style="font-size: 14px; color: #374151; line-height: 1.6;">{{ $fortaleza }}</div>
+                    </li>
+                    @endforeach
+                </ul>
+            </div>
+            @endif
+            
+            @if(isset($ai_analysis['areas_mejora']) && !empty($ai_analysis['areas_mejora']))
+            <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1);">
+                <h3 style="color: #1e293b; font-size: 28px; font-weight: bold; margin-bottom: 25px; text-align: center;">🔧 Áreas de Mejora</h3>
+                <ul style="list-style: none; padding: 0;">
+                    @foreach($ai_analysis['areas_mejora'] as $area)
+                    <li style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); margin-bottom: 15px; padding: 15px; border-radius: 10px; border-left: 5px solid #f59e0b;">
+                        <div style="font-size: 14px; color: #374151; line-height: 1.6;">{{ $area }}</div>
+                    </li>
+                    @endforeach
+                </ul>
+            </div>
+            @endif
+        </div>
+        
+        <!-- Conclusiones -->
+        @if(isset($ai_analysis['conclusiones']) && !empty($ai_analysis['conclusiones']))
+        <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); margin-bottom: 30px;">
+            <h3 style="color: #1e293b; font-size: 28px; font-weight: bold; margin-bottom: 25px; text-align: center;">💡 Conclusiones</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                @foreach($ai_analysis['conclusiones'] as $index => $conclusion)
+                <div style="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); padding: 20px; border-radius: 15px; border-left: 5px solid #3b82f6;">
+                    <div style="font-size: 24px; margin-bottom: 10px;">{{ $index + 1 }}</div>
+                    <div style="font-size: 14px; color: #374151; line-height: 1.6;">{{ $conclusion }}</div>
+                </div>
+                @endforeach
+            </div>
+        </div>
+        @endif
+        
+        <!-- Recomendaciones -->
+        @if(isset($ai_analysis['recomendaciones']) && !empty($ai_analysis['recomendaciones']))
+        <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); margin-bottom: 30px;">
+            <h3 style="color: #1e293b; font-size: 28px; font-weight: bold; margin-bottom: 25px; text-align: center;">🚀 Recomendaciones</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 25px;">
+                @foreach($ai_analysis['recomendaciones'] as $recomendacion)
+                <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 25px; border-radius: 15px; border-left: 5px solid #f59e0b;">
+                    <h4 style="color: #1e293b; font-size: 18px; font-weight: bold; margin-bottom: 15px;">{{ $recomendacion['categoria'] ?? 'Recomendación' }}</h4>
+                    <div style="font-size: 14px; color: #374151; line-height: 1.6; margin-bottom: 15px;">{{ $recomendacion['recomendacion'] ?? '' }}</div>
+                    <div style="display: flex; gap: 15px; font-size: 12px;">
+                        <span style="background: #3b82f6; color: white; padding: 4px 8px; border-radius: 6px;">Impacto: {{ $recomendacion['impacto_esperado'] ?? 'Medio' }}</span>
+                        <span style="background: #10b981; color: white; padding: 4px 8px; border-radius: 6px;">Prioridad: {{ $recomendacion['prioridad'] ?? 'Media' }}</span>
+                    </div>
+                </div>
+                @endforeach
+            </div>
+        </div>
+        @endif
+        
+        <!-- Próximos Pasos -->
+        @if(isset($ai_analysis['proximos_pasos']) && !empty($ai_analysis['proximos_pasos']))
+        <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1);">
+            <h3 style="color: #1e293b; font-size: 28px; font-weight: bold; margin-bottom: 25px; text-align: center;">📋 Próximos Pasos</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                @foreach($ai_analysis['proximos_pasos'] as $index => $paso)
+                <div style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); padding: 20px; border-radius: 15px; border-left: 5px solid #10b981;">
+                    <div style="font-size: 24px; margin-bottom: 10px;">{{ $index + 1 }}</div>
+                    <div style="font-size: 14px; color: #374151; line-height: 1.6;">{{ $paso }}</div>
+                </div>
+                @endforeach
+            </div>
+        </div>
+        @endif
+    </div>
+    
     <!-- Página de Resumen -->
     <div class="summary-page">
         <div class="page-header">

@@ -21,10 +21,21 @@ class PdfReportService
             // Obtener datos de Facebook
             $facebookData = $this->getFacebookDataByFanPages($report);
             
+            // Generar análisis con IA
+            $analysisService = new \App\Services\GeminiAnalysisService();
+            $reportInfo = [
+                'name' => $report->name,
+                'period_start' => $report->period_start->format('d/m/Y'),
+                'period_end' => $report->period_end->format('d/m/Y'),
+            ];
+            
+            $aiAnalysis = $analysisService->analyzeReportMetrics($facebookData, $reportInfo);
+            
             // Preparar datos para el template
             $reportData = [
                 'report' => $report,
                 'facebook_data' => $facebookData,
+                'ai_analysis' => $aiAnalysis,
                 'generated_at' => now()->format('d/m/Y H:i:s'),
                 'period' => [
                     'start' => $report->period_start->format('d/m/Y'),

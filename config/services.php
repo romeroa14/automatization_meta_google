@@ -39,4 +39,8 @@ return [
         'webapp_url' => env('GOOGLE_WEBAPP_URL'),
     ],
 
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+    ],
+
 ];

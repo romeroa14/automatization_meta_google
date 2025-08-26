@@ -11,6 +11,8 @@
         "facebook/php-business-sdk": "^23.0",
         "filament/filament": "^3.0",
         "google/apiclient": "^2.18",
+        "google/cloud-ai-platform": "^1.35",
+        "google/cloud-core": "^1.64",
         "laravel/framework": "^11.31",
         "laravel/tinker": "^2.9"
     },
