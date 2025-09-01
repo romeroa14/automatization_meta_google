@@ -57,7 +57,9 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
             Log::info("📊 Usando cuenta publicitaria: act_{$adAccountId}");
             
             // 2. Obtener datos de Facebook Ads (anuncios individuales)
+            Log::info("🚀 Iniciando obtención de datos de Facebook Ads...");
             $ads = $this->getFacebookAdsData($account);
+            Log::info("📊 Total de anuncios obtenidos: " . count($ads));
             
             // 3. Configurar Google Sheets Service
             $googleSheet = $this->task->googleSheet;
@@ -190,7 +192,7 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
         $params = [
             'level' => 'ad',
             'time_range' => [
-                'since' => date('Y-m-d', strtotime('-7 days')),
+                'since' => date('Y-m-d', strtotime('-30 days')), // Extendido a 30 días
                 'until' => date('Y-m-d'),
             ],
         ];
@@ -216,9 +218,15 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
             Log::info("📊 Sin breakdowns geográficos - datos por anuncio únicamente");
         }
 
-        // Si hay anuncios específicos configurados, filtrar por ellos (jerarquía correcta)
+        // Lógica de filtrado MEJORADA: SIEMPRE filtrar por campañas de la fanpage específica
         $fbAccount = $this->task->facebookAccount;
-        if ($fbAccount->selected_ad_ids && is_array($fbAccount->selected_ad_ids) && !empty($fbAccount->selected_ad_ids)) {
+        
+        // Verificar si hay algún filtro configurado
+        $hasAdFilter = $fbAccount->selected_ad_ids && is_array($fbAccount->selected_ad_ids) && !empty($fbAccount->selected_ad_ids);
+        $hasCampaignFilter = $fbAccount->selected_campaign_ids && is_array($fbAccount->selected_campaign_ids) && !empty($fbAccount->selected_campaign_ids);
+        
+        if ($hasAdFilter) {
+            // Si hay anuncios específicos seleccionados, filtrar por ellos
             $params['filtering'] = [
                 [
                     'field' => 'ad.id',
@@ -228,8 +236,9 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
             ];
             $adCount = count($fbAccount->selected_ad_ids);
             Log::info("🎯 Filtrando por {$adCount} anuncios específicos: " . implode(', ', $fbAccount->selected_ad_ids));
-        } elseif ($fbAccount->selected_campaign_ids && is_array($fbAccount->selected_campaign_ids) && !empty($fbAccount->selected_campaign_ids)) {
-            // Fallback: si no hay anuncios específicos, usar campañas
+            
+        } elseif ($hasCampaignFilter) {
+            // Si hay campañas específicas seleccionadas, filtrar por ellas
             $params['filtering'] = [
                 [
                     'field' => 'campaign.id',
@@ -239,10 +248,41 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
             ];
             $campaignCount = count($fbAccount->selected_campaign_ids);
             Log::info("🎯 Filtrando por {$campaignCount} campañas específicas: " . implode(', ', $fbAccount->selected_campaign_ids));
+            
+        } else {
+            // IMPORTANTE: Si NO hay filtros configurados, OBTENER SOLO LAS CAMPAÑAS DE LA FANPAGE
+            Log::info("🎯 NO hay filtros configurados - Obteniendo SOLO campañas de la fanpage: {$fbAccount->account_name}");
+            
+            // Obtener las campañas que pertenecen a esta fanpage específica
+            $pageCampaigns = $this->getPageSpecificCampaigns($account, $fbAccount);
+            
+            if (!empty($pageCampaigns)) {
+                $params['filtering'] = [
+                    [
+                        'field' => 'campaign.id',
+                        'operator' => 'IN',
+                        'value' => $pageCampaigns,
+                    ],
+                ];
+                $campaignCount = count($pageCampaigns);
+                Log::info("🎯 Filtrando por {$campaignCount} campañas de la fanpage {$fbAccount->account_name}: " . implode(', ', $pageCampaigns));
+            } else {
+                Log::warning("⚠️ No se encontraron campañas para la fanpage: {$fbAccount->account_name}");
+                return [];
+            }
         }
 
         try {
+            Log::info("🔍 Parámetros de búsqueda:", [
+                'level' => $params['level'],
+                'time_range' => $params['time_range'],
+                'has_filtering' => isset($params['filtering']),
+                'filtering_details' => $params['filtering'] ?? 'Sin filtros'
+            ]);
+            
             $insights = $account->getInsights($fields, $params);
+            Log::info("📈 Insights obtenidos de Facebook: " . count($insights));
+            
             $ads = [];
 
             foreach ($insights as $insight) {
@@ -627,11 +667,42 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
             return 'URL muy larga - Ver en Facebook';
         }
 
-        // Si es una URL local, convertirla a URL completa
-        if (strpos($url, 'storage/') === 0) {
-            return config('app.url') . '/' . $url;
-        }
-
         return $url;
+    }
+
+    /**
+     * Obtiene solo las campañas que pertenecen a la fanpage específica
+     */
+    private function getPageSpecificCampaigns($account, $fbAccount): array
+    {
+        try {
+            Log::info("🔍 Obteniendo campañas específicas para la fanpage: {$fbAccount->account_name}");
+            
+            // Obtener todas las campañas de la cuenta publicitaria
+            $allCampaigns = $account->getCampaigns(['id', 'name', 'status']);
+            
+            $pageCampaigns = [];
+            
+            foreach ($allCampaigns as $campaign) {
+                $campaignName = $campaign->name ?? '';
+                
+                // Filtrar campañas que contengan el nombre de la fanpage
+                if (stripos($campaignName, $fbAccount->account_name) !== false) {
+                    $pageCampaigns[] = $campaign->id;
+                    Log::info("✅ Campaña de {$fbAccount->account_name} encontrada: {$campaignName} (ID: {$campaign->id})");
+                }
+            }
+            
+            if (empty($pageCampaigns)) {
+                Log::warning("⚠️ No se encontraron campañas para la fanpage: {$fbAccount->account_name}");
+                Log::info("📋 Campañas disponibles: " . implode(', ', array_map(fn($c) => $c->name, $allCampaigns)));
+            }
+            
+            return $pageCampaigns;
+            
+        } catch (\Exception $e) {
+            Log::error("❌ Error obteniendo campañas de la fanpage: " . $e->getMessage());
+            return [];
+        }
     }
 }

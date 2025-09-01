@@ -313,8 +313,8 @@ class ReportResource extends Resource
                 IconColumn::make('is_active')
                     ->label('Activo')
                     ->boolean()
-                    ->trueIcon('heroicon-o-check-circle')
-                    ->falseIcon('heroicon-o-x-circle')
+                                    ->trueIcon('heroicon-o-check-circle')
+                ->falseIcon('heroicon-o-x-mark')
                     ->trueColor('success')
                     ->falseColor('danger'),
             ])
@@ -417,7 +417,7 @@ class ReportResource extends Resource
                 
                 Action::make('generate_pdf')
                     ->label(fn (Report $record): string => $record->pdf_generated ? 'Ver PDF' : 'Generar PDF')
-                    ->icon(fn (Report $record): string => $record->pdf_generated ? 'heroicon-o-eye' : 'heroicon-o-document-arrow-down')
+                    ->icon(fn (Report $record): string => $record->pdf_generated ? 'heroicon-o-eye' : 'heroicon-o-arrow-down-tray')
                     ->color(fn (Report $record): string => $record->pdf_generated ? 'success' : 'warning')
                     ->url(fn (Report $record): string => 
                         $record->pdf_generated 
@@ -425,6 +425,241 @@ class ReportResource extends Resource
                             : route('reports.generate-pdf', $record)
                     )
                     ->openUrlInNewTab()
+                    ->visible(fn (Report $record): bool => true),
+                
+                                Action::make('period_config')
+                    ->label('Configurar Período')
+                    ->icon('heroicon-o-calendar')
+                    ->color('warning')
+                    ->modalHeading('Configurar Período del Reporte')
+                    ->modalDescription(fn (Report $record): string => "Configura el período para: {$record->name}")
+                    ->form([
+                        Section::make('Período Actual')
+                            ->description('Información del período configurado actualmente')
+                            ->schema([
+                                Grid::make(2)
+                                    ->schema([
+                                        Forms\Components\Placeholder::make('current_start')
+                                            ->label('Fecha de Inicio Actual')
+                                            ->content(fn (Report $record): string => $record->period_start->format('d/m/Y')),
+                                        
+                                        Forms\Components\Placeholder::make('current_end')
+                                            ->label('Fecha de Fin Actual')
+                                            ->content(fn (Report $record): string => $record->period_end->format('d/m/Y')),
+                                        
+                                        Forms\Components\Placeholder::make('current_days')
+                                            ->label('Días del Período')
+                                            ->content(fn (Report $record): string => $record->period_start->diffInDays($record->period_end) + 1 . ' días'),
+                                        
+                                        Forms\Components\Placeholder::make('current_status')
+                                            ->label('Estado')
+                                            ->content(function (Report $record): string {
+                                                if ($record->generated_data || $record->google_slides_url || $record->pdf_generated) {
+                                                    return '⚠️ Con datos generados';
+                                                }
+                                                return '✅ Sin datos generados';
+                                            }),
+                                    ]),
+                            ])
+                            ->collapsible(),
+
+                        Section::make('Períodos Predefinidos')
+                            ->description('Selecciona un período predefinido')
+                            ->schema([
+                                Forms\Components\Select::make('preset_period')
+                                    ->label('Seleccionar Período Predefinido')
+                                    ->options([
+                                        'last_7d' => 'Últimos 7 días',
+                                        'last_14d' => 'Últimos 14 días',
+                                        'last_30d' => 'Últimos 30 días',
+                                        'this_month' => 'Este mes',
+                                        'last_month' => 'Mes pasado',
+                                        'last_90d' => 'Últimos 90 días',
+                                    ])
+                                    ->placeholder('Selecciona un período')
+                                    ->helperText('Selecciona un período predefinido para aplicar automáticamente')
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, $set) {
+                                        if ($state) {
+                                            // Si se selecciona un período predefinido, limpiar fechas personalizadas
+                                            $set('custom_start', null);
+                                            $set('custom_end', null);
+                                        }
+                                    }),
+                            ])
+                            ->collapsible(),
+
+                        Section::make('Período Personalizado')
+                            ->description('Define un período personalizado')
+                            ->schema([
+                                Grid::make(2)
+                                    ->schema([
+                                        Forms\Components\DatePicker::make('custom_start')
+                                            ->label('Fecha de Inicio')
+                                            ->required()
+                                            ->maxDate(now())
+                                            ->default(fn (Report $record): string => $record->period_start->format('Y-m-d'))
+                                            ->disabled(fn ($get) => !empty($get('preset_period')))
+                                            ->live()
+                                            ->afterStateUpdated(function ($state, $set) {
+                                                if ($state) {
+                                                    // Si se ingresa una fecha personalizada, limpiar período predefinido
+                                                    $set('preset_period', null);
+                                                }
+                                            }),
+                                        
+                                        Forms\Components\DatePicker::make('custom_end')
+                                            ->label('Fecha de Fin')
+                                            ->required()
+                                            ->maxDate(now())
+                                            ->default(fn (Report $record): string => $record->period_end->format('Y-m-d'))
+                                            ->disabled(fn ($get) => !empty($get('preset_period')))
+                                            ->live()
+                                            ->afterStateUpdated(function ($state, $set) {
+                                                if ($state) {
+                                                    // Si se ingresa una fecha personalizada, limpiar período predefinido
+                                                    $set('preset_period', null);
+                                                }
+                                            }),
+                                    ]),
+                                
+                                Forms\Components\Placeholder::make('update_info')
+                                    ->content('Para aplicar el período personalizado, haz clic en "Actualizar" al final del modal.')
+                                    ->extraAttributes(['class' => 'text-center p-4 bg-orange-50 border border-orange-200 rounded-lg'])
+                                    ->visible(fn ($get) => empty($get('preset_period'))),
+                            ])
+                            ->collapsible(),
+
+                        Section::make('Advertencia')
+                            ->description('Información importante sobre el cambio de período')
+                            ->schema([
+                                Forms\Components\Placeholder::make('warning')
+                                    ->content('⚠️ **Atención**: Si este reporte ya tiene datos generados (Slides o PDF), al cambiar el período estos datos se eliminarán y deberás regenerar el reporte.')
+                                    ->extraAttributes([
+                                        'class' => 'text-yellow-700 bg-yellow-50 p-4 rounded-lg border border-yellow-200'
+                                    ]),
+                            ])
+                            ->collapsible(),
+                    ])
+                    ->modalSubmitActionLabel('Actualizar Período Personalizado')
+                    ->modalCancelActionLabel('Cerrar')
+                    ->action(function (Report $record, array $data) {
+                        // Procesar período predefinido si se seleccionó
+                        if (isset($data['preset_period']) && $data['preset_period']) {
+                            switch ($data['preset_period']) {
+                                case 'last_7d':
+                                    $start = now()->subDays(6)->startOfDay();
+                                    $end = now()->endOfDay();
+                                    $message = 'Últimos 7 días';
+                                    break;
+                                case 'last_14d':
+                                    $start = now()->subDays(13)->startOfDay();
+                                    $end = now()->endOfDay();
+                                    $message = 'Últimos 14 días';
+                                    break;
+                                case 'last_30d':
+                                    $start = now()->subDays(29)->startOfDay();
+                                    $end = now()->endOfDay();
+                                    $message = 'Últimos 30 días';
+                                    break;
+                                case 'this_month':
+                                    $start = now()->startOfMonth();
+                                    $end = now()->endOfMonth();
+                                    $message = 'Este mes';
+                                    break;
+                                case 'last_month':
+                                    $start = now()->subMonth()->startOfMonth();
+                                    $end = now()->subMonth()->endOfMonth();
+                                    $message = 'Mes pasado';
+                                    break;
+                                case 'last_90d':
+                                    $start = now()->subDays(89)->startOfDay();
+                                    $end = now()->endOfDay();
+                                    $message = 'Últimos 90 días';
+                                    break;
+                                default:
+                                    throw new \Exception('Período no válido');
+                            }
+                            
+                            // Actualizar el período
+                            $record->update([
+                                'period_start' => $start,
+                                'period_end' => $end,
+                            ]);
+                            
+                            // Limpiar datos generados si existen
+                            if ($record->generated_data || $record->google_slides_url || $record->pdf_generated) {
+                                $record->update([
+                                    'generated_data' => null,
+                                    'google_slides_url' => null,
+                                    'pdf_generated' => false,
+                                    'pdf_url' => null,
+                                    'status' => 'draft',
+                                ]);
+                                
+                                Notification::make()
+                                    ->title('Período Actualizado')
+                                    ->body("Se ha configurado el período a {$message}. Los datos anteriores se han eliminado.")
+                                    ->warning()
+                                    ->send();
+                            } else {
+                                Notification::make()
+                                    ->title('Período Actualizado')
+                                    ->body("Se ha configurado el período a {$message}")
+                                    ->success()
+                                    ->send();
+                            }
+                        }
+                        
+                        // Procesar período personalizado si se proporcionaron fechas
+                        if (isset($data['custom_start']) && isset($data['custom_end'])) {
+                            $start = Carbon::parse($data['custom_start']);
+                            $end = Carbon::parse($data['custom_end']);
+                            
+                            // Validaciones
+                            if ($end->gt(now())) {
+                                throw new \Exception('La fecha de fin no puede ser futura');
+                            }
+                            
+                            if ($start->gt($end)) {
+                                throw new \Exception('La fecha de inicio debe ser anterior a la fecha de fin');
+                            }
+                            
+                            $daysDiff = $start->diffInDays($end);
+                            if ($daysDiff > 90) {
+                                throw new \Exception('El período máximo es de 90 días para datos de Facebook');
+                            }
+                            
+                            // Actualizar el período
+                            $record->update([
+                                'period_start' => $start,
+                                'period_end' => $end,
+                            ]);
+                            
+                            // Limpiar datos generados si existen
+                            if ($record->generated_data || $record->google_slides_url || $record->pdf_generated) {
+                                $record->update([
+                                    'generated_data' => null,
+                                    'google_slides_url' => null,
+                                    'pdf_generated' => false,
+                                    'pdf_url' => null,
+                                    'status' => 'draft',
+                                ]);
+                                
+                                Notification::make()
+                                    ->title('Período Actualizado')
+                                    ->body('El período personalizado se ha actualizado y los datos anteriores se han eliminado.')
+                                    ->warning()
+                                    ->send();
+                            } else {
+                                Notification::make()
+                                    ->title('Período Actualizado')
+                                    ->body('El período personalizado se ha actualizado correctamente')
+                                    ->success()
+                                    ->send();
+                            }
+                        }
+                    })
                     ->visible(fn (Report $record): bool => true),
                 
                 Action::make('view_slides')
@@ -469,6 +704,6 @@ class ReportResource extends Resource
 
     public static function getNavigationBadgeColor(): ?string
     {
-        return static::getModel()::count() > 10 ? 'warning' : 'primary';
+        return static::getModel()::count() > 10 ? 'primary' : 'success';
     }
 }
