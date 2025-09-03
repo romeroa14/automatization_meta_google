@@ -240,4 +240,144 @@ class ActiveCampaign extends Model
         }
         return $this->adset_lifetime_budget;
     }
+    
+    /**
+     * Contar cuántos AdSets tiene esta campaña
+     */
+    public function getAdsetsCount()
+    {
+        return static::where('meta_campaign_id', $this->meta_campaign_id)
+            ->whereNotNull('meta_adset_id')
+            ->distinct('meta_adset_id')
+            ->count('meta_adset_id');
+    }
+    
+    /**
+     * Contar cuántos Anuncios tiene esta campaña
+     */
+    public function getAdsCount()
+    {
+        return static::where('meta_campaign_id', $this->meta_campaign_id)
+            ->whereNotNull('meta_ad_id')
+            ->distinct('meta_ad_id')
+            ->count();
+    }
+    
+    /**
+     * Obtener todos los AdSets de esta campaña
+     */
+    public function getAdsets()
+    {
+        return static::where('meta_campaign_id', $this->meta_campaign_id)
+            ->whereNotNull('meta_adset_id')
+            ->select('meta_adset_id', 'meta_adset_name', 'adset_daily_budget', 'adset_lifetime_budget', 
+                     'adset_status', 'adset_start_time', 'adset_stop_time', 'adset_data')
+            ->distinct('meta_adset_id')
+            ->get();
+    }
+    
+    /**
+     * Obtener todos los Anuncios de un AdSet específico
+     */
+    public function getAdsByAdset($adsetId)
+    {
+        return static::where('meta_campaign_id', $this->meta_campaign_id)
+            ->where('meta_adset_id', $adsetId)
+            ->whereNotNull('meta_ad_id')
+            ->get();
+    }
+    
+    /**
+     * Calcular presupuesto total estimado de campaña basado en presupuesto diario × duración
+     */
+    public function getCampaignTotalBudgetEstimated()
+    {
+        if ($this->campaign_daily_budget && $this->getCampaignDurationDays()) {
+            return $this->campaign_daily_budget * $this->getCampaignDurationDays();
+        }
+        
+        // Si no se puede calcular, usar el valor de Meta si existe
+        return $this->campaign_total_budget;
+    }
+    
+    /**
+     * Calcular presupuesto total estimado del adset basado en presupuesto diario × duración
+     */
+    public function getAdsetTotalBudgetEstimated()
+    {
+        if ($this->adset_daily_budget && $this->getAdsetDurationDays()) {
+            return $this->adset_daily_budget * $this->getAdsetDurationDays();
+        }
+        
+        // Si no se puede calcular, usar el valor de Meta si existe
+        return $this->adset_lifetime_budget;
+    }
+    
+    /**
+     * Obtener información de duración y presupuestos de Meta API
+     */
+    public function getMetaBudgetInfo()
+    {
+        $info = [];
+        
+        // Información de campaña
+        if (isset($this->campaign_data)) {
+            $campaignData = $this->campaign_data;
+            
+            $info['campaign'] = [
+                'daily_budget' => $campaignData['daily_budget'] ?? null,
+                'lifetime_budget' => $campaignData['lifetime_budget'] ?? null,
+                'budget_remaining' => $campaignData['budget_remaining'] ?? null,
+                'start_time' => $campaignData['start_time'] ?? null,
+                'stop_time' => $campaignData['stop_time'] ?? null,
+                'created_time' => $campaignData['created_time'] ?? null,
+                'updated_time' => $campaignData['updated_time'] ?? null,
+            ];
+        }
+        
+        // Información de adset
+        if (isset($this->adset_data)) {
+            $adsetData = $this->adset_data;
+            
+            $info['adset'] = [
+                'daily_budget' => $adsetData['daily_budget'] ?? null,
+                'lifetime_budget' => $adsetData['lifetime_budget'] ?? null,
+                'budget_remaining' => $adsetData['budget_remaining'] ?? null,
+                'start_time' => $adsetData['start_time'] ?? null,
+                'stop_time' => $adsetData['stop_time'] ?? null,
+                'created_time' => $adsetData['created_time'] ?? null,
+                'updated_time' => $adsetData['updated_time'] ?? null,
+            ];
+        }
+        
+        return $info;
+    }
+    
+    /**
+     * Obtener presupuesto restante real desde Meta API
+     */
+    public function getCampaignBudgetRemainingFromMeta()
+    {
+        if (isset($this->campaign_data['budget_remaining'])) {
+            $budgetRemaining = $this->campaign_data['budget_remaining'];
+            // Convertir de centavos a dólares si es necesario
+            return $budgetRemaining > 1000 ? $budgetRemaining / 100 : $budgetRemaining;
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Obtener presupuesto restante real del adset desde Meta API
+     */
+    public function getAdsetBudgetRemainingFromMeta()
+    {
+        if (isset($this->adset_data['budget_remaining'])) {
+            $budgetRemaining = $this->adset_data['budget_remaining'];
+            // Convertir de centavos a dólares si es necesario
+            return $budgetRemaining > 1000 ? $budgetRemaining / 100 : $budgetRemaining;
+        }
+        
+        return null;
+    }
 }

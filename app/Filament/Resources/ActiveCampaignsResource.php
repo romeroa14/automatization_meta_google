@@ -20,6 +20,7 @@ use Filament\Tables\Actions\BulkAction;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
+use Illuminate\Database\Eloquent\Builder;
 
 class ActiveCampaignsResource extends Resource
 {
@@ -146,160 +147,104 @@ class ActiveCampaignsResource extends Resource
     {
         return $table
             ->columns([
-                // Niveles jerárquicos
-                TextColumn::make('meta_campaign_id')
-                    ->label('ID Campaña')
-                    ->searchable()
-                    ->sortable(),
-                    
+                // Solo lo esencial
                 TextColumn::make('meta_campaign_name')
-                    ->label('Nombre Campaña')
+                    ->label('Nombre de Campaña')
                     ->searchable()
                     ->sortable()
-                    ->limit(30),
+                    ->limit(50)
+                    ->weight('bold'),
                     
-                TextColumn::make('meta_adset_id')
-                    ->label('ID AdSet')
-                    ->searchable()
-                    ->sortable(),
-                    
-                TextColumn::make('meta_adset_name')
-                    ->label('Nombre AdSet')
-                    ->searchable()
+                TextColumn::make('campaign_daily_budget_corrected')
+                    ->label('Presupuesto Diario')
+                    ->getStateUsing(function ($record) {
+                        // Preguntar: ¿Mostrar de campaña o adset?
+                        // Por ahora mostrar de campaña, pero se puede cambiar
+                        $dailyBudget = $record->campaign_daily_budget ?? $record->adset_daily_budget;
+                        
+                        if ($dailyBudget && $dailyBudget > 100) {
+                            // Si es mayor a 100, probablemente está en centavos
+                            return $dailyBudget / 100;
+                        }
+                        
+                        return $dailyBudget;
+                    })
+                    ->money('USD')
                     ->sortable()
-                    ->limit(25),
+                    ->color('success'),
                     
-                TextColumn::make('meta_ad_id')
-                    ->label('ID Anuncio')
-                    ->searchable()
-                    ->sortable(),
-                    
-                TextColumn::make('meta_ad_name')
-                    ->label('Nombre Anuncio')
-                    ->searchable()
-                    ->sortable()
-                    ->limit(25),
-                
-                // Presupuestos de campaña
-                TextColumn::make('campaign_daily_budget')
-                    ->label('Presupuesto Diario Campaña')
-                    ->money('USD')
-                    ->sortable(),
-                    
-                TextColumn::make('campaign_total_budget')
-                    ->label('Presupuesto Total Campaña')
-                    ->money('USD')
-                    ->sortable(),
-                    
-                // Presupuestos de adset
-                TextColumn::make('adset_daily_budget')
-                    ->label('Presupuesto Diario AdSet')
-                    ->money('USD')
-                    ->sortable(),
-                    
-                TextColumn::make('adset_lifetime_budget')
-                    ->label('Presupuesto Total AdSet')
-                    ->money('USD')
-                    ->sortable(),
-                
-                // Fechas
-                TextColumn::make('campaign_start_time')
-                    ->label('Inicio Campaña')
-                    ->dateTime('d/m/Y H:i')
-                    ->sortable(),
-                    
-                TextColumn::make('campaign_stop_time')
-                    ->label('Fin Campaña')
-                    ->dateTime('d/m/Y H:i')
-                    ->sortable(),
-                    
-                TextColumn::make('adset_start_time')
-                    ->label('Inicio AdSet')
-                    ->dateTime('d/m/Y H:i')
-                    ->sortable(),
-                    
-                TextColumn::make('adset_stop_time')
-                    ->label('Fin AdSet')
-                    ->dateTime('d/m/Y H:i')
-                    ->sortable(),
-                
-                // Estados
-                BadgeColumn::make('campaign_status')
-                    ->label('Estado Campaña')
+                TextColumn::make('campaign_status')
+                    ->label('Estado')
+                    ->badge()
                     ->colors([
                         'success' => 'ACTIVE',
                         'danger' => 'PAUSED',
                         'warning' => 'DELETED',
                     ]),
                     
-                BadgeColumn::make('adset_status')
-                    ->label('Estado AdSet')
-                    ->colors([
-                        'success' => 'ACTIVE',
-                        'danger' => 'PAUSED',
-                        'warning' => 'DELETED',
-                    ]),
-                    
-                BadgeColumn::make('ad_status')
-                    ->label('Estado Anuncio')
-                    ->colors([
-                        'success' => 'ACTIVE',
-                        'danger' => 'PAUSED',
-                        'warning' => 'DELETED',
-                    ]),
-                    
-                // Objetivo
-                TextColumn::make('campaign_objective')
-                    ->label('Objetivo')
-                    ->searchable()
-                    ->sortable(),
-                    
-                // Métricas calculadas
-                TextColumn::make('campaign_duration')
-                    ->label('Duración Campaña')
+                TextColumn::make('campaign_duration_days')
+                    ->label('Duración')
                     ->getStateUsing(fn ($record) => $record->getCampaignDurationDays())
                     ->suffix(' días')
-                    ->sortable(),
+                    ->sortable()
+                    ->badge()
+                    ->color('info'),
                     
-                TextColumn::make('adset_duration')
-                    ->label('Duración AdSet')
-                    ->getStateUsing(fn ($record) => $record->getAdsetDurationDays())
-                    ->suffix(' días')
-                    ->sortable(),
-                    
-                TextColumn::make('campaign_remaining_budget')
-                    ->label('Presupuesto Restante Campaña')
-                    ->getStateUsing(fn ($record) => $record->getCampaignRemainingBudget())
+                TextColumn::make('budget_remaining')
+                    ->label('Presupuesto Restante')
+                    ->getStateUsing(function ($record) {
+                        // Intentar obtener de Meta API primero
+                        $remaining = $record->getCampaignBudgetRemainingFromMeta() ?? 
+                                   $record->getAdsetBudgetRemainingFromMeta();
+                        
+                        if ($remaining) {
+                            return $remaining;
+                        }
+                        
+                        // Si no, calcular estimado
+                        return $record->getCampaignRemainingBudget() ?? 
+                               $record->getAdsetRemainingBudget();
+                    })
                     ->money('USD')
-                    ->sortable(),
-                    
-                TextColumn::make('adset_remaining_budget')
-                    ->label('Presupuesto Restante AdSet')
-                    ->getStateUsing(fn ($record) => $record->getAdsetRemainingBudget())
-                    ->money('USD')
-                    ->sortable(),
+                    ->sortable()
+                    ->color('success'),
             ])
             ->filters([
-                //
+                Tables\Filters\SelectFilter::make('campaign_status')
+                    ->label('Estado')
+                    ->options([
+                        'ACTIVE' => 'Activa',
+                        'PAUSED' => 'Pausada',
+                        'DELETED' => 'Eliminada',
+                    ]),
             ])
             ->actions([
-                Action::make('view_details')
-                    ->label('Ver Detalles')
-                    ->icon('heroicon-o-eye')
-                    ->modalHeading('Detalles Completos de la Campaña')
+                Action::make('view_json_details')
+                    ->label('Ver Detalles JSON')
+                    ->icon('heroicon-o-code-bracket')
+                    ->color('info')
+                    ->modalHeading('Datos Completos de los 3 Niveles')
                     ->modalContent(fn ($record) => view('components.raw-html', [
-                        'html' => '<h3>Datos de Campaña</h3><pre>' . json_encode($record->campaign_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . '</pre>' .
-                                 '<h3>Datos de AdSet</h3><pre>' . json_encode($record->adset_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . '</pre>' .
-                                 '<h3>Datos de Anuncio</h3><pre>' . json_encode($record->ad_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . '</pre>'
+                        'html' => '<h3 class="text-lg font-bold mb-3">📊 Datos de Campaña</h3>' .
+                                 '<pre class="bg-gray-100 p-3 rounded text-xs overflow-x-auto mb-4">' . 
+                                 json_encode($record->campaign_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . '</pre>' .
+                                 
+                                 '<h3 class="text-lg font-bold mb-3">📈 Datos de AdSet</h3>' .
+                                 '<pre class="bg-gray-100 p-3 rounded text-xs overflow-x-auto mb-4">' . 
+                                 json_encode($record->adset_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . '</pre>' .
+                                 
+                                 '<h3 class="text-lg font-bold mb-3">🎯 Datos de Anuncio</h3>' .
+                                 '<pre class="bg-gray-100 p-3 rounded text-xs overflow-x-auto">' . 
+                                 json_encode($record->ad_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . '</pre>'
                     ]))
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('Cerrar'),
                     
-                Action::make('refresh_campaigns')
+                Action::make('refresh_campaign')
                     ->label('Refrescar')
                     ->icon('heroicon-o-arrow-path')
+                    ->color('warning')
                     ->action(function ($record) {
-                        // Aquí se podría implementar la lógica de refresh individual
                         Notification::make()
                             ->title('Campaña refrescada')
                             ->success()
