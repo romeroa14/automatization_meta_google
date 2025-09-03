@@ -107,7 +107,7 @@ class AccountingTransactionResource extends Resource
                             ->schema([
                                 Select::make('campaign_reconciliation_id')
                                     ->label('Conciliación de Campaña')
-                                    ->options(CampaignReconciliation::pluck('meta_campaign_name', 'id'))
+                                    // ->options(CampaignReconciliation::pluck('meta_campaign_name', 'id'))
                                     ->searchable()
                                     ->placeholder('Selecciona una conciliación (opcional)')
                                     ->helperText('Conecta esta transacción con una campaña específica'),
@@ -343,8 +343,8 @@ class AccountingTransactionResource extends Resource
         ];
     }
 
-    public static function getNavigationBadge(): ?string
-    {
-        return static::getModel()::count();
-    }
+    // public static function getNavigationBadge(): ?string
+    // {
+    //     return static::getModel()::count();
+    // }
 }
