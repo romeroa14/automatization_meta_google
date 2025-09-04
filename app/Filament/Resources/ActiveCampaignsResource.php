@@ -149,11 +149,28 @@ class ActiveCampaignsResource extends Resource
         return $table
             ->columns([
                 // Solo lo esencial
+
+                TextColumn::make('campaign_status')
+                    ->label('Estado')
+                    ->getStateUsing(function ($record) {
+                        // Usar el estado real basado en fechas
+                        return $record->getRealCampaignStatus();
+                    })
+                    ->badge()
+                    ->colors([
+                        'success' => 'ACTIVE',
+                        'info' => 'SCHEDULED',
+                        'warning' => 'COMPLETED',
+                        'danger' => 'PAUSED',
+                        'secondary' => 'DELETED',
+                        'gray' => 'UNKNOWN',
+                    ]),
+
                 TextColumn::make('meta_campaign_name')
                     ->label('Nombre de Campaña')
                     ->searchable()
                     ->sortable()
-                    ->limit(50)
+                    ->limit(25)
                     ->weight('bold'),
                     
                 TextColumn::make('campaign_daily_budget_corrected')
@@ -210,14 +227,7 @@ class ActiveCampaignsResource extends Resource
                     ->color('warning')
                     ->description('Valor original de Meta'),
                     
-                TextColumn::make('campaign_status')
-                    ->label('Estado')
-                    ->badge()
-                    ->colors([
-                        'success' => 'ACTIVE',
-                        'danger' => 'PAUSED',
-                        'warning' => 'DELETED',
-                    ]),
+                
                     
                 TextColumn::make('campaign_duration_days')
                     ->label('Duración')
@@ -282,8 +292,11 @@ class ActiveCampaignsResource extends Resource
                     ->label('Estado')
                     ->options([
                         'ACTIVE' => 'Activa',
+                        'SCHEDULED' => 'Programada',
+                        'COMPLETED' => 'Completada',
                         'PAUSED' => 'Pausada',
                         'DELETED' => 'Eliminada',
+                        'UNKNOWN' => 'Desconocido',
                     ]),
             ])
             ->actions([
@@ -293,7 +306,16 @@ class ActiveCampaignsResource extends Resource
                     ->color('info')
                     ->modalHeading('Datos Completos de los 3 Niveles')
                     ->modalContent(fn ($record) => view('components.raw-html', [
-                        'html' => '<h3 class="text-lg font-bold mb-3 text-red-600">🔍 DEBUG: Información de Presupuestos</h3>' .
+                        'html' => '<h3 class="text-lg font-bold mb-3 text-blue-600">📊 ESTADO REAL vs META</h3>' .
+                                 '<div class="bg-blue-50 p-3 rounded mb-4 border border-blue-200">' .
+                                 '<p><strong>Estado Meta:</strong> ' . ($record->campaign_data['status'] ?? 'N/A') . '</p>' .
+                                 '<p><strong>Estado Real:</strong> ' . $record->getRealCampaignStatus() . '</p>' .
+                                 '<p><strong>Fecha Inicio:</strong> ' . ($record->campaign_data['start_time'] ?? 'N/A') . '</p>' .
+                                 '<p><strong>Fecha Fin:</strong> ' . ($record->campaign_data['stop_time'] ?? 'N/A') . '</p>' .
+                                 '<p><strong>Fecha Actual:</strong> ' . now()->toISOString() . '</p>' .
+                                 '</div>' .
+                                 
+                                 '<h3 class="text-lg font-bold mb-3 text-red-600">🔍 DEBUG: Información de Presupuestos</h3>' .
                                  '<pre class="bg-red-50 p-3 rounded text-xs overflow-x-auto mb-4 border border-red-200">' . 
                                  json_encode($record->getBudgetDebugInfo(), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . '</pre>' .
                                  
@@ -314,16 +336,6 @@ class ActiveCampaignsResource extends Resource
                     
                 
                     
-                Action::make('refresh_campaign')
-                    ->label('Refrescar')
-                    ->icon('heroicon-o-arrow-path')
-                    ->color('warning')
-                    ->action(function ($record) {
-                        Notification::make()
-                            ->title('Campaña refrescada')
-                            ->success()
-                            ->send();
-                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

@@ -20,11 +20,69 @@ class ListActiveCampaigns extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('refresh_spend_data')
+                ->label('Actualizar Gastos')
+                ->icon('heroicon-o-arrow-path')
+                ->color('success')
+                ->action(function () {
+                    $updated = 0;
+                    foreach (ActiveCampaign::all() as $record) {
+                        try {
+                            $campaignId = $record->meta_campaign_id;
+                            if (!$campaignId) {
+                                continue;
+                            }
+                            
+                            // Buscar token de la cuenta asociada
+                            $facebookAccount = null;
+                            if (isset($record->facebook_account_id)) {
+                                $facebookAccount = FacebookAccount::find($record->facebook_account_id);
+                            }
+                            if (!$facebookAccount || !$facebookAccount->access_token) {
+                                continue;
+                            }
+                            
+                            $token = $facebookAccount->access_token;
+                            // Obtener gastos de los últimos 30 días (rango amplio para datos recientes)
+                            $url = "https://graph.facebook.com/v18.0/{$campaignId}/insights?fields=spend&time_range[since]=" . urlencode(now()->subDays(30)->format('Y-m-d')) . "&time_range[until]=" . urlencode(now()->format('Y-m-d')) . "&access_token={$token}";
+                            $response = @file_get_contents($url);
+                            if ($response === false) {
+                                continue;
+                            }
+                            
+                            $json = json_decode($response, true);
+                            $spend = 0;
+                            if (isset($json['data']) && is_array($json['data'])) {
+                                foreach ($json['data'] as $row) {
+                                    $spend += (float)($row['spend'] ?? 0);
+                                }
+                            }
+                            
+                            // Guardar gastos actualizados
+                            $campaignData = $record->campaign_data ?? [];
+                            $campaignData['amount_spent_override'] = $spend;
+                            $campaignData['last_updated'] = now()->toISOString();
+                            $record->campaign_data = $campaignData;
+                            $record->save();
+                            $updated++;
+                        } catch (\Throwable $e) {
+                            continue;
+                        }
+                    }
+
+                    Notification::make()
+                        ->title('Gastos actualizados')
+                        ->body("Se actualizaron los gastos de {$updated} campañas con datos recientes de Meta API")
+                        ->success()
+                        ->send();
+                }),
+                
             Action::make('date_range_stats')
-                ->label('Estadísticas por Rango')
+                ->label('Actualizar Gastos por Rango')
                 ->icon('heroicon-o-calendar-days')
                 ->color('primary')
-                ->modalHeading('Obtener estadísticas por rango de fechas')
+                ->modalHeading('Actualizar gastos reales de las campañas por rango de fechas')
+                ->modalDescription('Selecciona el rango de fechas para obtener los gastos reales desde Meta API y actualizar la tabla.')
                 ->form([
                     \Filament\Forms\Components\DatePicker::make('start_date')
                         ->label('Fecha de Inicio')

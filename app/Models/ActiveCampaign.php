@@ -199,6 +199,72 @@ class ActiveCampaign extends Model
         }
         return null;
     }
+
+    /**
+     * Obtiene el estado real de la campaña basado en fechas y estado de Meta
+     */
+    public function getRealCampaignStatus()
+    {
+        if (!$this->campaign_data) {
+            return 'UNKNOWN';
+        }
+
+        $metaStatus = $this->campaign_data['status'] ?? 'UNKNOWN';
+        $startTime = $this->campaign_data['start_time'] ?? null;
+        $stopTime = $this->campaign_data['stop_time'] ?? null;
+
+        if (!$startTime || !$stopTime) {
+            return $metaStatus;
+        }
+
+        $now = new \DateTime();
+        $start = new \DateTime($startTime);
+        $stop = new \DateTime($stopTime);
+
+        // Lógica de estado real
+        if ($now < $start) {
+            return 'SCHEDULED'; // Aún no ha empezado
+        } elseif ($now > $stop) {
+            return 'COMPLETED'; // Ya terminó
+        } elseif ($metaStatus === 'ACTIVE') {
+            return 'ACTIVE'; // Está en rango y Meta dice activa
+        } else {
+            return $metaStatus; // Usar el estado de Meta
+        }
+    }
+
+    /**
+     * Obtiene el estado real del adset basado en fechas y estado de Meta
+     */
+    public function getRealAdsetStatus()
+    {
+        if (!$this->adset_data) {
+            return 'UNKNOWN';
+        }
+
+        $metaStatus = $this->adset_data['status'] ?? 'UNKNOWN';
+        $startTime = $this->adset_data['start_time'] ?? null;
+        $stopTime = $this->adset_data['stop_time'] ?? null;
+
+        if (!$startTime || !$stopTime) {
+            return $metaStatus;
+        }
+
+        $now = new \DateTime();
+        $start = new \DateTime($startTime);
+        $stop = new \DateTime($stopTime);
+
+        // Lógica de estado real
+        if ($now < $start) {
+            return 'SCHEDULED';
+        } elseif ($now > $stop) {
+            return 'COMPLETED';
+        } elseif ($metaStatus === 'ACTIVE') {
+            return 'ACTIVE';
+        } else {
+            return $metaStatus;
+        }
+    }
     
     /**
      * Calcular duración del adset
