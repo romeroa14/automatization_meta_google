@@ -159,14 +159,14 @@ class ActiveCampaignsResource extends Resource
                 TextColumn::make('campaign_daily_budget_corrected')
                     ->label('Presupuesto Diario')
                     ->getStateUsing(function ($record) {
-                        // Mostrar valor tal como lo devuelve Meta API (sin conversiones)
+                        // Meta API devuelve valores en centavos, dividir entre 100
                         $dailyBudget = $record->campaign_daily_budget ?? $record->adset_daily_budget;
-                        return $dailyBudget ?? 0;
+                        return $dailyBudget ? $dailyBudget / 100 : 0;
                     })
                     ->money('USD')
                     ->sortable()
                     ->color('success')
-                    ->description('Valor original de Meta'),
+                    ->description('Valor convertido de centavos'),
                     
                 TextColumn::make('campaign_total_budget_calculated')
                     ->label('Presupuesto Total')
@@ -175,8 +175,8 @@ class ActiveCampaignsResource extends Resource
                         $duration = $record->getCampaignDurationDays() ?? $record->getAdsetDurationDays();
                         
                         if ($dailyBudget && $duration) {
-                            // Mantener formato original de Meta
-                            return $dailyBudget * $duration;
+                            // Meta API devuelve valores en centavos, dividir entre 100
+                            return ($dailyBudget / 100) * $duration;
                         }
                         
                         return 0;
@@ -184,7 +184,7 @@ class ActiveCampaignsResource extends Resource
                     ->money('USD')
                     ->sortable()
                     ->color('info')
-                    ->description('Diario × Días (formato Meta)'),
+                    ->description('Diario × Días (convertido de centavos)'),
                     
                 TextColumn::make('amount_spent')
                     ->label('Gastado')
@@ -230,12 +230,13 @@ class ActiveCampaignsResource extends Resource
                 TextColumn::make('budget_remaining')
                     ->label('Presupuesto Restante')
                     ->getStateUsing(function ($record) {
-                        // Obtener presupuesto total (diario × duración) con formato original
+                        // Obtener presupuesto total (diario × duración) convertido de centavos
                         $dailyBudget = $record->campaign_daily_budget ?? $record->adset_daily_budget;
                         $duration = $record->getCampaignDurationDays() ?? $record->getAdsetDurationDays();
                         
                         if ($dailyBudget && $duration) {
-                            $totalBudget = $dailyBudget * $duration;
+                            // Meta API devuelve valores en centavos, dividir entre 100
+                            $totalBudget = ($dailyBudget / 100) * $duration;
                             
                             // Usar override si existe
                             $override = $record->campaign_data['amount_spent_override'] ?? null;
@@ -243,7 +244,7 @@ class ActiveCampaignsResource extends Resource
                                 return max(0, $totalBudget - (float) $override);
                             }
 
-                            // Obtener gastado con formato original
+                            // Obtener gastado (ya está en formato correcto)
                             $spent = $record->getAmountSpentFromMeta();
                             
                             if ($spent !== null) {
@@ -261,12 +262,12 @@ class ActiveCampaignsResource extends Resource
                             return $totalBudget;
                         }
                         
-                        // Fallback: intentar obtener de Meta API con formato original
+                        // Fallback: intentar obtener de Meta API y convertir de centavos
                         $remaining = $record->getCampaignBudgetRemainingFromMeta() ?? 
                                    $record->getAdsetBudgetRemainingFromMeta();
                         
                         if ($remaining !== null) {
-                            return $remaining; // Valor original de Meta
+                            return $remaining / 100; // Convertir de centavos
                         }
                         
                         return 0;
@@ -274,7 +275,7 @@ class ActiveCampaignsResource extends Resource
                     ->money('USD')
                     ->sortable()
                     ->color('success')
-                    ->description('Total - Gastado (formato Meta)'),
+                    ->description('Total - Gastado (convertido de centavos)'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('campaign_status')
