@@ -20,6 +20,21 @@ class ListActiveCampaigns extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('auto_reconcile_campaigns')
+                ->label('Conciliar Automáticamente')
+                ->icon('heroicon-o-calculator')
+                ->color('success')
+                ->action(function () {
+                    $service = new \App\Services\CampaignReconciliationService();
+                    $results = $service->processActiveCampaigns();
+                    
+                    Notification::make()
+                        ->title('Conciliación Automática Completada')
+                        ->body("Procesadas: {$results['processed']} campañas | Conciliadas: {$results['reconciled']} | Errores: " . count($results['errors']))
+                        ->success()
+                        ->send();
+                }),
+                
             Action::make('refresh_spend_data')
                 ->label('Actualizar Gastos')
                 ->icon('heroicon-o-arrow-path')

@@ -173,7 +173,7 @@ class ActiveCampaignsResource extends Resource
                     ->limit(25)
                     ->weight('bold'),
                     
-                TextColumn::make('campaign_daily_budget_corrected')
+                TextColumn::make('campaign_daily_budget')
                     ->label('Presupuesto Diario')
                     ->getStateUsing(function ($record) {
                         // Meta API devuelve valores en centavos, dividir entre 100
@@ -182,28 +182,9 @@ class ActiveCampaignsResource extends Resource
                     })
                     ->money('USD')
                     ->sortable()
-                    ->color('success')
-                    ->description('Valor convertido de centavos'),
+                    ->color('success'),
                     
-                TextColumn::make('campaign_total_budget_calculated')
-                    ->label('Presupuesto Total')
-                    ->getStateUsing(function ($record) {
-                        $dailyBudget = $record->campaign_daily_budget ?? $record->adset_daily_budget;
-                        $duration = $record->getCampaignDurationDays() ?? $record->getAdsetDurationDays();
-                        
-                        if ($dailyBudget && $duration) {
-                            // Meta API devuelve valores en centavos, dividir entre 100
-                            return ($dailyBudget / 100) * $duration;
-                        }
-                        
-                        return 0;
-                    })
-                    ->money('USD')
-                    ->sortable()
-                    ->color('info')
-                    ->description('Diario × Días (convertido de centavos)'),
-                    
-                TextColumn::make('amount_spent')
+                TextColumn::make('campaign_data')
                     ->label('Gastado')
                     ->getStateUsing(function ($record) {
                         // Si hay override por rango, usarlo
@@ -224,20 +205,9 @@ class ActiveCampaignsResource extends Resource
                     })
                     ->money('USD')
                     ->sortable()
-                    ->color('warning')
-                    ->description('Valor original de Meta'),
+                    ->color('warning'),
                     
-                
-                    
-                TextColumn::make('campaign_duration_days')
-                    ->label('Duración')
-                    ->getStateUsing(fn ($record) => $record->getCampaignDurationDays())
-                    ->suffix(' días')
-                    ->sortable()
-                    ->badge()
-                    ->color('info'),
-                    
-                TextColumn::make('budget_remaining')
+                TextColumn::make('campaign_total_budget')
                     ->label('Presupuesto Restante')
                     ->getStateUsing(function ($record) {
                         // Obtener presupuesto total (diario × duración) convertido de centavos
@@ -284,8 +254,32 @@ class ActiveCampaignsResource extends Resource
                     })
                     ->money('USD')
                     ->sortable()
-                    ->color('success')
-                    ->description('Total - Gastado (convertido de centavos)'),
+                    ->color('success'),
+                    
+                TextColumn::make('campaign_lifetime_budget')
+                    ->label('Presupuesto Total')
+                    ->getStateUsing(function ($record) {
+                        $dailyBudget = $record->campaign_daily_budget ?? $record->adset_daily_budget;
+                        $duration = $record->getCampaignDurationDays() ?? $record->getAdsetDurationDays();
+                        
+                        if ($dailyBudget && $duration) {
+                            // Meta API devuelve valores en centavos, dividir entre 100
+                            return ($dailyBudget / 100) * $duration;
+                        }
+                        
+                        return 0;
+                    })
+                    ->money('USD')
+                    ->sortable()
+                    ->color('info'),
+                    
+                TextColumn::make('campaign_duration_days')
+                    ->label('Duración')
+                    ->getStateUsing(fn ($record) => $record->getCampaignDurationDays())
+                    ->suffix(' días')
+                    ->sortable()
+                    ->badge()
+                    ->color('info')
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('campaign_status')

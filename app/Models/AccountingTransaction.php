@@ -39,7 +39,7 @@ class AccountingTransaction extends Model
      */
     public function campaignReconciliation(): BelongsTo
     {
-        return $this->belongsTo(CampaignReconciliation::class);
+        return $this->belongsTo(CampaignPlanReconciliation::class);
     }
 
     /**
