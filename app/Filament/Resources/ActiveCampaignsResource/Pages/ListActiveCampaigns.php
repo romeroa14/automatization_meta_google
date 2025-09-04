@@ -20,6 +20,75 @@ class ListActiveCampaigns extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('date_range_stats')
+                ->label('Estadísticas por Rango')
+                ->icon('heroicon-o-calendar-days')
+                ->color('primary')
+                ->modalHeading('Obtener estadísticas por rango de fechas')
+                ->form([
+                    \Filament\Forms\Components\DatePicker::make('start_date')
+                        ->label('Fecha de Inicio')
+                        ->required()
+                        ->default(now()->subDays(7)),
+                    \Filament\Forms\Components\DatePicker::make('end_date')
+                        ->label('Fecha de Fin')
+                        ->required()
+                        ->default(now()),
+                ])
+                ->action(function (array $data) {
+                    $startDate = $data['start_date'];
+                    $endDate = $data['end_date'];
+
+                    $updated = 0;
+                    foreach (ActiveCampaign::all() as $record) {
+                        try {
+                            $campaignId = $record->meta_campaign_id;
+                            if (!$campaignId) {
+                                continue;
+                            }
+                            // Buscar token de la cuenta asociada si existe
+                            $facebookAccount = null;
+                            if (isset($record->facebook_account_id)) {
+                                $facebookAccount = FacebookAccount::find($record->facebook_account_id);
+                            }
+                            if (!$facebookAccount || !$facebookAccount->access_token) {
+                                continue;
+                            }
+                            $token = $facebookAccount->access_token;
+                            $url = "https://graph.facebook.com/v18.0/{$campaignId}/insights?fields=spend&time_range[since]=" . urlencode($startDate) . "&time_range[until]=" . urlencode($endDate) . "&access_token={$token}";
+                            $response = @file_get_contents($url);
+                            if ($response === false) {
+                                continue;
+                            }
+                            $json = json_decode($response, true);
+                            $spend = 0;
+                            if (isset($json['data']) && is_array($json['data'])) {
+                                foreach ($json['data'] as $row) {
+                                    $spend += (float)($row['spend'] ?? 0);
+                                }
+                            }
+                            // Guardar override en el JSON de campaña
+                            $campaignData = $record->campaign_data ?? [];
+                            $campaignData['amount_spent_override'] = $spend;
+                            $campaignData['amount_spent_range'] = [
+                                'since' => $startDate,
+                                'until' => $endDate,
+                            ];
+                            $record->campaign_data = $campaignData;
+                            $record->save();
+                            $updated++;
+                        } catch (\Throwable $e) {
+                            // Continuar con el siguiente registro
+                            continue;
+                        }
+                    }
+
+                    Notification::make()
+                        ->title('Rango aplicado')
+                        ->body("Se actualizaron {$updated} campañas con el gasto del rango seleccionado")
+                        ->success()
+                        ->send();
+                }),
             Action::make('load_campaigns')
                 ->label('Cargar Campañas Activas')
                 ->icon('heroicon-o-cloud-arrow-down')

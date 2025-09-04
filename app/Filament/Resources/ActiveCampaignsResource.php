@@ -18,6 +18,7 @@ use Filament\Forms\Components\Hidden;
 use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\BulkAction;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\DatePicker;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Builder;
@@ -158,20 +159,56 @@ class ActiveCampaignsResource extends Resource
                 TextColumn::make('campaign_daily_budget_corrected')
                     ->label('Presupuesto Diario')
                     ->getStateUsing(function ($record) {
-                        // Preguntar: ¿Mostrar de campaña o adset?
-                        // Por ahora mostrar de campaña, pero se puede cambiar
+                        // Mostrar valor tal como lo devuelve Meta API (sin conversiones)
                         $dailyBudget = $record->campaign_daily_budget ?? $record->adset_daily_budget;
-                        
-                        if ($dailyBudget && $dailyBudget > 100) {
-                            // Si es mayor a 100, probablemente está en centavos
-                            return $dailyBudget / 100;
-                        }
-                        
-                        return $dailyBudget;
+                        return $dailyBudget ?? 0;
                     })
                     ->money('USD')
                     ->sortable()
-                    ->color('success'),
+                    ->color('success')
+                    ->description('Valor original de Meta'),
+                    
+                TextColumn::make('campaign_total_budget_calculated')
+                    ->label('Presupuesto Total')
+                    ->getStateUsing(function ($record) {
+                        $dailyBudget = $record->campaign_daily_budget ?? $record->adset_daily_budget;
+                        $duration = $record->getCampaignDurationDays() ?? $record->getAdsetDurationDays();
+                        
+                        if ($dailyBudget && $duration) {
+                            // Mantener formato original de Meta
+                            return $dailyBudget * $duration;
+                        }
+                        
+                        return 0;
+                    })
+                    ->money('USD')
+                    ->sortable()
+                    ->color('info')
+                    ->description('Diario × Días (formato Meta)'),
+                    
+                TextColumn::make('amount_spent')
+                    ->label('Gastado')
+                    ->getStateUsing(function ($record) {
+                        // Si hay override por rango, usarlo
+                        $override = $record->campaign_data['amount_spent_override'] ?? null;
+                        if ($override !== null) {
+                            return (float) $override;
+                        }
+                        // Mostrar valor tal como lo devuelve Meta API
+                        $spent = $record->getAmountSpentFromMeta();
+                        
+                        if ($spent !== null) {
+                            return $spent; // Valor original de Meta
+                        }
+                        
+                        // Si no hay datos de Meta, calcular estimado
+                        $spentEstimated = $record->getAmountSpentEstimated();
+                        return $spentEstimated ?? 0;
+                    })
+                    ->money('USD')
+                    ->sortable()
+                    ->color('warning')
+                    ->description('Valor original de Meta'),
                     
                 TextColumn::make('campaign_status')
                     ->label('Estado')
@@ -193,21 +230,51 @@ class ActiveCampaignsResource extends Resource
                 TextColumn::make('budget_remaining')
                     ->label('Presupuesto Restante')
                     ->getStateUsing(function ($record) {
-                        // Intentar obtener de Meta API primero
+                        // Obtener presupuesto total (diario × duración) con formato original
+                        $dailyBudget = $record->campaign_daily_budget ?? $record->adset_daily_budget;
+                        $duration = $record->getCampaignDurationDays() ?? $record->getAdsetDurationDays();
+                        
+                        if ($dailyBudget && $duration) {
+                            $totalBudget = $dailyBudget * $duration;
+                            
+                            // Usar override si existe
+                            $override = $record->campaign_data['amount_spent_override'] ?? null;
+                            if ($override !== null) {
+                                return max(0, $totalBudget - (float) $override);
+                            }
+
+                            // Obtener gastado con formato original
+                            $spent = $record->getAmountSpentFromMeta();
+                            
+                            if ($spent !== null) {
+                                $remaining = $totalBudget - $spent;
+                                return max(0, $remaining);
+                            }
+                            
+                            // Si no hay gastado, usar estimado
+                            $spentEstimated = $record->getAmountSpentEstimated();
+                            if ($spentEstimated) {
+                                $remaining = $totalBudget - $spentEstimated;
+                                return max(0, $remaining);
+                            }
+                            
+                            return $totalBudget;
+                        }
+                        
+                        // Fallback: intentar obtener de Meta API con formato original
                         $remaining = $record->getCampaignBudgetRemainingFromMeta() ?? 
                                    $record->getAdsetBudgetRemainingFromMeta();
                         
-                        if ($remaining) {
-                            return $remaining;
+                        if ($remaining !== null) {
+                            return $remaining; // Valor original de Meta
                         }
                         
-                        // Si no, calcular estimado
-                        return $record->getCampaignRemainingBudget() ?? 
-                               $record->getAdsetRemainingBudget();
+                        return 0;
                     })
                     ->money('USD')
                     ->sortable()
-                    ->color('success'),
+                    ->color('success')
+                    ->description('Total - Gastado (formato Meta)'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('campaign_status')
@@ -225,7 +292,11 @@ class ActiveCampaignsResource extends Resource
                     ->color('info')
                     ->modalHeading('Datos Completos de los 3 Niveles')
                     ->modalContent(fn ($record) => view('components.raw-html', [
-                        'html' => '<h3 class="text-lg font-bold mb-3">📊 Datos de Campaña</h3>' .
+                        'html' => '<h3 class="text-lg font-bold mb-3 text-red-600">🔍 DEBUG: Información de Presupuestos</h3>' .
+                                 '<pre class="bg-red-50 p-3 rounded text-xs overflow-x-auto mb-4 border border-red-200">' . 
+                                 json_encode($record->getBudgetDebugInfo(), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . '</pre>' .
+                                 
+                                 '<h3 class="text-lg font-bold mb-3">📊 Datos de Campaña</h3>' .
                                  '<pre class="bg-gray-100 p-3 rounded text-xs overflow-x-auto mb-4">' . 
                                  json_encode($record->campaign_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . '</pre>' .
                                  
@@ -239,6 +310,8 @@ class ActiveCampaignsResource extends Resource
                     ]))
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('Cerrar'),
+                    
+                
                     
                 Action::make('refresh_campaign')
                     ->label('Refrescar')

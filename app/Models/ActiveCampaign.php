@@ -71,7 +71,7 @@ class ActiveCampaign extends Model
         
         try {
             // 1. OBTENER CAMPAÑAS ACTIVAS
-            $campaignsUrl = "https://graph.facebook.com/v18.0/act_{$adAccountId}/campaigns?fields=id,name,status,daily_budget,lifetime_budget,start_time,stop_time,objective,created_time&limit=250&access_token={$facebookAccount->access_token}";
+            $campaignsUrl = "https://graph.facebook.com/v18.0/act_{$adAccountId}/campaigns?fields=id,name,status,daily_budget,lifetime_budget,start_time,stop_time,objective,created_time,amount_spent&limit=250&access_token={$facebookAccount->access_token}";
             $campaignsResponse = file_get_contents($campaignsUrl);
             $campaignsData = json_decode($campaignsResponse, true);
             
@@ -84,7 +84,7 @@ class ActiveCampaign extends Model
             foreach ($campaignsData['data'] as $campaignData) {
                 if ($campaignData['status'] === 'ACTIVE') {
                     // 2. OBTENER ADSETS DE CADA CAMPAÑA
-                    $adsetsUrl = "https://graph.facebook.com/v18.0/{$campaignData['id']}/adsets?fields=id,name,status,daily_budget,lifetime_budget,start_time,stop_time&limit=250&access_token={$facebookAccount->access_token}";
+                    $adsetsUrl = "https://graph.facebook.com/v18.0/{$campaignData['id']}/adsets?fields=id,name,status,daily_budget,lifetime_budget,start_time,stop_time,amount_spent&limit=250&access_token={$facebookAccount->access_token}";
                     $adsetsResponse = file_get_contents($adsetsUrl);
                     $adsetsData = json_decode($adsetsResponse, true);
                     
@@ -379,5 +379,186 @@ class ActiveCampaign extends Model
         }
         
         return null;
+    }
+    
+    /**
+     * Debug: Obtener información completa de presupuestos para análisis
+     */
+    public function getBudgetDebugInfo()
+    {
+        $debug = [];
+        
+        // Valores almacenados en la base de datos
+        $debug['database'] = [
+            'campaign_daily_budget' => $this->campaign_daily_budget,
+            'adset_daily_budget' => $this->adset_daily_budget,
+            'campaign_total_budget' => $this->campaign_total_budget,
+            'adset_lifetime_budget' => $this->adset_lifetime_budget,
+        ];
+        
+        // Valores originales de Meta API
+        if (isset($this->campaign_data)) {
+            $debug['meta_campaign'] = [
+                'daily_budget' => $this->campaign_data['daily_budget'] ?? null,
+                'lifetime_budget' => $this->campaign_data['lifetime_budget'] ?? null,
+                'budget_remaining' => $this->campaign_data['budget_remaining'] ?? null,
+                'amount_spent' => $this->campaign_data['amount_spent'] ?? null,
+                'raw_amount_spent' => $this->campaign_data['amount_spent'] ?? null,
+            ];
+        }
+        
+        if (isset($this->adset_data)) {
+            $debug['meta_adset'] = [
+                'daily_budget' => $this->adset_data['daily_budget'] ?? null,
+                'lifetime_budget' => $this->adset_data['lifetime_budget'] ?? null,
+                'budget_remaining' => $this->adset_data['budget_remaining'] ?? null,
+                'amount_spent' => $this->adset_data['amount_spent'] ?? null,
+                'raw_amount_spent' => $this->adset_data['amount_spent'] ?? null,
+            ];
+        }
+        
+        // Cálculos
+        $debug['calculations'] = [
+            'campaign_duration_days' => $this->getCampaignDurationDays(),
+            'adset_duration_days' => $this->getAdsetDurationDays(),
+            'campaign_total_estimated' => $this->getCampaignTotalBudgetEstimated(),
+            'adset_total_estimated' => $this->getAdsetTotalBudgetEstimated(),
+        ];
+        
+        // Análisis de formato
+        $debug['format_analysis'] = [
+            'daily_budget_raw' => $this->campaign_data['daily_budget'] ?? $this->adset_data['daily_budget'] ?? null,
+            'daily_budget_converted' => $this->campaign_daily_budget ?? $this->adset_daily_budget ?? null,
+            'amount_spent_raw' => $this->campaign_data['amount_spent'] ?? $this->adset_data['amount_spent'] ?? null,
+            'amount_spent_converted' => $this->getAmountSpentFromMeta(),
+            'total_calculated' => ($this->campaign_daily_budget ?? $this->adset_daily_budget ?? 0) * ($this->getCampaignDurationDays() ?? $this->getAdsetDurationDays() ?? 0),
+        ];
+        
+        // Detección de formato
+        $debug['format_detection'] = $this->detectMetaNumberFormat();
+        
+        // Conversiones con nuevo método
+        $debug['conversions'] = [
+            'daily_budget_converted_new' => $this->convertMetaNumber($this->campaign_data['daily_budget'] ?? $this->adset_data['daily_budget'] ?? null, 'budget'),
+            'amount_spent_converted_new' => $this->convertMetaNumber($this->campaign_data['amount_spent'] ?? $this->adset_data['amount_spent'] ?? null, 'amount'),
+        ];
+        
+        return $debug;
+    }
+    
+    /**
+     * Obtener presupuesto gastado desde Meta API
+     */
+    public function getAmountSpentFromMeta()
+    {
+        // Intentar obtener desde datos de campaña
+        if (isset($this->campaign_data['amount_spent'])) {
+            $amountSpent = $this->campaign_data['amount_spent'];
+            // Convertir de centavos a dólares si es necesario
+            return $amountSpent > 1000 ? $amountSpent / 100 : $amountSpent;
+        }
+        
+        // Intentar obtener desde datos de adset
+        if (isset($this->adset_data['amount_spent'])) {
+            $amountSpent = $this->adset_data['amount_spent'];
+            // Convertir de centavos a dólares si es necesario
+            return $amountSpent > 1000 ? $amountSpent / 100 : $amountSpent;
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Calcular presupuesto gastado estimado basado en días transcurridos
+     */
+    public function getAmountSpentEstimated()
+    {
+        $dailyBudget = $this->campaign_daily_budget ?? $this->adset_daily_budget;
+        
+        if (!$dailyBudget) {
+            return 0;
+        }
+        
+        // Convertir centavos a dólares si es necesario
+        if ($dailyBudget >= 10) {
+            $dailyBudget = $dailyBudget / 100;
+        }
+        
+        // Calcular días transcurridos desde el inicio
+        $startTime = $this->campaign_start_time ?? $this->adset_start_time;
+        
+        if (!$startTime) {
+            return 0;
+        }
+        
+        $now = now();
+        $daysElapsed = $startTime->diffInDays($now);
+        
+        // Estimar gasto basado en presupuesto diario × días transcurridos
+        return $dailyBudget * $daysElapsed;
+    }
+    
+    /**
+     * Detectar formato de números de Meta API
+     */
+    public function detectMetaNumberFormat()
+    {
+        $format = [
+            'decimal_separator' => '.',
+            'thousands_separator' => ',',
+            'uses_centavos' => false,
+            'uses_commas_as_decimals' => false,
+        ];
+        
+        // Verificar si usa centavos
+        $dailyBudget = $this->campaign_data['daily_budget'] ?? $this->adset_data['daily_budget'] ?? null;
+        if ($dailyBudget && $dailyBudget > 100) {
+            $format['uses_centavos'] = true;
+        }
+        
+        // Verificar si usa comas como separador decimal
+        $amountSpent = $this->campaign_data['amount_spent'] ?? $this->adset_data['amount_spent'] ?? null;
+        if ($amountSpent && is_string($amountSpent) && strpos($amountSpent, ',') !== false) {
+            $format['uses_commas_as_decimals'] = true;
+            $format['decimal_separator'] = ',';
+        }
+        
+        return $format;
+    }
+    
+    /**
+     * Convertir número de Meta API al formato correcto
+     */
+    public function convertMetaNumber($value, $type = 'amount')
+    {
+        if ($value === null) {
+            return 0;
+        }
+        
+        // Si es string, verificar formato
+        if (is_string($value)) {
+            // Si usa comas como separador decimal (ej: "16,03")
+            if (strpos($value, ',') !== false && strpos($value, '.') === false) {
+                $value = str_replace(',', '.', $value);
+            }
+            
+            // Convertir a float
+            $value = (float) $value;
+        }
+        
+        // Si es número, verificar si está en centavos
+        if (is_numeric($value)) {
+            // Para presupuestos diarios y totales
+            if ($type === 'budget' && $value > 100) {
+                $value = $value / 100;
+            }
+            
+            // Para montos gastados, verificar si está en centavos
+            if ($type === 'amount' && $value > 1000) {
+                $value = $value / 100;
+            }
+        }
+        
+        return $value;
     }
 }
