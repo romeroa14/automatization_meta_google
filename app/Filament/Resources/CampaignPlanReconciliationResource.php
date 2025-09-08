@@ -143,26 +143,12 @@ class CampaignPlanReconciliationResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('reconciliation_status')
-                    ->label('Estado')
-                    ->badge()
-                    ->colors([
-                        'warning' => 'pending',
-                        'success' => 'approved',
-                        'danger' => 'rejected',
-                    ])
-                    ->formatStateUsing(fn (string $state): string => match($state) {
-                        'pending' => '⏳',
-                        'approved' => '✅',
-                        'rejected' => '❌',
-                        default => '❓',
-                    }),
 
                 TextColumn::make('activeCampaign.meta_campaign_name')
                     ->label('Campaña')
                     ->searchable()
                     ->sortable()
-                    ->limit(10)
+                    ->limit(20)
                     ->weight('bold'),
 
                 TextColumn::make('advertisingPlan.plan_name')
