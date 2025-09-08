@@ -135,7 +135,7 @@ class CampaignReconciliationService
     /**
      * Extraer nombre del cliente (cuenta de Instagram) desde la API de Meta
      */
-    private function extractClientName(ActiveCampaign $campaign): string
+    public function extractClientName(ActiveCampaign $campaign): string
     {
         try {
             // Obtener el ID del anuncio

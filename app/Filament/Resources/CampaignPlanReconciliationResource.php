@@ -360,21 +360,40 @@ class CampaignPlanReconciliationResource extends Resource
                             'profit_percentage' => $profitPercentage,
                         ]);
 
+                        // Usar el servicio de conciliación para actualizar la transacción con detección automática
+                        $reconciliationService = new \App\Services\CampaignReconciliationService();
+                        
+                        // Detectar automáticamente el nombre de Instagram del cliente
+                        $instagramClientName = $reconciliationService->extractClientName($record->activeCampaign);
+                        
+                        // Obtener fechas reales de la campaña activa
+                        $campaignStartDate = $record->activeCampaign->campaign_start_time?->format('Y-m-d');
+                        $campaignEndDate = $record->activeCampaign->campaign_stop_time?->format('Y-m-d');
+
                         // Buscar la transacción contable existente para esta conciliación
                         $existingTransaction = \App\Models\AccountingTransaction::where('campaign_reconciliation_id', $record->id)->first();
 
                         if ($existingTransaction) {
-                            // Actualizar la transacción existente con los nuevos valores
+                            // Actualizar la transacción existente con los nuevos valores Y datos automáticos
                             $existingTransaction->update([
                                 'income' => $clientPrice, // Lo que paga el cliente
                                 'expense' => $totalBudget, // Presupuesto total del plan
                                 'profit' => $profitMargin, // Comisión (Cliente - Presupuesto)
+                                'client_name' => $instagramClientName, // Nombre de Instagram detectado automáticamente
+                                'campaign_start_date' => $campaignStartDate, // Fecha real de inicio de campaña
+                                'campaign_end_date' => $campaignEndDate, // Fecha real de final de campaña
                                 'notes' => 'Plan personalizado configurado - Comisión calculada: Cliente $' . number_format($clientPrice, 2) . ' - Presupuesto $' . number_format($totalBudget, 2) . ' = Comisión $' . number_format($profitMargin, 2),
                                 'metadata' => array_merge($existingTransaction->metadata ?? [], [
                                     'custom_plan_configured' => true,
                                     'configured_at' => now()->toISOString(),
                                     'client_price_configured' => $clientPrice,
                                     'profit_margin_configured' => $profitMargin,
+                                    'instagram_detected' => $instagramClientName !== 'Cliente Sin Identificar',
+                                    'campaign_dates' => [
+                                        'start_date' => $campaignStartDate,
+                                        'end_date' => $campaignEndDate,
+                                        'duration_days' => $record->activeCampaign->getCampaignDurationDays()
+                                    ]
                                 ])
                             ]);
                         } else {
@@ -382,14 +401,16 @@ class CampaignPlanReconciliationResource extends Resource
                             \App\Models\AccountingTransaction::create([
                                 'campaign_reconciliation_id' => $record->id,
                                 'advertising_plan_id' => $plan->id,
-                                'description' => "Plan personalizado configurado - {$plan->plan_name} - Cliente: {$record->activeCampaign->meta_campaign_name}",
+                                'description' => "Plan personalizado configurado - {$plan->plan_name} - Cliente: {$instagramClientName}",
                                 'income' => $clientPrice, // Lo que paga el cliente
                                 'expense' => $totalBudget, // Presupuesto total del plan
                                 'profit' => $profitMargin, // Comisión (Cliente - Presupuesto)
                                 'currency' => 'USD',
                                 'status' => 'completed',
-                                'client_name' => $record->activeCampaign->meta_campaign_name,
+                                'client_name' => $instagramClientName, // Nombre de Instagram detectado automáticamente
                                 'meta_campaign_id' => $record->activeCampaign->meta_campaign_id,
+                                'campaign_start_date' => $campaignStartDate, // Fecha real de inicio de campaña
+                                'campaign_end_date' => $campaignEndDate, // Fecha real de final de campaña
                                 'transaction_date' => now(),
                                 'notes' => 'Plan personalizado configurado - Comisión calculada: Cliente $' . number_format($clientPrice, 2) . ' - Presupuesto $' . number_format($totalBudget, 2) . ' = Comisión $' . number_format($profitMargin, 2),
                                 'metadata' => [
@@ -401,6 +422,12 @@ class CampaignPlanReconciliationResource extends Resource
                                     'configured_at' => now()->toISOString(),
                                     'client_price_configured' => $clientPrice,
                                     'profit_margin_configured' => $profitMargin,
+                                    'instagram_detected' => $instagramClientName !== 'Cliente Sin Identificar',
+                                    'campaign_dates' => [
+                                        'start_date' => $campaignStartDate,
+                                        'end_date' => $campaignEndDate,
+                                        'duration_days' => $record->activeCampaign->getCampaignDurationDays()
+                                    ],
                                     'created_via' => 'custom_plan_configuration'
                                 ]
                             ]);
