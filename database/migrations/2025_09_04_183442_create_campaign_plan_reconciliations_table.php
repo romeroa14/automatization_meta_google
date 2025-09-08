@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('active_campaign_id')->constrained('active_campaigns_view')->onDelete('cascade');
             $table->foreignId('advertising_plan_id')->constrained('advertising_plans')->onDelete('cascade');
-            $table->enum('reconciliation_status', ['pending', 'approved', 'rejected', 'completed'])->default('pending');
+            $table->enum('reconciliation_status', ['pending', 'approved', 'rejected', 'completed', 'paused'])->default('pending');
             $table->timestamp('reconciliation_date')->nullable();
             $table->text('notes')->nullable();
             

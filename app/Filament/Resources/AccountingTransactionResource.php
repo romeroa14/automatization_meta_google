@@ -98,6 +98,7 @@ class AccountingTransactionResource extends Resource
                                 'completed' => 'Completada',
                                 'cancelled' => 'Cancelada',
                                 'refunded' => 'Reembolsada',
+                                'paused' => 'Pausada',
                             ])
                             ->default('pending'),
 
@@ -172,6 +173,24 @@ class AccountingTransactionResource extends Resource
                     ->sortable()
                     ->color('success'),
 
+                TextColumn::make('status')
+                    ->label('Estado')
+                    ->badge()
+                    ->colors([
+                        'warning' => 'pending',
+                        'success' => 'completed',
+                        'danger' => ['cancelled', 'paused'],
+                        'info' => 'refunded',
+                    ])
+                    ->formatStateUsing(fn (string $state): string => match($state) {
+                        'pending' => '⏳ Pendiente',
+                        'completed' => '✅ Completada',
+                        'cancelled' => '❌ Cancelada',
+                        'refunded' => '🔄 Reembolsada',
+                        'paused' => '⏸️ Pausada',
+                        default => '❓ Desconocido',
+                    }),
+
              
             ])
             ->filters([
@@ -182,6 +201,7 @@ class AccountingTransactionResource extends Resource
                         'completed' => 'Completada',
                         'cancelled' => 'Cancelada',
                         'refunded' => 'Reembolsada',
+                        'paused' => 'Pausada',
                     ]),
                 Tables\Filters\Filter::make('date_range')
                     ->form([

@@ -23,6 +23,39 @@ class ListActiveCampaigns extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('microscopic_accounting')
+                ->label('Contabilidad Microscópica')
+                ->icon('heroicon-o-magnifying-glass')
+                ->color('warning')
+                ->action(function () {
+                    $service = new \App\Services\MicroscopicAccountingService();
+                    $results = $service->processCampaignsByStatus();
+                    
+                    $summary = $results['summary'] ?? [];
+                    $message = "📊 Procesadas: {$summary['total_campaigns_processed']} campañas\n";
+                    $message .= "✅ Conciliadas: {$summary['total_campaigns_reconciled']} campañas\n";
+                    $message .= "❌ Errores: {$summary['total_errors']}\n";
+                    $message .= "📈 Tasa de éxito: " . number_format($summary['success_rate'], 2) . "%\n\n";
+                    
+                    $message .= "📋 Por estado:\n";
+                    foreach ($summary['status_breakdown'] as $status => $count) {
+                        $emoji = match($status) {
+                            'active' => '🟢',
+                            'paused' => '🔴',
+                            'scheduled' => '🔵',
+                            'completed' => '✅',
+                            default => '❓'
+                        };
+                        $message .= "{$emoji} " . strtoupper($status) . ": {$count}\n";
+                    }
+                    
+                    Notification::make()
+                        ->title('Contabilidad Microscópica Completada')
+                        ->body($message)
+                        ->success()
+                        ->send();
+                }),
+                
             Action::make('auto_reconcile_campaigns')
                 ->label('Conciliar Automáticamente')
                 ->icon('heroicon-o-calculator')

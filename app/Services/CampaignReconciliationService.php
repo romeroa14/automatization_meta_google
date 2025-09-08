@@ -102,7 +102,7 @@ class CampaignReconciliationService
     /**
      * Extraer información relevante de la campaña activa
      */
-    private function extractCampaignInfo(ActiveCampaign $campaign): array
+    public function extractCampaignInfo(ActiveCampaign $campaign): array
     {
         // Obtener presupuesto diario usando el método convertMetaNumber del modelo
         $dailyBudgetRaw = $campaign->campaign_daily_budget ?? $campaign->adset_daily_budget ?? 0;
@@ -303,7 +303,7 @@ class CampaignReconciliationService
     /**
      * Detectar automáticamente el plan de publicidad basado en la información de la campaña
      */
-    private function detectAdvertisingPlan(array $campaignInfo): ?AdvertisingPlan
+    public function detectAdvertisingPlan(array $campaignInfo): ?AdvertisingPlan
     {
         $dailyBudget = $campaignInfo['daily_budget'];
         $durationDays = $campaignInfo['duration_days'];
@@ -343,7 +343,7 @@ class CampaignReconciliationService
     /**
      * Crear la conciliación de la campaña
      */
-    private function createReconciliation(ActiveCampaign $campaign, array $campaignInfo, ?AdvertisingPlan $plan): CampaignPlanReconciliation
+    public function createReconciliation(ActiveCampaign $campaign, array $campaignInfo, ?AdvertisingPlan $plan): CampaignPlanReconciliation
     {
         // Si no hay plan detectado, crear un plan personalizado
         if (!$plan) {
@@ -388,7 +388,7 @@ class CampaignReconciliationService
     /**
      * Crear un plan personalizado para campañas que no coinciden con planes existentes
      */
-    private function createCustomPlan(array $campaignInfo): AdvertisingPlan
+    public function createCustomPlan(array $campaignInfo): AdvertisingPlan
     {
         $dailyBudget = $campaignInfo['daily_budget'];
         $durationDays = $campaignInfo['duration_days'];

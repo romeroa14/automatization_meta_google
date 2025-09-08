@@ -329,7 +329,6 @@ class CampaignPlanReconciliationResource extends Resource
                             ->prefix('$')
                             ->minValue(0.01)
                             ->step(0.01)
-                            ->default(fn ($record) => $record->advertisingPlan->client_price)
                             ->helperText('Ingresa el precio que pagará el cliente por este plan personalizado'),
                     ])
                     ->action(function ($record, array $data) {

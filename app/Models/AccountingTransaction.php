@@ -83,6 +83,7 @@ class AccountingTransaction extends Model
             'completed' => 'Completada',
             'cancelled' => 'Cancelada',
             'refunded' => 'Reembolsada',
+            'paused' => 'Pausada',
             default => 'Desconocido'
         };
     }

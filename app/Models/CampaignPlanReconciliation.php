@@ -73,6 +73,7 @@ class CampaignPlanReconciliation extends Model
             'approved' => 'success',
             'rejected' => 'danger',
             'completed' => 'info',
+            'paused' => 'danger',
             default => 'gray',
         };
     }
@@ -87,6 +88,7 @@ class CampaignPlanReconciliation extends Model
             'approved' => 'Aprobada',
             'rejected' => 'Rechazada',
             'completed' => 'Completada',
+            'paused' => 'Pausada',
             default => 'Desconocido',
         };
     }
@@ -113,5 +115,13 @@ class CampaignPlanReconciliation extends Model
     public function scopeCompleted($query)
     {
         return $query->where('reconciliation_status', 'completed');
+    }
+
+    /**
+     * Scope para conciliaciones pausadas
+     */
+    public function scopePaused($query)
+    {
+        return $query->where('reconciliation_status', 'paused');
     }
 }

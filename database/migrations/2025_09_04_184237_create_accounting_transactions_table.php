@@ -20,7 +20,7 @@ return new class extends Migration
             $table->decimal('expense', 10, 2)->default(0); // Campo para gasto
             $table->decimal('profit', 10, 2)->default(0); // Campo para ganancia
             $table->string('currency', 3)->default('USD');
-            $table->enum('status', ['pending', 'completed', 'cancelled', 'refunded'])->default('pending');
+            $table->enum('status', ['pending', 'completed', 'cancelled', 'refunded', 'paused'])->default('pending');
             $table->string('reference_number')->nullable();
             $table->string('client_name')->nullable();
             $table->string('meta_campaign_id')->nullable();
