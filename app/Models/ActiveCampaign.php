@@ -70,8 +70,8 @@ class ActiveCampaign extends Model
         }
         
         try {
-            // 1. OBTENER CAMPAÑAS ACTIVAS
-            $campaignsUrl = "https://graph.facebook.com/v18.0/act_{$adAccountId}/campaigns?fields=id,name,status,daily_budget,lifetime_budget,start_time,stop_time,objective,created_time,amount_spent&limit=250&access_token={$facebookAccount->access_token}";
+            // 1. OBTENER CAMPAÑAS ACTIVAS (sin amount_spent porque no está disponible)
+            $campaignsUrl = "https://graph.facebook.com/v18.0/act_{$adAccountId}/campaigns?fields=id,name,status,daily_budget,lifetime_budget,start_time,stop_time,objective,created_time&limit=250&access_token={$facebookAccount->access_token}";
             $campaignsResponse = file_get_contents($campaignsUrl);
             $campaignsData = json_decode($campaignsResponse, true);
             
@@ -92,8 +92,26 @@ class ActiveCampaign extends Model
                 }
                 
                 if ($isActive || $isRecent) {
+                    // 1.1. OBTENER GASTOS REALES DE LA CAMPAÑA USANDO INSIGHTS
+                    $campaignSpend = 0;
+                    try {
+                        $insightsUrl = "https://graph.facebook.com/v18.0/{$campaignData['id']}/insights?fields=spend&time_range[since]=" . urlencode(now()->subDays(30)->format('Y-m-d')) . "&time_range[until]=" . urlencode(now()->format('Y-m-d')) . "&access_token={$facebookAccount->access_token}";
+                        $insightsResponse = @file_get_contents($insightsUrl);
+                        if ($insightsResponse) {
+                            $insightsData = json_decode($insightsResponse, true);
+                            if (isset($insightsData['data']) && is_array($insightsData['data'])) {
+                                foreach ($insightsData['data'] as $insight) {
+                                    $campaignSpend += (float)($insight['spend'] ?? 0);
+                                }
+                            }
+                        }
+                    } catch (\Exception $e) {
+                        // Si falla, continuar con 0
+                        $campaignSpend = 0;
+                    }
+
                     // 2. OBTENER ADSETS DE CADA CAMPAÑA
-                    $adsetsUrl = "https://graph.facebook.com/v18.0/{$campaignData['id']}/adsets?fields=id,name,status,daily_budget,lifetime_budget,start_time,stop_time,amount_spent&limit=250&access_token={$facebookAccount->access_token}";
+                    $adsetsUrl = "https://graph.facebook.com/v18.0/{$campaignData['id']}/adsets?fields=id,name,status,daily_budget,lifetime_budget,start_time,stop_time&limit=250&access_token={$facebookAccount->access_token}";
                     $adsetsResponse = file_get_contents($adsetsUrl);
                     $adsetsData = json_decode($adsetsResponse, true);
                     
@@ -186,7 +204,8 @@ class ActiveCampaign extends Model
                                                 $record->adset_stop_time = \Carbon\Carbon::parse($adsetData['stop_time']);
                                             }
                                             
-                                            // Datos JSON completos
+                                            // Datos JSON completos (incluir gasto real de insights)
+                                            $campaignData['amount_spent'] = $campaignSpend; // Agregar gasto real obtenido de insights
                                             $record->campaign_data = $campaignData;
                                             $record->adset_data = $adsetData;
                                             $record->ad_data = $adData;
