@@ -364,6 +364,7 @@ class CampaignPlanReconciliationResource extends Resource
                                 'income' => $clientPrice, // Lo que paga el cliente
                                 'expense' => $totalBudget, // Presupuesto total del plan
                                 'profit' => $profitMargin, // Comisión (Cliente - Presupuesto)
+                                'status' => 'completed', // ✅ CAMBIAR ESTADO A COMPLETADA
                                 'client_name' => $instagramClientName, // Nombre de Instagram detectado automáticamente
                                 'campaign_start_date' => $campaignStartDate, // Fecha real de inicio de campaña
                                 'campaign_end_date' => $campaignEndDate, // Fecha real de final de campaña
