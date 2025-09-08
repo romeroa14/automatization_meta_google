@@ -23,7 +23,7 @@ return new class extends Migration
             $table->decimal('planned_budget', 10, 2)->nullable(); // Presupuesto planificado del plan
             $table->decimal('actual_spent', 10, 2)->nullable(); // Gasto real de la campaña
             $table->decimal('variance', 10, 2)->nullable(); // Diferencia (planned - actual)
-            $table->decimal('variance_percentage', 5, 2)->nullable(); // Porcentaje de variación
+            $table->decimal('variance_percentage', 8, 2)->nullable(); // Porcentaje de variación
             
             // Metadatos
             $table->json('reconciliation_data')->nullable(); // Datos adicionales de la conciliación

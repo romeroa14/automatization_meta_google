@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Database\Seeders\AdvertisingPlansSeeder;
+use Database\Seeders\FacebookAccountSeeder;
 use Illuminate\Support\Facades\Hash;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -16,7 +17,10 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // User::factory(10)->create();
-        AdvertisingPlansSeeder::run();
+        $this->call([
+            AdvertisingPlansSeeder::class,
+            FacebookAccountSeeder::class,
+        ]);
         
 
         User::factory()->create([

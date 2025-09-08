@@ -82,7 +82,16 @@ class ActiveCampaign extends Model
             $allRecords = collect();
             
             foreach ($campaignsData['data'] as $campaignData) {
-                if ($campaignData['status'] === 'ACTIVE') {
+                // Incluir campañas activas y también campañas recientes (últimos 2 años)
+                $isActive = $campaignData['status'] === 'ACTIVE';
+                $isRecent = false;
+                
+                if (isset($campaignData['start_time'])) {
+                    $startTime = \Carbon\Carbon::parse($campaignData['start_time']);
+                    $isRecent = $startTime->isAfter(now()->subYears(2));
+                }
+                
+                if ($isActive || $isRecent) {
                     // 2. OBTENER ADSETS DE CADA CAMPAÑA
                     $adsetsUrl = "https://graph.facebook.com/v18.0/{$campaignData['id']}/adsets?fields=id,name,status,daily_budget,lifetime_budget,start_time,stop_time,amount_spent&limit=250&access_token={$facebookAccount->access_token}";
                     $adsetsResponse = file_get_contents($adsetsUrl);
@@ -90,7 +99,16 @@ class ActiveCampaign extends Model
                     
                     if (isset($adsetsData['data'])) {
                         foreach ($adsetsData['data'] as $adsetData) {
-                            if ($adsetData['status'] === 'ACTIVE') {
+                            // Incluir adsets activos y también recientes
+                            $isAdsetActive = $adsetData['status'] === 'ACTIVE';
+                            $isAdsetRecent = false;
+                            
+                            if (isset($adsetData['start_time'])) {
+                                $adsetStartTime = \Carbon\Carbon::parse($adsetData['start_time']);
+                                $isAdsetRecent = $adsetStartTime->isAfter(now()->subYears(2));
+                            }
+                            
+                            if ($isAdsetActive || $isAdsetRecent) {
                                 // 3. OBTENER ANUNCIOS DE CADA ADSET
                                 $adsUrl = "https://graph.facebook.com/v18.0/{$adsetData['id']}/ads?fields=id,name,status,creative&limit=250&access_token={$facebookAccount->access_token}";
                                 $adsResponse = file_get_contents($adsUrl);
@@ -98,7 +116,12 @@ class ActiveCampaign extends Model
                                 
                                 if (isset($adsData['data'])) {
                                     foreach ($adsData['data'] as $adData) {
-                                        if ($adData['status'] === 'ACTIVE') {
+                                        // Incluir anuncios activos y también recientes
+                                        $isAdActive = $adData['status'] === 'ACTIVE';
+                                        // Para anuncios, usamos la fecha de la campaña o adset
+                                        $isAdRecent = $isRecent || $isAdsetRecent;
+                                        
+                                        if ($isAdActive || $isAdRecent) {
                                             // CREAR REGISTRO COMPLETO CON TODOS LOS NIVELES
                                             $record = new self();
                                             
@@ -576,10 +599,17 @@ class ActiveCampaign extends Model
             'uses_commas_as_decimals' => false,
         ];
         
-        // Verificar si usa centavos
+        // Verificar si usa centavos - Meta API SIEMPRE devuelve valores en centavos
         $dailyBudget = $this->campaign_data['daily_budget'] ?? $this->adset_data['daily_budget'] ?? null;
-        if ($dailyBudget && $dailyBudget > 100) {
-            $format['uses_centavos'] = true;
+        if ($dailyBudget) {
+            // Convertir a número si es string
+            $budgetValue = is_string($dailyBudget) ? (float) $dailyBudget : $dailyBudget;
+            
+            // Si el valor es >= 10, probablemente está en centavos
+            // Ejemplos: 100 = $1.00, 500 = $5.00, 1000 = $10.00
+            if ($budgetValue >= 10) {
+                $format['uses_centavos'] = true;
+            }
         }
         
         // Verificar si usa comas como separador decimal
@@ -615,13 +645,21 @@ class ActiveCampaign extends Model
         // Si es número, verificar si está en centavos
         if (is_numeric($value)) {
             // Para presupuestos diarios y totales
-            if ($type === 'budget' && $value > 100) {
-                $value = $value / 100;
+            if ($type === 'budget') {
+                // Meta API devuelve presupuestos en centavos
+                // Ejemplos: 100 = $1.00, 500 = $5.00, 1000 = $10.00
+                if ($value >= 10) {
+                    $value = $value / 100;
+                }
             }
             
             // Para montos gastados, verificar si está en centavos
-            if ($type === 'amount' && $value > 1000) {
-                $value = $value / 100;
+            if ($type === 'amount') {
+                // Meta API devuelve montos gastados en centavos
+                // Ejemplos: 1000 = $10.00, 5000 = $50.00
+                if ($value >= 100) {
+                    $value = $value / 100;
+                }
             }
         }
         

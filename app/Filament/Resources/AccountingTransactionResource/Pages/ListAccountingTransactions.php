@@ -11,9 +11,12 @@ class ListAccountingTransactions extends ListRecords
     protected static string $resource = AccountingTransactionResource::class;
 
     protected function getHeaderActions(): array
-    {
-        return [
-            Actions\CreateAction::make(),
-        ];
-    }
+{
+    return [
+        Actions\CreateAction::make(),
+        
+
+
+    ];
+}
 }

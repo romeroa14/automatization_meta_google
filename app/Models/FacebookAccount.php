@@ -12,7 +12,6 @@ class FacebookAccount extends Model
 
     protected $fillable = [
         'account_name',
-        'account_id',
         'app_id',
         'app_secret',
         'access_token',
@@ -72,8 +71,7 @@ class FacebookAccount extends Model
 
     public function getFullNameAttribute(): string
     {
-        $accountId = $this->account_id ? " (ID: {$this->account_id})" : '';
-        return "{$this->account_name}{$accountId}";
+        return $this->account_name;
     }
 
     public function getStatusLabelAttribute(): string

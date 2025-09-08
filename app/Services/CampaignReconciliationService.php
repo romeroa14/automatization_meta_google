@@ -104,24 +104,21 @@ class CampaignReconciliationService
      */
     private function extractCampaignInfo(ActiveCampaign $campaign): array
     {
-        // Obtener presupuesto diario (convertido de centavos)
-        $dailyBudget = $campaign->campaign_daily_budget ?? $campaign->adset_daily_budget ?? 0;
-        if ($dailyBudget > 100) {
-            $dailyBudget = $dailyBudget / 100;
-        }
+        // Obtener presupuesto diario usando el método convertMetaNumber del modelo
+        $dailyBudgetRaw = $campaign->campaign_daily_budget ?? $campaign->adset_daily_budget ?? 0;
+        $dailyBudget = $campaign->convertMetaNumber($dailyBudgetRaw, 'budget');
 
         // Obtener duración en días (redondear hacia abajo)
         $durationDays = $campaign->getCampaignDurationDays() ?? $campaign->getAdsetDurationDays() ?? 0;
         $durationDays = floor($durationDays); // Redondear hacia abajo (15.99 → 15)
 
-        // Obtener presupuesto total
-        $totalBudget = $campaign->campaign_total_budget ?? $campaign->adset_lifetime_budget ?? 0;
-        if ($totalBudget > 100) {
-            $totalBudget = $totalBudget / 100;
-        }
+        // Obtener presupuesto total usando el método convertMetaNumber del modelo
+        $totalBudgetRaw = $campaign->campaign_total_budget ?? $campaign->adset_lifetime_budget ?? 0;
+        $totalBudget = $campaign->convertMetaNumber($totalBudgetRaw, 'budget');
 
-        // Obtener gasto actual
-        $actualSpent = $campaign->getAmountSpentFromMeta() ?? $campaign->getAmountSpentEstimated() ?? 0;
+        // Obtener gasto actual (convertir de centavos a dólares)
+        $actualSpentRaw = $campaign->getAmountSpentFromMeta() ?? $campaign->getAmountSpentEstimated() ?? 0;
+        $actualSpent = $campaign->convertMetaNumber($actualSpentRaw, 'amount');
 
         return [
             'daily_budget' => (float) $dailyBudget,
@@ -129,44 +126,171 @@ class CampaignReconciliationService
             'total_budget' => (float) $totalBudget,
             'actual_spent' => (float) $actualSpent,
             'campaign_name' => $campaign->meta_campaign_name,
-            'client_name' => $this->extractClientName($campaign->meta_campaign_name),
+            'client_name' => $this->extractClientName($campaign),
             'start_date' => $campaign->campaign_start_time?->format('Y-m-d'),
             'end_date' => $campaign->campaign_stop_time?->format('Y-m-d'),
         ];
     }
 
     /**
-     * Extraer nombre del cliente del nombre de la campaña
+     * Extraer nombre del cliente (cuenta de Instagram) desde la API de Meta
      */
-    private function extractClientName(string $campaignName): string
+    private function extractClientName(ActiveCampaign $campaign): string
+    {
+        try {
+            // Obtener el ID del anuncio
+            $adId = $campaign->meta_ad_id;
+            
+            if (!$adId) {
+                Log::warning("No se encontró meta_ad_id para la campaña: {$campaign->meta_campaign_name}");
+                return $this->fallbackClientName($campaign->meta_campaign_name);
+            }
+            
+            // Obtener la cuenta de Facebook asociada
+            $facebookAccount = \App\Models\FacebookAccount::where('id', $campaign->facebook_account_id)->first();
+            
+            if (!$facebookAccount) {
+                Log::warning("No se encontró FacebookAccount para la campaña: {$campaign->meta_campaign_name}");
+                return $this->fallbackClientName($campaign->meta_campaign_name);
+            }
+            
+            // Hacer llamada a la API de Meta para obtener información del anuncio
+            $instagramAccountName = $this->getInstagramAccountFromAdId($adId, $facebookAccount);
+            
+            if ($instagramAccountName) {
+                Log::info("Nombre de cuenta de Instagram obtenido: {$instagramAccountName} para anuncio: {$adId}");
+                return $instagramAccountName;
+            }
+            
+            Log::warning("No se pudo obtener el nombre de la cuenta de Instagram para el anuncio: {$adId}");
+            return $this->fallbackClientName($campaign->meta_campaign_name);
+            
+        } catch (\Exception $e) {
+            Log::error("Error obteniendo nombre de cuenta de Instagram para campaña {$campaign->meta_campaign_name}: " . $e->getMessage());
+            return $this->fallbackClientName($campaign->meta_campaign_name);
+        }
+    }
+    
+    /**
+     * Obtener el nombre de la cuenta de Instagram desde la API de Meta usando el ID del anuncio
+     */
+    private function getInstagramAccountFromAdId(string $adId, \App\Models\FacebookAccount $facebookAccount): ?string
+    {
+        try {
+            // Configurar la API de Facebook
+            \FacebookAds\Api::init($facebookAccount->app_id, $facebookAccount->app_secret, $facebookAccount->access_token);
+            
+            // Obtener información del anuncio
+            $ad = new \FacebookAds\Object\Ad($adId);
+            $ad->read([
+                'id',
+                'name',
+                'creative',
+                'effective_status'
+            ]);
+            
+            // Obtener información del creative
+            $creativeData = $ad->creative;
+            
+            // Si creative es un array, obtener el ID y crear el objeto
+            if (is_array($creativeData)) {
+                $creativeId = $creativeData['id'] ?? null;
+                if (!$creativeId) {
+                    Log::warning("No se encontró ID del creative para el anuncio: {$adId}");
+                    return null;
+                }
+                $creative = new \FacebookAds\Object\AdCreative($creativeId);
+            } else {
+                $creative = $creativeData;
+            }
+            
+            $creative->read([
+                'id',
+                'name',
+                'object_story_spec',
+                'actor_id'
+            ]);
+            
+            // Intentar obtener desde actor_id (puede ser página de Instagram)
+            if ($creative->actor_id) {
+                try {
+                    // Intentar como página de Instagram primero
+                    $page = new \FacebookAds\Object\Page($creative->actor_id);
+                    $page->read(['id', 'name', 'instagram_business_account']);
+                    
+                    // Si tiene cuenta de Instagram asociada
+                    if ($page->instagram_business_account) {
+                        $instagramAccount = $page->instagram_business_account;
+                        return $instagramAccount['username'] ?? $instagramAccount['name'] ?? $page->name;
+                    }
+                    
+                    // Si no tiene cuenta de Instagram, usar el nombre de la página
+                    return $page->name;
+                    
+                } catch (\Exception $e) {
+                    Log::warning("Error obteniendo página para actor_id {$creative->actor_id}: " . $e->getMessage());
+                }
+            }
+            
+            // Intentar obtener desde object_story_spec
+            if ($creative->object_story_spec) {
+                $storySpec = $creative->object_story_spec;
+                
+                // Buscar en page_id
+                if (isset($storySpec['page_id'])) {
+                    try {
+                        $page = new \FacebookAds\Object\Page($storySpec['page_id']);
+                        $page->read(['id', 'name', 'instagram_business_account']);
+                        
+                        // Si tiene cuenta de Instagram asociada
+                        if ($page->instagram_business_account) {
+                            $instagramAccount = $page->instagram_business_account;
+                            return $instagramAccount['username'] ?? $instagramAccount['name'] ?? $page->name;
+                        }
+                        
+                        // Si no tiene cuenta de Instagram, usar el nombre de la página
+                        return $page->name;
+                        
+                    } catch (\Exception $e) {
+                        Log::warning("Error obteniendo página para page_id {$storySpec['page_id']}: " . $e->getMessage());
+                    }
+                }
+            }
+            
+            return null;
+            
+        } catch (\Exception $e) {
+            Log::error("Error obteniendo cuenta de Instagram para anuncio {$adId}: " . $e->getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Método de respaldo para extraer nombre del cliente del texto de la campaña
+     */
+    private function fallbackClientName(string $campaignName): string
     {
         // Limpiar el nombre de la campaña
         $cleanName = trim($campaignName);
         
-        // Buscar patrones comunes en nombres de campaña
-        // Patrón 1: Nombre al inicio seguido de fecha o separador
-        if (preg_match('/^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/', $cleanName, $matches)) {
+        // Patrón principal: Nombre de cuenta de Instagram antes del separador "|"
+        if (preg_match('/^([^|]+?)\s*\|\s*/', $cleanName, $matches)) {
             $clientName = trim($matches[1]);
-            // Verificar que no sea solo números o caracteres especiales
-            if (strlen($clientName) > 2 && !preg_match('/^[\d\s\-\|\$]+$/', $clientName)) {
+            
+            // Limpiar sufijos comunes como "- Copia", " - Copia", etc.
+            $clientName = preg_replace('/\s*-\s*Copia\s*$/i', '', $clientName);
+            $clientName = preg_replace('/\s*\(Copia\)\s*$/i', '', $clientName);
+            
+            // Verificar que no esté vacío y tenga al menos 2 caracteres
+            if (strlen($clientName) >= 2) {
                 return $clientName;
             }
         }
         
-        // Patrón 2: Buscar después de "Publicación:" o "Publicación de Instagram:"
-        if (preg_match('/(?:Publicación(?:\s+de\s+Instagram)?:\s*["\']?)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/', $cleanName, $matches)) {
+        // Patrón secundario: Buscar nombre al inicio seguido de fecha
+        if (preg_match('/^([A-Za-z0-9._-]+?)\s+\d{2}\/\d{2}\/\d{4}/', $cleanName, $matches)) {
             $clientName = trim($matches[1]);
-            if (strlen($clientName) > 2 && !preg_match('/^[\d\s\-\|\$]+$/', $clientName)) {
-                return $clientName;
-            }
-        }
-        
-        // Patrón 3: Buscar cualquier palabra que empiece con mayúscula seguida de minúsculas
-        if (preg_match('/\b([A-Z][a-z]{2,})\b/', $cleanName, $matches)) {
-            $clientName = trim($matches[1]);
-            // Excluir palabras comunes que no son nombres de cliente
-            $excludeWords = ['Publicación', 'Instagram', 'Facebook', 'Meta', 'Ads', 'Campaña', 'Campaign'];
-            if (!in_array($clientName, $excludeWords)) {
+            if (strlen($clientName) >= 2) {
                 return $clientName;
             }
         }
@@ -221,22 +345,27 @@ class CampaignReconciliationService
      */
     private function createReconciliation(ActiveCampaign $campaign, array $campaignInfo, ?AdvertisingPlan $plan): CampaignPlanReconciliation
     {
+        // Si no hay plan detectado, crear un plan personalizado
+        if (!$plan) {
+            $plan = $this->createCustomPlan($campaignInfo);
+        }
+
         $reconciliation = CampaignPlanReconciliation::create([
             'active_campaign_id' => $campaign->id,
-            'advertising_plan_id' => $plan?->id,
+            'advertising_plan_id' => $plan->id,
             'reconciliation_status' => 'pending',
             'reconciliation_date' => now(),
-            'planned_budget' => $plan?->total_budget ?? $campaignInfo['total_budget'],
+            'planned_budget' => $plan->total_budget,
             'actual_spent' => $campaignInfo['actual_spent'],
-            'variance' => $plan ? ($plan->total_budget - $campaignInfo['actual_spent']) : 0,
-            'variance_percentage' => $plan && $plan->total_budget > 0 ? 
+            'variance' => $plan->total_budget - $campaignInfo['actual_spent'],
+            'variance_percentage' => $plan->total_budget > 0 ? 
                 (($plan->total_budget - $campaignInfo['actual_spent']) / $plan->total_budget) * 100 : 0,
-            'notes' => $plan ? 
-                "Plan detectado automáticamente: {$plan->plan_name} (Presupuesto: $" . number_format($campaignInfo['daily_budget'], 2) . "/día, Duración: {$campaignInfo['duration_days']} días)" : 
-                "Sin plan detectado (Presupuesto: $" . number_format($campaignInfo['daily_budget'], 2) . "/día, Duración: {$campaignInfo['duration_days']} días)",
+            'notes' => $plan->plan_name === 'Plan Personalizado' ? 
+                "Plan personalizado creado automáticamente (Presupuesto: $" . number_format($campaignInfo['daily_budget'], 2) . "/día, Duración: {$campaignInfo['duration_days']} días) - Requiere configuración de ganancia" : 
+                "Plan detectado automáticamente: {$plan->plan_name} (Presupuesto: $" . number_format($campaignInfo['daily_budget'], 2) . "/día, Duración: {$campaignInfo['duration_days']} días)",
             'reconciliation_data' => [
                 'campaign_info' => $campaignInfo,
-                'detection_method' => 'automatic',
+                'detection_method' => $plan->plan_name === 'Plan Personalizado' ? 'custom_created' : 'automatic',
                 'detected_at' => now()->toISOString(),
             ],
             'last_updated_at' => now(),
@@ -247,68 +376,119 @@ class CampaignReconciliationService
 
         Log::info("Conciliación creada para campaña {$campaign->meta_campaign_name}", [
             'reconciliation_id' => $reconciliation->id,
-            'plan_detected' => $plan ? $plan->plan_name : 'Ninguno',
+            'plan_detected' => $plan->plan_name,
             'daily_budget' => $campaignInfo['daily_budget'],
-            'duration_days' => $campaignInfo['duration_days']
+            'duration_days' => $campaignInfo['duration_days'],
+            'is_custom_plan' => $plan->plan_name === 'Plan Personalizado'
         ]);
 
         return $reconciliation;
     }
 
     /**
+     * Crear un plan personalizado para campañas que no coinciden con planes existentes
+     */
+    private function createCustomPlan(array $campaignInfo): AdvertisingPlan
+    {
+        $dailyBudget = $campaignInfo['daily_budget'];
+        $durationDays = $campaignInfo['duration_days'];
+        $totalBudget = $dailyBudget * $durationDays;
+        
+        // Crear nombre único para el plan personalizado
+        $planName = "Plan Personalizado - $" . number_format($dailyBudget, 2) . "/día x {$durationDays} días";
+        
+        // Verificar si ya existe un plan personalizado con estas características
+        $existingPlan = AdvertisingPlan::where('plan_name', $planName)->first();
+        
+        if ($existingPlan) {
+            return $existingPlan;
+        }
+        
+        // Crear nuevo plan personalizado
+        $customPlan = AdvertisingPlan::create([
+            'plan_name' => $planName,
+            'description' => "Plan personalizado creado automáticamente para campaña con presupuesto de $" . number_format($dailyBudget, 2) . " diarios por {$durationDays} días",
+            'daily_budget' => $dailyBudget,
+            'duration_days' => $durationDays,
+            'total_budget' => $totalBudget,
+            'client_price' => $totalBudget, // Inicialmente igual al presupuesto total (sin ganancia)
+            'profit_margin' => 0, // Sin ganancia inicial
+            'profit_percentage' => 0, // Sin ganancia inicial
+            'is_active' => true,
+            'features' => [
+                'Facebook Ads' => 'Campaña publicitaria en Facebook',
+                'Instagram Ads' => 'Campaña publicitaria en Instagram',
+                'Reportes Básicos' => 'Reportes de rendimiento básicos',
+                'Soporte' => 'Soporte técnico básico'
+            ]
+        ]);
+        
+        Log::info("Plan personalizado creado: {$planName}", [
+            'plan_id' => $customPlan->id,
+            'daily_budget' => $dailyBudget,
+            'duration_days' => $durationDays,
+            'total_budget' => $totalBudget
+        ]);
+        
+        return $customPlan;
+    }
+
+    /**
      * Crear transacciones contables para la conciliación
      */
-    private function createAccountingTransactions(CampaignPlanReconciliation $reconciliation, AdvertisingPlan $plan): void
+    public function createAccountingTransactions(CampaignPlanReconciliation $reconciliation, AdvertisingPlan $plan): void
     {
-        // Transacción de ingreso (lo que paga el cliente)
+        $isCustomPlan = str_contains($plan->plan_name, 'Plan Personalizado');
+        
+        // Detectar automáticamente el nombre de Instagram del cliente
+        $instagramClientName = $this->extractClientName($reconciliation->activeCampaign);
+        
+        // Obtener fechas reales de la campaña activa
+        $campaignStartDate = $reconciliation->activeCampaign->campaign_start_time?->format('Y-m-d');
+        $campaignEndDate = $reconciliation->activeCampaign->campaign_stop_time?->format('Y-m-d');
+
+        // Crear UNA SOLA transacción consolidada con los 3 niveles
         AccountingTransaction::create([
             'campaign_reconciliation_id' => $reconciliation->id,
             'advertising_plan_id' => $plan->id,
-            'transaction_type' => 'income',
-            'description' => "Pago por plan {$plan->plan_name} - Cliente: {$reconciliation->activeCampaign->meta_campaign_name}",
-            'amount' => $plan->client_price,
+            'description' => "Conciliación completa - Plan {$plan->plan_name} - Cliente: {$instagramClientName}",
+            'income' => $plan->client_price, // Lo que paga el cliente
+            'expense' => $plan->total_budget, // Presupuesto de Meta
+            'profit' => $plan->profit_margin, // Ganancia
             'currency' => 'USD',
-            'status' => 'completed',
-            'client_name' => $reconciliation->activeCampaign->meta_campaign_name,
+            'status' => $isCustomPlan ? 'pending' : 'completed', // Planes personalizados requieren configuración
+            'client_name' => $instagramClientName, // Nombre de Instagram detectado automáticamente
             'meta_campaign_id' => $reconciliation->activeCampaign->meta_campaign_id,
+            'campaign_start_date' => $campaignStartDate, // Fecha real de inicio de campaña
+            'campaign_end_date' => $campaignEndDate, // Fecha real de final de campaña
             'transaction_date' => now(),
-            'notes' => 'Transacción automática por conciliación de campaña'
+            'notes' => $isCustomPlan 
+                ? 'Transacción pendiente - Requiere configuración de ganancia' 
+                : 'Transacción automática por conciliación de campaña - Consolidada (Ingreso, Gasto, Ganancia)',
+            'metadata' => [
+                'plan_name' => $plan->plan_name,
+                'daily_budget' => $plan->daily_budget,
+                'duration_days' => $plan->duration_days,
+                'is_custom_plan' => $isCustomPlan,
+                'reconciliation_id' => $reconciliation->id,
+                'created_via' => 'automatic_reconciliation',
+                'instagram_detected' => $instagramClientName !== 'Cliente Sin Identificar',
+                'campaign_dates' => [
+                    'start_date' => $campaignStartDate,
+                    'end_date' => $campaignEndDate,
+                    'duration_days' => $reconciliation->activeCampaign->getCampaignDurationDays()
+                ]
+            ]
         ]);
 
-        // Transacción de gasto (presupuesto de Meta)
-        AccountingTransaction::create([
-            'campaign_reconciliation_id' => $reconciliation->id,
-            'advertising_plan_id' => $plan->id,
-            'transaction_type' => 'expense',
-            'description' => "Presupuesto Meta Ads para plan {$plan->plan_name}",
-            'amount' => $plan->total_budget,
-            'currency' => 'USD',
-            'status' => 'pending',
-            'client_name' => $reconciliation->activeCampaign->meta_campaign_name,
-            'meta_campaign_id' => $reconciliation->activeCampaign->meta_campaign_id,
-            'transaction_date' => now(),
-            'notes' => 'Gasto esperado en Meta Ads'
-        ]);
-
-        // Transacción de ganancia
-        AccountingTransaction::create([
-            'campaign_reconciliation_id' => $reconciliation->id,
-            'advertising_plan_id' => $plan->id,
-            'transaction_type' => 'profit',
-            'description' => "Ganancia del plan {$plan->plan_name}",
-            'amount' => $plan->profit_margin,
-            'currency' => 'USD',
-            'status' => 'pending',
-            'client_name' => $reconciliation->activeCampaign->meta_campaign_name,
-            'meta_campaign_id' => $reconciliation->activeCampaign->meta_campaign_id,
-            'transaction_date' => now(),
-            'notes' => 'Ganancia esperada del plan'
-        ]);
-
-        Log::info("Transacciones contables creadas para conciliación {$reconciliation->id}", [
+        Log::info("Transacción contable consolidada creada para conciliación {$reconciliation->id}", [
             'plan' => $plan->plan_name,
             'campaign' => $reconciliation->activeCampaign->meta_campaign_name,
-            'transactions_count' => 3
+            'instagram_client' => $instagramClientName,
+            'income' => $plan->client_price,
+            'expense' => $plan->total_budget,
+            'profit' => $plan->profit_margin,
+            'is_custom_plan' => $isCustomPlan
         ]);
     }
 

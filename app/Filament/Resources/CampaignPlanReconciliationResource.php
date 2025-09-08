@@ -67,7 +67,6 @@ class CampaignPlanReconciliationResource extends Resource
                                 'pending' => 'Pendiente',
                                 'approved' => 'Aprobada',
                                 'rejected' => 'Rechazada',
-                                'completed' => 'Completada',
                             ])
                             ->default('pending')
                             ->required(),
@@ -113,7 +112,7 @@ class CampaignPlanReconciliationResource extends Resource
                             }),
 
                         TextInput::make('variance')
-                            ->label('Variación')
+                            ->label('Restante')
                             ->numeric()
                             ->prefix('$')
                             ->step(0.01)
@@ -144,11 +143,26 @@ class CampaignPlanReconciliationResource extends Resource
     {
         return $table
             ->columns([
+                TextColumn::make('reconciliation_status')
+                    ->label('Estado')
+                    ->badge()
+                    ->colors([
+                        'warning' => 'pending',
+                        'success' => 'approved',
+                        'danger' => 'rejected',
+                    ])
+                    ->formatStateUsing(fn (string $state): string => match($state) {
+                        'pending' => '⏳',
+                        'approved' => '✅',
+                        'rejected' => '❌',
+                        default => '❓',
+                    }),
+
                 TextColumn::make('activeCampaign.meta_campaign_name')
                     ->label('Campaña')
                     ->searchable()
                     ->sortable()
-                    ->limit(30)
+                    ->limit(10)
                     ->weight('bold'),
 
                 TextColumn::make('advertisingPlan.plan_name')
@@ -158,65 +172,72 @@ class CampaignPlanReconciliationResource extends Resource
                     ->badge()
                     ->color('info'),
 
-                TextColumn::make('reconciliation_status')
-                    ->label('Estado')
-                    ->badge()
-                    ->colors([
-                        'warning' => 'pending',
-                        'success' => 'approved',
-                        'danger' => 'rejected',
-                        'info' => 'completed',
-                    ])
-                    ->formatStateUsing(fn (string $state): string => match($state) {
-                        'pending' => 'Pendiente',
-                        'approved' => 'Aprobada',
-                        'rejected' => 'Rechazada',
-                        'completed' => 'Completada',
-                        default => 'Desconocido',
-                    }),
+                
 
-                TextColumn::make('planned_budget')
-                    ->label('Presupuesto Planificado')
+                    TextColumn::make('activeCampaign.campaign_total_budget')
+                    ->label('Presupuesto Total')
+                    ->getStateUsing(function ($record) {
+                        // Usar el mismo cálculo que ActiveCampaignsResource
+                        $dailyBudget = $record->activeCampaign->campaign_daily_budget ?? $record->activeCampaign->adset_daily_budget;
+                        $duration = $record->activeCampaign->getCampaignDurationDays() ?? $record->activeCampaign->getAdsetDurationDays();
+                        
+                        if ($dailyBudget && $duration) {
+                            // Meta API devuelve valores en centavos, dividir entre 100
+                            return ($dailyBudget / 100) * $duration;
+                        }
+                        
+                        return 0;
+                    })
                     ->money('USD')
                     ->sortable()
                     ->color('success'),
-
-                TextColumn::make('actual_spent')
-                    ->label('Gasto Real')
+                
+                    TextColumn::make('activeCampaign.campaign_daily_budget')
+                    ->label('Presupuesto Diario')
+                    ->getStateUsing(function ($record) {
+                        // Usar el mismo cálculo que ActiveCampaignsResource
+                        $dailyBudget = $record->activeCampaign->campaign_daily_budget ?? $record->activeCampaign->adset_daily_budget;
+                        return $dailyBudget ? $dailyBudget / 100 : 0;
+                    })
                     ->money('USD')
                     ->sortable()
-                    ->color('warning'),
+                    ->color('success'),
+                
+                
+                
+                
 
-                TextColumn::make('variance')
-                    ->label('Variación')
-                    ->money('USD')
-                    ->sortable()
-                    ->color(function ($record) {
-                        if ($record->variance > 0) {
-                            return 'success'; // Presupuesto mayor al gasto
-                        } elseif ($record->variance < 0) {
-                            return 'danger'; // Gasto mayor al presupuesto
-                        }
-                        return 'gray'; // Igual
-                    }),
+                
 
-                TextColumn::make('variance_percentage')
-                    ->label('Variación (%)')
-                    ->suffix('%')
-                    ->sortable()
-                    ->color(function ($record) {
-                        if ($record->variance_percentage > 0) {
-                            return 'success';
-                        } elseif ($record->variance_percentage < 0) {
-                            return 'danger';
-                        }
-                        return 'gray';
-                    }),
+                
 
-                TextColumn::make('reconciliation_date')
-                    ->label('Fecha de Conciliación')
-                    ->dateTime()
-                    ->sortable(),
+               
+
+
+                
+
+                
+                
+
+                TextColumn::make('activeCampaign.debug_info')
+                    ->label('Debug Presupuestos')
+                    ->getStateUsing(function ($record) {
+                        $debug = $record->activeCampaign->getBudgetDebugInfo();
+                        $dailyRaw = $debug['meta_campaign']['daily_budget'] ?? $debug['meta_adset']['daily_budget'] ?? 'N/A';
+                        $dailyConverted = $debug['database']['campaign_daily_budget'] ?? $debug['database']['adset_daily_budget'] ?? 'N/A';
+                        $spentRaw = $debug['meta_campaign']['amount_spent'] ?? $debug['meta_adset']['amount_spent'] ?? 'N/A';
+                        $spentConverted = $debug['conversions']['amount_spent_converted_new'] ?? 'N/A';
+                        
+                        return "Diario: {$dailyRaw}→{$dailyConverted} | Gasto: {$spentRaw}→{$spentConverted}";
+                    })
+                    ->limit(50)
+                    ->tooltip(function ($record) {
+                        $debug = $record->activeCampaign->getBudgetDebugInfo();
+                        return json_encode($debug, JSON_PRETTY_PRINT);
+                    })
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                
 
                 TextColumn::make('created_at')
                     ->label('Creado')
@@ -231,7 +252,6 @@ class CampaignPlanReconciliationResource extends Resource
                         'pending' => 'Pendiente',
                         'approved' => 'Aprobada',
                         'rejected' => 'Rechazada',
-                        'completed' => 'Completada',
                     ]),
 
                 Tables\Filters\SelectFilter::make('advertising_plan_id')
@@ -239,63 +259,172 @@ class CampaignPlanReconciliationResource extends Resource
                     ->relationship('advertisingPlan', 'plan_name'),
             ])
             ->actions([
-                Action::make('approve')
-                    ->label('Aprobar')
-                    ->icon('heroicon-o-check-circle')
+                Action::make('view_transaction')
+                    ->label('')
+                    ->button()
+                    ->size('xs')
+                    ->icon('heroicon-o-banknotes')
                     ->color('success')
-                    ->visible(fn ($record) => $record->reconciliation_status === 'pending')
                     ->action(function ($record) {
-                        $record->update([
-                            'reconciliation_status' => 'approved',
-                            'reconciliation_date' => now(),
-                        ]);
-                        
-                        Notification::make()
-                            ->title('Conciliación aprobada')
-                            ->success()
-                            ->send();
+                        $transaction = \App\Models\AccountingTransaction::where('campaign_reconciliation_id', $record->id)->first();
+                        if ($transaction) {
+                            return redirect()->route('filament.admin.resources.accounting-transactions.edit', $transaction->id);
+                        } else {
+                            Notification::make()
+                                ->title('No hay transacción contable')
+                                ->body('No se encontró una transacción contable para esta conciliación.')
+                                ->warning()
+                                ->send();
+                        }
                     }),
 
                 Action::make('reject')
-                    ->label('Rechazar')
+                    ->label('')->button()->size('xs')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
                     ->visible(fn ($record) => $record->reconciliation_status === 'pending')
+                    ->requiresConfirmation()
+                    ->modalHeading('Rechazar Conciliación')
+                    ->modalDescription('¿Estás seguro de que quieres rechazar esta conciliación? Esta acción eliminará permanentemente el registro de la base de datos.')
+                    ->modalSubmitActionLabel('Sí, Rechazar y Eliminar')
+                    ->modalCancelActionLabel('Cancelar')
                     ->action(function ($record) {
-                        $record->update([
-                            'reconciliation_status' => 'rejected',
-                            'reconciliation_date' => now(),
-                        ]);
+                        // Eliminar transacciones contables relacionadas
+                        \App\Models\AccountingTransaction::where('campaign_reconciliation_id', $record->id)->delete();
+                        
+                        // Eliminar el registro de conciliación
+                        $record->delete();
                         
                         Notification::make()
-                            ->title('Conciliación rechazada')
+                            ->title('Conciliación rechazada y eliminada')
+                            ->body('La conciliación ha sido rechazada y eliminada permanentemente de la base de datos.')
                             ->warning()
                             ->send();
                     }),
 
-                Action::make('complete')
-                    ->label('Completar')
-                    ->icon('heroicon-o-check-badge')
-                    ->color('info')
-                    ->visible(fn ($record) => $record->reconciliation_status === 'approved')
+                Action::make('delete_reconciliation')
+                    ->label('')
+                    ->button()
+                    ->size('xs')
+                    ->icon('heroicon-o-trash')
+                    ->color('danger')
+                    ->visible(fn ($record) => in_array($record->reconciliation_status, ['completed', 'approved']))
+                    ->requiresConfirmation()
+                    ->modalHeading('Eliminar Conciliación')
+                    ->modalDescription('¿Estás seguro de que quieres eliminar esta conciliación? Esta acción eliminará permanentemente el registro y todas las transacciones contables relacionadas.')
+                    ->modalSubmitActionLabel('Sí, Eliminar')
+                    ->modalCancelActionLabel('Cancelar')
                     ->action(function ($record) {
-                        $record->update([
-                            'reconciliation_status' => 'completed',
-                            'reconciliation_date' => now(),
-                        ]);
+                        // Eliminar transacciones contables relacionadas
+                        \App\Models\AccountingTransaction::where('campaign_reconciliation_id', $record->id)->delete();
                         
+                        // Eliminar el registro de conciliación
+                        $record->delete();
+                        
+                        Notification::make( )
+                            ->title('Conciliación eliminada')
+                            ->body('La conciliación y todas las transacciones relacionadas han sido eliminadas permanentemente.')
+                            ->danger()
+                            ->send();
+                    }),
+
+                Action::make('configure_profit')
+                    ->label('')
+                    ->button()
+                    ->size('xs')
+                    ->icon('heroicon-o-currency-dollar')
+                    ->color('success')
+                    ->visible(fn ($record) => str_contains($record->advertisingPlan->plan_name, 'Plan Personalizado') && $record->advertisingPlan->profit_margin == 0)
+                    ->form([
+                        Forms\Components\TextInput::make('client_price')
+                            ->label('Precio al Cliente ($)')
+                            ->required()
+                            ->numeric()
+                            ->prefix('$')
+                            ->minValue(0.01)
+                            ->step(0.01)
+                            ->default(fn ($record) => $record->advertisingPlan->client_price)
+                            ->helperText('Ingresa el precio que pagará el cliente por este plan personalizado'),
+                    ])
+                    ->action(function ($record, array $data) {
+                        $plan = $record->advertisingPlan;
+                        $clientPrice = (float) $data['client_price'];
+                        $totalBudget = $plan->total_budget; // Presupuesto total del plan
+                        $profitMargin = $clientPrice - $totalBudget; // Comisión = Cliente paga - Presupuesto total
+                        $profitPercentage = $totalBudget > 0 ? ($profitMargin / $totalBudget) * 100 : 0;
+
+                        // Actualizar el plan con el nuevo precio del cliente y ganancia
+                        $plan->update([
+                            'client_price' => $clientPrice,
+                            'profit_margin' => $profitMargin,
+                            'profit_percentage' => $profitPercentage,
+                        ]);
+
+                        // Buscar la transacción contable existente para esta conciliación
+                        $existingTransaction = \App\Models\AccountingTransaction::where('campaign_reconciliation_id', $record->id)->first();
+
+                        if ($existingTransaction) {
+                            // Actualizar la transacción existente con los nuevos valores
+                            $existingTransaction->update([
+                                'income' => $clientPrice, // Lo que paga el cliente
+                                'expense' => $totalBudget, // Presupuesto total del plan
+                                'profit' => $profitMargin, // Comisión (Cliente - Presupuesto)
+                                'notes' => 'Plan personalizado configurado - Comisión calculada: Cliente $' . number_format($clientPrice, 2) . ' - Presupuesto $' . number_format($totalBudget, 2) . ' = Comisión $' . number_format($profitMargin, 2),
+                                'metadata' => array_merge($existingTransaction->metadata ?? [], [
+                                    'custom_plan_configured' => true,
+                                    'configured_at' => now()->toISOString(),
+                                    'client_price_configured' => $clientPrice,
+                                    'profit_margin_configured' => $profitMargin,
+                                ])
+                            ]);
+                        } else {
+                            // Crear nueva transacción si no existe
+                            \App\Models\AccountingTransaction::create([
+                                'campaign_reconciliation_id' => $record->id,
+                                'advertising_plan_id' => $plan->id,
+                                'description' => "Plan personalizado configurado - {$plan->plan_name} - Cliente: {$record->activeCampaign->meta_campaign_name}",
+                                'income' => $clientPrice, // Lo que paga el cliente
+                                'expense' => $totalBudget, // Presupuesto total del plan
+                                'profit' => $profitMargin, // Comisión (Cliente - Presupuesto)
+                                'currency' => 'USD',
+                                'status' => 'completed',
+                                'client_name' => $record->activeCampaign->meta_campaign_name,
+                                'meta_campaign_id' => $record->activeCampaign->meta_campaign_id,
+                                'transaction_date' => now(),
+                                'notes' => 'Plan personalizado configurado - Comisión calculada: Cliente $' . number_format($clientPrice, 2) . ' - Presupuesto $' . number_format($totalBudget, 2) . ' = Comisión $' . number_format($profitMargin, 2),
+                                'metadata' => [
+                                    'plan_name' => $plan->plan_name,
+                                    'daily_budget' => $plan->daily_budget,
+                                    'duration_days' => $plan->duration_days,
+                                    'is_custom_plan' => true,
+                                    'custom_plan_configured' => true,
+                                    'configured_at' => now()->toISOString(),
+                                    'client_price_configured' => $clientPrice,
+                                    'profit_margin_configured' => $profitMargin,
+                                    'created_via' => 'custom_plan_configuration'
+                                ]
+                            ]);
+                        }
+
                         Notification::make()
-                            ->title('Conciliación completada')
+                            ->title('Plan Personalizado Configurado')
+                            ->body("✅ Cliente pagará: $" . number_format($clientPrice, 2) . 
+                                  "\n💰 Presupuesto plan: $" . number_format($totalBudget, 2) . 
+                                  "\n💵 Comisión: $" . number_format($profitMargin, 2) . " (" . number_format($profitPercentage, 1) . "%)")
                             ->success()
                             ->send();
                     }),
+
+              
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
-                ]),
+                ])
             ])
             ->defaultSort('created_at', 'desc');
+            
+                
     }
 
     public static function getEloquentQuery(): Builder

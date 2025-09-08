@@ -25,6 +25,8 @@ use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
+use Filament\Actions\Action;
+use Filament\Actions\Modal\Actions\Action as ActionsAction;
 
 class AccountingTransactionResource extends Resource
 {
@@ -47,149 +49,78 @@ class AccountingTransactionResource extends Resource
         return $form
             ->schema([
                 Section::make('Información de la Transacción')
-                    ->description('Datos básicos de la transacción contable')
                     ->schema([
-                        Grid::make(2)
-                            ->schema([
-                                Select::make('transaction_type')
-                                    ->label('Tipo de Transacción')
-                                    ->required()
-                                    ->options([
-                                        'income' => 'Ingreso',
-                                        'expense' => 'Gasto',
-                                        'profit' => 'Ganancia',
-                                        'refund' => 'Reembolso',
-                                    ])
-                                    ->placeholder('Selecciona el tipo')
-                                    ->live()
-                                    ->afterStateUpdated(function (Set $set) {
-                                        $set('description', '');
-                                    }),
-
-                                TextInput::make('amount')
-                                    ->label('Monto ($)')
-                                    ->required()
-                                    ->numeric()
-                                    ->prefix('$')
-                                    ->minValue(0.01)
-                                    ->step(0.01)
-                                    ->placeholder('29.00'),
-
-                                Select::make('currency')
-                                    ->label('Moneda')
-                                    ->required()
-                                    ->options([
-                                        'USD' => 'Dólar Estadounidense (USD)',
-                                        'EUR' => 'Euro (EUR)',
-                                        'MXN' => 'Peso Mexicano (MXN)',
-                                    ])
-                                    ->default('USD')
-                                    ->placeholder('Selecciona la moneda'),
-
-                                Select::make('status')
-                                    ->label('Estado')
-                                    ->required()
-                                    ->options([
-                                        'pending' => 'Pendiente',
-                                        'completed' => 'Completada',
-                                        'cancelled' => 'Cancelada',
-                                        'refunded' => 'Reembolsada',
-                                    ])
-                                    ->default('pending')
-                                    ->placeholder('Selecciona el estado'),
-                            ]),
-                    ]),
-
-                Section::make('Relaciones del Sistema')
-                    ->description('Conexión con campañas y planes de publicidad')
-                    ->schema([
-                        Grid::make(2)
-                            ->schema([
-                                Select::make('campaign_reconciliation_id')
-                                    ->label('Conciliación de Campaña')
-                                    // ->options(CampaignReconciliation::pluck('meta_campaign_name', 'id'))
-                                    ->searchable()
-                                    ->placeholder('Selecciona una conciliación (opcional)')
-                                    ->helperText('Conecta esta transacción con una campaña específica'),
-
-                                Select::make('advertising_plan_id')
-                                    ->label('Plan de Publicidad')
-                                    ->options(AdvertisingPlan::active()->pluck('plan_name', 'id'))
-                                    ->searchable()
-                                    ->placeholder('Selecciona un plan (opcional)')
-                                    ->helperText('Conecta esta transacción con un plan específico'),
-                            ]),
-                    ]),
-
-                Section::make('Información del Cliente')
-                    ->description('Datos del cliente y campaña de Meta')
-                    ->schema([
-                        Grid::make(2)
-                            ->schema([
-                                TextInput::make('client_name')
-                                    ->label('Nombre del Cliente')
-                                    ->maxLength(255)
-                                    ->placeholder('BrandShop')
-                                    ->helperText('Nombre de la empresa o marca del cliente'),
-
-                                TextInput::make('meta_campaign_id')
-                                    ->label('ID de Campaña Meta')
-                                    ->maxLength(255)
-                                    ->placeholder('123456789012345')
-                                    ->helperText('ID de la campaña en Meta Ads (opcional)'),
-                            ]),
-                    ]),
-
-                Section::make('Fechas y Referencias')
-                    ->description('Control temporal y referencias de la transacción')
-                    ->schema([
-                        Grid::make(2)
-                            ->schema([
-                                DatePicker::make('transaction_date')
-                                    ->label('Fecha de Transacción')
-                                    ->required()
-                                    ->default(now())
-                                    ->maxDate(now())
-                                    ->placeholder('Selecciona la fecha'),
-
-                                DatePicker::make('due_date')
-                                    ->label('Fecha de Vencimiento')
-                                    ->minDate(fn (Get $get) => $get('transaction_date'))
-                                    ->placeholder('Fecha de vencimiento (opcional)'),
-                            ]),
-
-                        TextInput::make('reference_number')
-                            ->label('Número de Referencia')
+                        TextInput::make('client_name')
+                            ->label('Cliente (Cuenta de Instagram)')
                             ->maxLength(255)
-                            ->placeholder('REF-2024-001')
-                            ->helperText('Número de referencia interno o externo'),
-                    ]),
+                            ->columnSpanFull()
+                            ->helperText('Nombre de la cuenta de Instagram del cliente (se detecta automáticamente)')
+                            ->disabled()
+                            ->dehydrated(),
 
-                Section::make('Descripción y Notas')
-                    ->description('Detalles adicionales de la transacción')
-                    ->schema([
-                        TextInput::make('description')
-                            ->label('Descripción')
-                            ->required()
-                            ->maxLength(255)
-                            ->placeholder('Descripción de la transacción...')
-                            ->helperText('Descripción detallada de la transacción'),
+                        TextInput::make('income')
+                            ->label('Ingreso ($)')
+                            ->numeric()
+                            ->default(0)
+                            ->prefix('$')
+                            ->step(0.01)
+                            ->helperText('Monto que paga el cliente por el plan'),
+
+                        TextInput::make('expense')
+                            ->label('Gasto ($)')
+                            ->numeric()
+                            ->default(0)
+                            ->prefix('$')
+                            ->step(0.01)
+                            ->helperText('Presupuesto gastado en Meta Ads'),
+
+                        TextInput::make('profit')
+                            ->label('Ganancia ($)')
+                            ->numeric()
+                            ->default(0)
+                            ->prefix('$')
+                            ->step(0.01)
+                            ->helperText('Ganancia = Ingreso - Gasto')
+                            ->live()
+                            ->afterStateUpdated(function ($state, $set, $get) {
+                                $income = (float) $get('income');
+                                $expense = (float) $get('expense');
+                                $calculatedProfit = $income - $expense;
+                                if ($state != $calculatedProfit) {
+                                    $set('profit', $calculatedProfit);
+                                }
+                            }),
+
+                        Select::make('status')
+                            ->label('Estado')
+                            ->options([
+                                'pending' => 'Pendiente',
+                                'completed' => 'Completada',
+                                'cancelled' => 'Cancelada',
+                                'refunded' => 'Reembolsada',
+                            ])
+                            ->default('pending'),
+
+                        DatePicker::make('campaign_start_date')
+                            ->label('Inicio de Campaña')
+                            ->helperText('Fecha de inicio de la campaña publicitaria'),
+
+                        DatePicker::make('campaign_end_date')
+                            ->label('Final de Campaña')
+                            ->helperText('Fecha de finalización de la campaña publicitaria'),
+
+                        DatePicker::make('transaction_date')
+                            ->label('Fecha de Transacción')
+                            ->default(now())
+                            ->required(),
 
                         Textarea::make('notes')
                             ->label('Notas')
                             ->rows(3)
-                            ->placeholder('Notas adicionales...')
-                            ->maxLength(1000)
-                            ->helperText('Notas internas sobre la transacción'),
-
-                        KeyValue::make('metadata')
-                            ->label('Metadatos')
-                            ->keyLabel('Campo')
-                            ->valueLabel('Valor')
-                            ->addActionLabel('Agregar Campo')
-                            ->deleteActionLabel('Eliminar Campo')
-                            ->helperText('Datos adicionales en formato clave-valor'),
-                    ]),
+                            ->columnSpanFull()
+                            ->helperText('Notas adicionales sobre esta transacción'),
+                    ])
+                    ->columns(2),
             ]);
     }
 
@@ -197,94 +128,53 @@ class AccountingTransactionResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('transaction_type')
-                    ->label('Tipo')
-                    ->badge()
-                    ->color(fn (string $state): string => match($state) {
-                        'income' => 'success',
-                        'expense' => 'danger',
-                        'profit' => 'warning',
-                        'refund' => 'info',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match($state) {
-                        'income' => 'Ingreso',
-                        'expense' => 'Gasto',
-                        'profit' => 'Ganancia',
-                        'refund' => 'Reembolso',
-                        default => $state,
-                    })
-                    ->sortable(),
+                TextColumn::make('client_name')
+                    ->label('Cliente (Instagram)')
+                    ->searchable()
+                    ->sortable()
+                    ->limit(30)
+                    ->weight('bold')
+                    ->color('primary'),
 
-                TextColumn::make('amount')
-                    ->label('Monto')
+                TextColumn::make('income')
+                    ->label('Ingreso')
                     ->money('USD')
                     ->sortable()
-                    ->color(fn (AccountingTransaction $record): string => match($record->transaction_type) {
-                        'income', 'profit' => 'success',
-                        'expense', 'refund' => 'danger',
-                        default => 'gray',
-                    }),
+                    ->color('success'),
 
-                TextColumn::make('client_name')
-                    ->label('Cliente')
-                    ->searchable()
+                TextColumn::make('expense')
+                    ->label('Gasto')
+                    ->money('USD')
                     ->sortable()
-                    ->limit(20),
+                    ->color('danger'),
 
-                TextColumn::make('meta_campaign_id')
-                    ->label('Campaña Meta')
-                    ->searchable()
-                    ->copyable()
-                    ->copyMessage('ID copiado al portapapeles')
-                    ->limit(15),
+                TextColumn::make('profit')
+                    ->label('Ganancia')
+                    ->money('USD')
+                    ->sortable()
+                    ->color('warning'),
+
+                TextColumn::make('campaign_start_date')
+                    ->label('Inicio')
+                    ->date('d/m/Y')
+                    ->sortable()
+                    ->color('info'),
+
+                TextColumn::make('campaign_end_date')
+                    ->label('Final')
+                    ->date('d/m/Y')
+                    ->sortable()
+                    ->color('warning'),
 
                 TextColumn::make('transaction_date')
-                    ->label('Fecha')
+                    ->label('Fecha Transacción')
                     ->date('d/m/Y')
-                    ->sortable(),
-
-                BadgeColumn::make('status')
-                    ->label('Estado')
-                    ->colors([
-                        'warning' => 'pending',
-                        'success' => 'completed',
-                        'danger' => 'cancelled',
-                        'info' => 'refunded',
-                    ])
-                    ->formatStateUsing(fn (string $state): string => match($state) {
-                        'pending' => 'Pendiente',
-                        'completed' => 'Completada',
-                        'cancelled' => 'Cancelada',
-                        'refunded' => 'Reembolsada',
-                        default => $state,
-                    }),
-
-                TextColumn::make('campaignReconciliation.meta_campaign_name')
-                    ->label('Campaña')
-                    ->searchable()
-                    ->limit(20),
-
-                TextColumn::make('advertisingPlan.plan_name')
-                    ->label('Plan')
-                    ->searchable()
-                    ->limit(20),
-
-                TextColumn::make('created_at')
-                    ->label('Creado')
-                    ->dateTime('d/m/Y H:i')
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->color('success'),
+
+             
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('transaction_type')
-                    ->label('Tipo de Transacción')
-                    ->options([
-                        'income' => 'Ingreso',
-                        'expense' => 'Gasto',
-                        'profit' => 'Ganancia',
-                        'refund' => 'Reembolso',
-                    ]),
                 Tables\Filters\SelectFilter::make('status')
                     ->label('Estado')
                     ->options([
@@ -313,10 +203,28 @@ class AccountingTransactionResource extends Resource
                     }),
             ])
             ->actions([
+                Tables\Actions\Action::make('view_reconciliation')
+                    ->label('')
+                    ->button()
+                    ->size('xs')
+                    ->icon('heroicon-o-eye')
+                    ->color('info')
+                    ->visible(fn ($record) => $record->campaign_reconciliation_id)
+                    ->url(fn ($record) => route('filament.admin.resources.campaign-plan-reconciliations.edit', $record->campaign_reconciliation_id))
+                    ->openUrlInNewTab(),
+
                 Tables\Actions\EditAction::make()
-                    ->label('Editar'),
+                    ->label('')
+                    ->button()
+                    ->size('xs')
+                    ->icon('heroicon-o-pencil'),
+
                 Tables\Actions\DeleteAction::make()
-                    ->label('Eliminar'),
+                    ->label('')
+                    ->button()
+                    ->size('xs')
+                    ->icon('heroicon-o-trash')
+                    ->color('danger'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -325,6 +233,13 @@ class AccountingTransactionResource extends Resource
                 ]),
             ])
             ->defaultSort('transaction_date', 'desc');
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        // Ya no necesitamos agrupar porque ahora solo hay un registro por conciliación
+        return parent::getEloquentQuery()
+            ->orderBy('transaction_date', 'desc');
     }
 
     public static function getRelations(): array
@@ -347,4 +262,5 @@ class AccountingTransactionResource extends Resource
     // {
     //     return static::getModel()::count();
     // }
+
 }

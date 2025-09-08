@@ -16,6 +16,9 @@ use Filament\Forms\Form;
 class ListActiveCampaigns extends ListRecords
 {
     protected static string $resource = ActiveCampaignsResource::class;
+    protected static ?string $navigationLabel = 'Campañas Activas';
+    protected static ?string $navigationGroup = 'ADMETRICAS.COM';
+    protected static ?int $navigationSort = 2;
 
     protected function getHeaderActions(): array
     {

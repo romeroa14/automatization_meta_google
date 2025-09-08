@@ -73,7 +73,7 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
                 Log::info("📋 Usando totales por campaña...");
                 // Calcular totales de todos los anuncios
                 $totals = $this->calculateTotals($ads);
-                            $result = $sheetsService->updateSheet(
+            $result = $sheetsService->updateSheet(
                 $googleSheet->spreadsheet_id,
                 $googleSheet->worksheet_name,
                     $totals,
@@ -504,7 +504,7 @@ class SyncFacebookAdsToGoogleSheets implements ShouldQueue
             
             // Retornar ruta relativa para usar con asset()
             return 'storage/ad-images/' . $filename;
-            
+
         } catch (\Exception $e) {
             Log::warning("Error descargando imagen para anuncio {$adId}: " . $e->getMessage());
             return null;

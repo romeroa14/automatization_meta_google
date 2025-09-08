@@ -13,14 +13,17 @@ class AccountingTransaction extends Model
     protected $fillable = [
         'campaign_reconciliation_id',
         'advertising_plan_id',
-        'transaction_type',
         'description',
-        'amount',
+        'income',
+        'expense',
+        'profit',
         'currency',
         'status',
         'reference_number',
         'client_name',
         'meta_campaign_id',
+        'campaign_start_date',
+        'campaign_end_date',
         'transaction_date',
         'due_date',
         'metadata',
@@ -28,7 +31,11 @@ class AccountingTransaction extends Model
     ];
 
     protected $casts = [
-        'amount' => 'decimal:2',
+        'income' => 'decimal:2',
+        'expense' => 'decimal:2',
+        'profit' => 'decimal:2',
+        'campaign_start_date' => 'date',
+        'campaign_end_date' => 'date',
         'transaction_date' => 'date',
         'due_date' => 'date',
         'metadata' => 'array',
@@ -51,75 +58,19 @@ class AccountingTransaction extends Model
     }
 
     /**
-     * Scope para transacciones de ingresos
+     * Obtener estadísticas de la transacción
      */
-    public function scopeIncome($query)
+    public function getTransactionStats(): array
     {
-        return $query->where('transaction_type', 'income');
-    }
-
-    /**
-     * Scope para transacciones de gastos
-     */
-    public function scopeExpense($query)
-    {
-        return $query->where('transaction_type', 'expense');
-    }
-
-    /**
-     * Scope para transacciones de ganancias
-     */
-    public function scopeProfit($query)
-    {
-        return $query->where('transaction_type', 'profit');
-    }
-
-    /**
-     * Scope para transacciones completadas
-     */
-    public function scopeCompleted($query)
-    {
-        return $query->where('status', 'completed');
-    }
-
-    /**
-     * Scope para transacciones pendientes
-     */
-    public function scopePending($query)
-    {
-        return $query->where('status', 'pending');
-    }
-
-    /**
-     * Verificar si es una transacción de ingreso
-     */
-    public function isIncome(): bool
-    {
-        return $this->transaction_type === 'income';
-    }
-
-    /**
-     * Verificar si es una transacción de gasto
-     */
-    public function isExpense(): bool
-    {
-        return $this->transaction_type === 'expense';
-    }
-
-    /**
-     * Verificar si es una transacción de ganancia
-     */
-    public function isProfit(): bool
-    {
-        return $this->transaction_type === 'profit';
-    }
-
-    /**
-     * Obtener el monto formateado con moneda
-     */
-    public function getFormattedAmount(): string
-    {
-        return $this->currency . ' ' . number_format($this->amount, 2);
+        return [
+            'income' => $this->income,
+            'expense' => $this->expense,
+            'profit' => $this->profit,
+            'formatted_income' => $this->currency . ' ' . number_format($this->income, 2),
+            'formatted_expense' => $this->currency . ' ' . number_format($this->expense, 2),
+            'formatted_profit' => $this->currency . ' ' . number_format($this->profit, 2),
+            'status_label' => $this->getStatusLabel(),
+        ];
     }
 
     /**
@@ -134,63 +85,5 @@ class AccountingTransaction extends Model
             'refunded' => 'Reembolsada',
             default => 'Desconocido'
         };
-    }
-
-    /**
-     * Obtener el tipo de transacción formateado
-     */
-    public function getTransactionTypeLabel(): string
-    {
-        return match($this->transaction_type) {
-            'income' => 'Ingreso',
-            'expense' => 'Gasto',
-            'profit' => 'Ganancia',
-            'refund' => 'Reembolso',
-            default => 'Desconocido'
-        };
-    }
-
-    /**
-     * Calcular días de vencimiento
-     */
-    public function getDaysUntilDue(): int
-    {
-        if (!$this->due_date) {
-            return 0;
-        }
-
-        $dueDate = \Carbon\Carbon::parse($this->due_date);
-        $today = \Carbon\Carbon::today();
-
-        if ($today->gt($dueDate)) {
-            return -$today->diffInDays($dueDate); // Días vencidos (negativo)
-        }
-
-        return $today->diffInDays($dueDate);
-    }
-
-    /**
-     * Verificar si la transacción está vencida
-     */
-    public function isOverdue(): bool
-    {
-        return $this->getDaysUntilDue() < 0;
-    }
-
-    /**
-     * Obtener estadísticas de la transacción
-     */
-    public function getTransactionStats(): array
-    {
-        return [
-            'is_income' => $this->isIncome(),
-            'is_expense' => $this->isExpense(),
-            'is_profit' => $this->isProfit(),
-            'is_overdue' => $this->isOverdue(),
-            'days_until_due' => $this->getDaysUntilDue(),
-            'formatted_amount' => $this->getFormattedAmount(),
-            'status_label' => $this->getStatusLabel(),
-            'type_label' => $this->getTransactionTypeLabel(),
-        ];
     }
 }
