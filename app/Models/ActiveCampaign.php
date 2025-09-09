@@ -20,6 +20,7 @@ class ActiveCampaign extends Model
         'meta_ad_name',
         'campaign_daily_budget',
         'campaign_total_budget',
+        'campaign_remaining_budget',
         'adset_daily_budget',
         'adset_lifetime_budget',
         'amount_spent',
@@ -43,6 +44,7 @@ class ActiveCampaign extends Model
     protected $casts = [
         'campaign_daily_budget' => 'decimal:2',
         'campaign_total_budget' => 'decimal:2',
+        'campaign_remaining_budget' => 'decimal:2',
         'adset_daily_budget' => 'decimal:2',
         'adset_lifetime_budget' => 'decimal:2',
         'amount_spent' => 'decimal:2',
@@ -280,6 +282,36 @@ class ActiveCampaign extends Model
                                                 $record->adset_lifetime_budget = (new self())->convertMetaNumber($adsetData['lifetime_budget'], 'budget');
                                             }
                                             
+                                            // LÓGICA INTELIGENTE: Calcular presupuestos desde diferentes fuentes
+                                            $duration = $record->getCampaignDurationDays();
+                                            
+                                            // 1. Si no hay presupuesto diario pero hay presupuesto total, calcular diario
+                                            if (!$record->campaign_daily_budget && $record->campaign_total_budget && $duration > 0) {
+                                                $record->campaign_daily_budget = $record->campaign_total_budget / $duration;
+                                            }
+                                            
+                                            // 2. Si no hay presupuesto total pero hay diario, calcular total
+                                            if (!$record->campaign_total_budget && $record->campaign_daily_budget && $duration > 0) {
+                                                $record->campaign_total_budget = $record->campaign_daily_budget * $duration;
+                                            }
+                                            
+                                            // 3. Si no hay presupuestos pero hay gastos, estimar desde gastos
+                                            if (!$record->campaign_daily_budget && !$record->campaign_total_budget && $campaignSpend > 0 && $duration > 0) {
+                                                // Estimar presupuesto diario basado en gastos y duración
+                                                $estimatedDailyBudget = $campaignSpend / $duration;
+                                                $record->campaign_daily_budget = $estimatedDailyBudget;
+                                                $record->campaign_total_budget = $campaignSpend; // Asumir que se gastó todo
+                                                
+                                                // Log para debugging
+                                                Log::info("Estimando presupuestos desde gastos", [
+                                                    'campaign_name' => $record->meta_campaign_name,
+                                                    'campaign_spend' => $campaignSpend,
+                                                    'duration' => $duration,
+                                                    'estimated_daily_budget' => $estimatedDailyBudget,
+                                                    'estimated_total_budget' => $campaignSpend
+                                                ]);
+                                            }
+                                            
                                             // Estados
                                             $record->campaign_status = $campaignData['status'];
                                             $record->adset_status = $adsetData['status'];
@@ -360,6 +392,48 @@ class ActiveCampaign extends Model
         $record->campaign_start_time = isset($campaignData['start_time']) ? \Carbon\Carbon::parse($campaignData['start_time']) : null;
         $record->campaign_stop_time = isset($campaignData['stop_time']) ? \Carbon\Carbon::parse($campaignData['stop_time']) : null;
         $record->amount_spent = $campaignSpend;
+        
+        // LÓGICA INTELIGENTE: Calcular presupuestos desde diferentes fuentes
+        $duration = $record->getCampaignDurationDays();
+        
+        // 1. Si no hay presupuesto diario pero hay presupuesto total, calcular diario
+        if (!$record->campaign_daily_budget && $record->campaign_total_budget && $duration > 0) {
+            $record->campaign_daily_budget = $record->campaign_total_budget / $duration;
+        }
+        
+        // 2. Si no hay presupuesto total pero hay diario, calcular total
+        if (!$record->campaign_total_budget && $record->campaign_daily_budget && $duration > 0) {
+            $record->campaign_total_budget = $record->campaign_daily_budget * $duration;
+        }
+        
+        // 3. Si no hay presupuestos pero hay gastos, estimar desde gastos
+        if (!$record->campaign_daily_budget && !$record->campaign_total_budget && $campaignSpend > 0 && $duration > 0) {
+            // Estimar presupuesto diario basado en gastos y duración
+            $estimatedDailyBudget = $campaignSpend / $duration;
+            $record->campaign_daily_budget = $estimatedDailyBudget;
+            $record->campaign_total_budget = $campaignSpend; // Asumir que se gastó todo
+            
+            // Log para debugging
+            Log::info("Estimando presupuestos desde gastos (createCampaignRecord)", [
+                'campaign_name' => $record->meta_campaign_name,
+                'campaign_spend' => $campaignSpend,
+                'duration' => $duration,
+                'estimated_daily_budget' => $estimatedDailyBudget,
+                'estimated_total_budget' => $campaignSpend
+            ]);
+        }
+        
+        // Calcular presupuesto restante
+        if ($record->campaign_total_budget > 0) {
+            $record->campaign_remaining_budget = $record->campaign_total_budget - $campaignSpend;
+            // Asegurar que no sea negativo
+            if ($record->campaign_remaining_budget < 0) {
+                $record->campaign_remaining_budget = 0;
+            }
+        } else {
+            $record->campaign_remaining_budget = 0;
+        }
+        
         $record->campaign_objective = $campaignData['objective'] ?? null;
         $record->campaign_created_time = isset($campaignData['created_time']) ? \Carbon\Carbon::parse($campaignData['created_time']) : null;
         
@@ -838,7 +912,7 @@ class ActiveCampaign extends Model
     /**
      * Hacer llamada HTTP con cURL (más confiable que file_get_contents)
      */
-    private static function makeHttpRequest($url)
+    public static function makeHttpRequest($url)
     {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);

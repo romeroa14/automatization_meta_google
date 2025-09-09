@@ -27,6 +27,7 @@ return new class extends Migration
             // Presupuestos por nivel
             $table->decimal('campaign_daily_budget', 10, 2)->nullable(); // Presupuesto diario de campaña
             $table->decimal('campaign_total_budget', 10, 2)->nullable(); // Presupuesto total de campaña
+            $table->decimal('campaign_remaining_budget', 10, 2)->nullable(); // Presupuesto restante de campaña
             $table->decimal('adset_daily_budget', 10, 2)->nullable(); // Presupuesto diario del adset
             $table->decimal('adset_lifetime_budget', 10, 2)->nullable(); // Presupuesto total del adset
             $table->decimal('amount_spent', 10, 2)->nullable(); // Cantidad gastada real
