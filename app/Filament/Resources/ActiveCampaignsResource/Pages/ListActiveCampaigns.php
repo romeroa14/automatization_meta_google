@@ -309,8 +309,8 @@ class ListActiveCampaigns extends ListRecords
                 ])
                 ->action(function (array $data) {
                     try {
-                        // Limpiar campañas existentes
-                        ActiveCampaign::query()->delete();
+                        // Limpiar campañas existentes SOLO de esta cuenta publicitaria
+                        ActiveCampaign::where('ad_account_id', $data['selected_ad_account_id'])->delete();
                         
                         // Cargar nuevas campañas
                         $campaigns = ActiveCampaign::getActiveCampaignsHierarchy(

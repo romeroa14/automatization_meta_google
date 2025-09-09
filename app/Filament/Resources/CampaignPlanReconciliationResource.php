@@ -160,13 +160,44 @@ class CampaignPlanReconciliationResource extends Resource
         return $table
             ->columns([
 
-                TextColumn::make('activeCampaign.meta_campaign_name')
-                    ->label('Campaña')
+                TextColumn::make('instagram_client_name')
+                    ->label('Cliente (Instagram)')
+                    ->getStateUsing(function ($record) {
+                        // Leer el nombre de Instagram desde los datos guardados en reconciliation_data
+                        $reconciliationData = $record->reconciliation_data ?? [];
+                        $instagramName = $reconciliationData['instagram_client_name'] ?? null;
+                        
+                        // Si no está guardado, usar fallback del nombre de campaña
+                        if (!$instagramName) {
+                            $campaignName = $record->activeCampaign->meta_campaign_name;
+                            // Extraer nombre del cliente del texto de la campaña como fallback
+                            if (preg_match('/^([^|]+?)\s*\|\s*/', $campaignName, $matches)) {
+                                $instagramName = trim($matches[1]);
+                                $instagramName = preg_replace('/\s*-\s*Copia\s*$/i', '', $instagramName);
+                            } else {
+                                $instagramName = 'Cliente Sin Identificar';
+                            }
+                        }
+                        
+                        return $instagramName;
+                    })
                     ->searchable()
                     ->sortable()
                     ->limit(25)
                     ->weight('bold')
-                    ->wrap(),
+                    ->wrap()
+                    ->color('info')
+                    ->tooltip('Nombre de la cuenta de Instagram del cliente'),
+
+                TextColumn::make('activeCampaign.meta_campaign_name')
+                    ->label('Campaña')
+                    ->searchable()
+                    ->sortable()
+                    ->limit(20)
+                    ->weight('normal')
+                    ->wrap()
+                    ->color('gray')
+                    ->tooltip('Nombre de la campaña publicitaria'),
 
                 TextColumn::make('advertisingPlan.plan_name')
                     ->label('Plan de Publicidad')

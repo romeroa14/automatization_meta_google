@@ -29,10 +29,12 @@ return new class extends Migration
             $table->decimal('campaign_total_budget', 10, 2)->nullable(); // Presupuesto total de campaña
             $table->decimal('adset_daily_budget', 10, 2)->nullable(); // Presupuesto diario del adset
             $table->decimal('adset_lifetime_budget', 10, 2)->nullable(); // Presupuesto total del adset
+            $table->decimal('amount_spent', 10, 2)->nullable(); // Cantidad gastada real
             
             // Fechas y duración
             $table->dateTime('campaign_start_time')->nullable();
             $table->dateTime('campaign_stop_time')->nullable();
+            $table->dateTime('campaign_created_time')->nullable(); // Fecha de creación de la campaña
             $table->dateTime('adset_start_time')->nullable();
             $table->dateTime('adset_stop_time')->nullable();
             

@@ -367,6 +367,7 @@ class CampaignReconciliationService
                 'campaign_info' => $campaignInfo,
                 'detection_method' => $plan->plan_name === 'Plan Personalizado' ? 'custom_created' : 'automatic',
                 'detected_at' => now()->toISOString(),
+                'instagram_client_name' => $campaignInfo['client_name'], // Guardar el nombre de Instagram detectado
             ],
             'last_updated_at' => now(),
         ]);

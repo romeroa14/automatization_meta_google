@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
 
 class ActiveCampaign extends Model
 {
@@ -21,6 +22,7 @@ class ActiveCampaign extends Model
         'campaign_total_budget',
         'adset_daily_budget',
         'adset_lifetime_budget',
+        'amount_spent',
         'campaign_status',
         'adset_status',
         'ad_status',
@@ -29,6 +31,7 @@ class ActiveCampaign extends Model
         'ad_account_id',
         'campaign_start_time',
         'campaign_stop_time',
+        'campaign_created_time',
         'adset_start_time',
         'adset_stop_time',
         'campaign_data',
@@ -42,11 +45,13 @@ class ActiveCampaign extends Model
         'campaign_total_budget' => 'decimal:2',
         'adset_daily_budget' => 'decimal:2',
         'adset_lifetime_budget' => 'decimal:2',
+        'amount_spent' => 'decimal:2',
         'campaign_data' => 'array',
         'adset_data' => 'array',
         'ad_data' => 'array',
         'campaign_start_time' => 'datetime',
         'campaign_stop_time' => 'datetime',
+        'campaign_created_time' => 'datetime',
         'adset_start_time' => 'datetime',
         'adset_stop_time' => 'datetime',
     ];
@@ -72,14 +77,54 @@ class ActiveCampaign extends Model
         try {
             // 1. OBTENER CAMPAÑAS ACTIVAS (sin amount_spent porque no está disponible)
             $campaignsUrl = "https://graph.facebook.com/v18.0/act_{$adAccountId}/campaigns?fields=id,name,status,daily_budget,lifetime_budget,start_time,stop_time,objective,created_time&limit=250&access_token={$facebookAccount->access_token}";
-            $campaignsResponse = file_get_contents($campaignsUrl);
-            $campaignsData = json_decode($campaignsResponse, true);
             
-            if (!isset($campaignsData['data'])) {
+            // Log para debugging
+            Log::info("Obteniendo campañas para cuenta publicitaria: {$adAccountId}", [
+                'url' => $campaignsUrl
+            ]);
+            
+            $campaignsResponse = self::makeHttpRequest($campaignsUrl);
+            
+            if ($campaignsResponse === false) {
+                Log::error("Error obteniendo campañas para cuenta publicitaria: {$adAccountId}", [
+                    'url' => $campaignsUrl,
+                    'error' => 'HTTP request failed'
+                ]);
                 return collect();
             }
             
+            $campaignsData = json_decode($campaignsResponse, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                Log::error("Error decodificando JSON de campañas para cuenta publicitaria: {$adAccountId}", [
+                    'response' => $campaignsResponse,
+                    'json_error' => json_last_error_msg()
+                ]);
+                return collect();
+            }
+            
+            Log::info("Campañas obtenidas de API", [
+                'ad_account_id' => $adAccountId,
+                'total_campaigns' => count($campaignsData['data'] ?? [])
+            ]);
+            
+            if (!isset($campaignsData['data'])) {
+                Log::warning("No se encontraron datos de campañas en la respuesta", [
+                    'ad_account_id' => $adAccountId,
+                    'response' => $campaignsData
+                ]);
+                return collect();
+            }
+            
+            Log::info("Procesando campañas", [
+                'ad_account_id' => $adAccountId,
+                'total_campaigns' => count($campaignsData['data'])
+            ]);
+            
             $allRecords = collect();
+            
+            $processedCount = 0;
+            $skippedCount = 0;
             
             foreach ($campaignsData['data'] as $campaignData) {
                 // Incluir campañas activas y también campañas recientes (últimos 2 años)
@@ -92,11 +137,18 @@ class ActiveCampaign extends Model
                 }
                 
                 if ($isActive || $isRecent) {
+                    $processedCount++;
+                    Log::info("Procesando campaña: {$campaignData['name']}", [
+                        'campaign_id' => $campaignData['id'],
+                        'status' => $campaignData['status'],
+                        'is_active' => $isActive,
+                        'is_recent' => $isRecent
+                    ]);
                     // 1.1. OBTENER GASTOS REALES DE LA CAMPAÑA USANDO INSIGHTS
                     $campaignSpend = 0;
                     try {
                         $insightsUrl = "https://graph.facebook.com/v18.0/{$campaignData['id']}/insights?fields=spend&time_range[since]=" . urlencode(now()->subDays(30)->format('Y-m-d')) . "&time_range[until]=" . urlencode(now()->format('Y-m-d')) . "&access_token={$facebookAccount->access_token}";
-                        $insightsResponse = @file_get_contents($insightsUrl);
+                        $insightsResponse = self::makeHttpRequest($insightsUrl);
                         if ($insightsResponse) {
                             $insightsData = json_decode($insightsResponse, true);
                             if (isset($insightsData['data']) && is_array($insightsData['data'])) {
@@ -112,10 +164,40 @@ class ActiveCampaign extends Model
 
                     // 2. OBTENER ADSETS DE CADA CAMPAÑA
                     $adsetsUrl = "https://graph.facebook.com/v18.0/{$campaignData['id']}/adsets?fields=id,name,status,daily_budget,lifetime_budget,start_time,stop_time&limit=250&access_token={$facebookAccount->access_token}";
-                    $adsetsResponse = file_get_contents($adsetsUrl);
-                    $adsetsData = json_decode($adsetsResponse, true);
                     
-                    if (isset($adsetsData['data'])) {
+                    // Log para debugging
+                    Log::info("Obteniendo adsets para campaña: {$campaignData['id']}", [
+                        'campaign_name' => $campaignData['name'],
+                        'url' => $adsetsUrl
+                    ]);
+                    
+                    $adsetsResponse = self::makeHttpRequest($adsetsUrl);
+                    
+                    if ($adsetsResponse === false) {
+                        Log::warning("Error obteniendo adsets para campaña: {$campaignData['id']}", [
+                            'campaign_name' => $campaignData['name'],
+                            'url' => $adsetsUrl,
+                            'error' => 'HTTP request failed'
+                        ]);
+                        // Crear registro de campaña sin adsets
+                        self::createCampaignRecord($campaignData, $campaignSpend, $facebookAccountId, $adAccountId, $allRecords);
+                        continue;
+                    } else {
+                        $adsetsData = json_decode($adsetsResponse, true);
+                        
+                        if (json_last_error() !== JSON_ERROR_NONE) {
+                            Log::warning("Error decodificando JSON de adsets para campaña: {$campaignData['id']}", [
+                                'campaign_name' => $campaignData['name'],
+                                'response' => $adsetsResponse,
+                                'json_error' => json_last_error_msg()
+                            ]);
+                            // Crear registro de campaña sin adsets
+                            self::createCampaignRecord($campaignData, $campaignSpend, $facebookAccountId, $adAccountId, $allRecords);
+                            continue;
+                        }
+                    }
+                    
+                    if (isset($adsetsData['data']) && !empty($adsetsData['data'])) {
                         foreach ($adsetsData['data'] as $adsetData) {
                             // Incluir adsets activos y también recientes
                             $isAdsetActive = $adsetData['status'] === 'ACTIVE';
@@ -127,10 +209,37 @@ class ActiveCampaign extends Model
                             }
                             
                             if ($isAdsetActive || $isAdsetRecent) {
-                                // 3. OBTENER ANUNCIOS DE CADA ADSET
-                                $adsUrl = "https://graph.facebook.com/v18.0/{$adsetData['id']}/ads?fields=id,name,status,creative&limit=250&access_token={$facebookAccount->access_token}";
-                                $adsResponse = file_get_contents($adsUrl);
+                            // 3. OBTENER ANUNCIOS DE CADA ADSET
+                            $adsUrl = "https://graph.facebook.com/v18.0/{$adsetData['id']}/ads?fields=id,name,status,creative&limit=250&access_token={$facebookAccount->access_token}";
+                            
+                            // Log para debugging
+                            Log::info("Obteniendo anuncios para adset: {$adsetData['id']}", [
+                                'adset_name' => $adsetData['name'],
+                                'url' => $adsUrl
+                            ]);
+                            
+                            $adsResponse = self::makeHttpRequest($adsUrl);
+                            
+                            if ($adsResponse === false) {
+                                Log::warning("Error obteniendo anuncios para adset: {$adsetData['id']}", [
+                                    'adset_name' => $adsetData['name'],
+                                    'url' => $adsUrl,
+                                    'error' => 'HTTP request failed'
+                                ]);
+                                // Continuar sin anuncios para este adset
+                                $adsData = ['data' => []];
+                            } else {
                                 $adsData = json_decode($adsResponse, true);
+                                
+                                if (json_last_error() !== JSON_ERROR_NONE) {
+                                    Log::warning("Error decodificando JSON de anuncios para adset: {$adsetData['id']}", [
+                                        'adset_name' => $adsetData['name'],
+                                        'response' => $adsResponse,
+                                        'json_error' => json_last_error_msg()
+                                    ]);
+                                    $adsData = ['data' => []];
+                                }
+                            }
                                 
                                 if (isset($adsData['data'])) {
                                     foreach ($adsData['data'] as $adData) {
@@ -153,30 +262,22 @@ class ActiveCampaign extends Model
                                             $record->meta_adset_name = $adsetData['name'];
                                             $record->meta_ad_name = $adData['name'];
                                             
-                                            // Presupuestos de campaña
-                                            if (isset($campaignData['daily_budget']) && is_numeric($campaignData['daily_budget'])) {
-                                                $record->campaign_daily_budget = $campaignData['daily_budget'] > 1000 ? 
-                                                    $campaignData['daily_budget'] / 100 : 
-                                                    $campaignData['daily_budget'];
+                                            // Presupuestos de campaña (usar método convertMetaNumber)
+                                            if (isset($campaignData['daily_budget'])) {
+                                                $record->campaign_daily_budget = (new self())->convertMetaNumber($campaignData['daily_budget'], 'budget');
                                             }
                                             
-                                            if (isset($campaignData['lifetime_budget']) && is_numeric($campaignData['lifetime_budget'])) {
-                                                $record->campaign_total_budget = $campaignData['lifetime_budget'] > 1000 ? 
-                                                    $campaignData['lifetime_budget'] / 100 : 
-                                                    $campaignData['lifetime_budget'];
+                                            if (isset($campaignData['lifetime_budget'])) {
+                                                $record->campaign_total_budget = (new self())->convertMetaNumber($campaignData['lifetime_budget'], 'budget');
                                             }
                                             
-                                            // Presupuestos de adset
-                                            if (isset($adsetData['daily_budget']) && is_numeric($adsetData['daily_budget'])) {
-                                                $record->adset_daily_budget = $adsetData['daily_budget'] > 1000 ? 
-                                                    $adsetData['daily_budget'] / 100 : 
-                                                    $adsetData['daily_budget'];
+                                            // Presupuestos de adset (usar método convertMetaNumber)
+                                            if (isset($adsetData['daily_budget'])) {
+                                                $record->adset_daily_budget = (new self())->convertMetaNumber($adsetData['daily_budget'], 'budget');
                                             }
                                             
-                                            if (isset($adsetData['lifetime_budget']) && is_numeric($adsetData['lifetime_budget'])) {
-                                                $record->adset_lifetime_budget = $adsetData['lifetime_budget'] > 1000 ? 
-                                                    $adsetData['lifetime_budget'] / 100 : 
-                                                    $adsetData['lifetime_budget'];
+                                            if (isset($adsetData['lifetime_budget'])) {
+                                                $record->adset_lifetime_budget = (new self())->convertMetaNumber($adsetData['lifetime_budget'], 'budget');
                                             }
                                             
                                             // Estados
@@ -224,11 +325,60 @@ class ActiveCampaign extends Model
                 }
             }
             
+            Log::info("Procesamiento de campañas completado", [
+                'ad_account_id' => $adAccountId,
+                'total_campaigns_from_api' => count($campaignsData['data']),
+                'campaigns_processed' => $processedCount,
+                'campaigns_skipped' => $skippedCount,
+                'total_records_returned' => $allRecords->count()
+            ]);
+            
+            Log::info("Método getActiveCampaignsHierarchy completado", [
+                'ad_account_id' => $adAccountId,
+                'total_records_returned' => $allRecords->count()
+            ]);
+            
             return $allRecords;
             
         } catch (\Exception $e) {
+            Log::error('Error en getActiveCampaignsHierarchy: ' . $e->getMessage());
             return collect();
         }
+    }
+    
+    /**
+     * Crear registro de campaña sin adsets/ads
+     */
+    private static function createCampaignRecord($campaignData, $campaignSpend, $facebookAccountId, $adAccountId, &$allRecords)
+    {
+        $record = new self();
+        $record->meta_campaign_id = $campaignData['id'];
+        $record->meta_campaign_name = $campaignData['name'];
+        $record->campaign_status = $campaignData['status'];
+        $record->campaign_daily_budget = (new self())->convertMetaNumber($campaignData['daily_budget'] ?? 0, 'budget');
+        $record->campaign_total_budget = (new self())->convertMetaNumber($campaignData['lifetime_budget'] ?? 0, 'budget');
+        $record->campaign_start_time = isset($campaignData['start_time']) ? \Carbon\Carbon::parse($campaignData['start_time']) : null;
+        $record->campaign_stop_time = isset($campaignData['stop_time']) ? \Carbon\Carbon::parse($campaignData['stop_time']) : null;
+        $record->amount_spent = $campaignSpend;
+        $record->campaign_objective = $campaignData['objective'] ?? null;
+        $record->campaign_created_time = isset($campaignData['created_time']) ? \Carbon\Carbon::parse($campaignData['created_time']) : null;
+        
+        // Datos de campaña
+        $campaignData['amount_spent'] = $campaignSpend;
+        $record->campaign_data = $campaignData;
+        $record->adset_data = [];
+        $record->ad_data = [];
+        
+        // Relaciones
+        $record->facebook_account_id = $facebookAccountId;
+        $record->ad_account_id = $adAccountId;
+        
+        $allRecords->push($record);
+        
+        Log::info("Registro de campaña creado sin adsets: {$campaignData['name']}", [
+            'campaign_id' => $campaignData['id'],
+            'status' => $campaignData['status']
+        ]);
     }
     
     /**
@@ -683,5 +833,36 @@ class ActiveCampaign extends Model
         }
         
         return $value;
+    }
+
+    /**
+     * Hacer llamada HTTP con cURL (más confiable que file_get_contents)
+     */
+    private static function makeHttpRequest($url)
+    {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HEADER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (compatible; ADMETRICAS/1.0)');
+        
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+        
+        if ($error) {
+            Log::error("cURL Error: {$error}", ['url' => $url]);
+            return false;
+        }
+        
+        if ($httpCode !== 200) {
+            Log::error("HTTP Error: {$httpCode}", ['url' => $url, 'response' => $response]);
+            return false;
+        }
+        
+        return $response;
     }
 }
