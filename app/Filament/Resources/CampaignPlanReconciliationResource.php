@@ -74,6 +74,22 @@ class CampaignPlanReconciliationResource extends Resource
                         DateTimePicker::make('reconciliation_date')
                             ->label('Fecha de Conciliación')
                             ->default(now()),
+
+                        DateTimePicker::make('campaign_start_time')
+                            ->label('Inicio de Campaña')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(function ($record) {
+                                return $record?->activeCampaign?->campaign_start_time;
+                            }),
+
+                        DateTimePicker::make('campaign_stop_time')
+                            ->label('Fin de Campaña')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(function ($record) {
+                                return $record?->activeCampaign?->campaign_stop_time;
+                            }),
                     ])
                     ->columns(2),
 
@@ -148,20 +164,38 @@ class CampaignPlanReconciliationResource extends Resource
                     ->label('Campaña')
                     ->searchable()
                     ->sortable()
-                    ->limit(20)
-                    ->weight('bold'),
+                    ->limit(25)
+                    ->weight('bold')
+                    ->wrap(),
 
                 TextColumn::make('advertisingPlan.plan_name')
                     ->label('Plan de Publicidad')
+                    ->tooltip(fn ($record) => $record->advertisingPlan->plan_summary)
                     ->searchable()
                     ->sortable()
                     ->badge()
-                    ->color('info'),
+                    ->color('info')
+                    ->wrap()
+                    ->limit(30),
 
-                
+                TextColumn::make('activeCampaign.campaign_start_time')
+                    ->label('Inicio')
+                    ->dateTime('d/m')
+                    ->sortable()
+                    ->color('info')
+                    ->tooltip('Fecha de inicio de la campaña publicitaria'),
 
-                    TextColumn::make('activeCampaign.campaign_total_budget')
-                    ->label('Presupuesto Total')
+                TextColumn::make('activeCampaign.campaign_stop_time')
+                    ->label('Fin')
+                    ->dateTime('d/m')
+                    ->sortable()
+                    ->color('warning')
+                    ->tooltip('Fecha de finalización de la campaña publicitaria'),
+
+               
+
+                TextColumn::make('activeCampaign.campaign_total_budget')
+                    ->label('Total')
                     ->getStateUsing(function ($record) {
                         // Usar el mismo cálculo que ActiveCampaignsResource
                         $dailyBudget = $record->activeCampaign->campaign_daily_budget ?? $record->activeCampaign->adset_daily_budget;
@@ -176,10 +210,11 @@ class CampaignPlanReconciliationResource extends Resource
                     })
                     ->money('USD')
                     ->sortable()
-                    ->color('success'),
+                    ->color('success')
+                    ->size('sm'),
                 
-                    TextColumn::make('activeCampaign.campaign_daily_budget')
-                    ->label('Presupuesto Diario')
+                TextColumn::make('activeCampaign.campaign_daily_budget')
+                    ->label('Diario')
                     ->getStateUsing(function ($record) {
                         // Usar el mismo cálculo que ActiveCampaignsResource
                         $dailyBudget = $record->activeCampaign->campaign_daily_budget ?? $record->activeCampaign->adset_daily_budget;
@@ -187,7 +222,8 @@ class CampaignPlanReconciliationResource extends Resource
                     })
                     ->money('USD')
                     ->sortable()
-                    ->color('success'),
+                    ->color('success')
+                    ->size('sm'),
                 
                 
                 
@@ -238,18 +274,54 @@ class CampaignPlanReconciliationResource extends Resource
                         'pending' => 'Pendiente',
                         'approved' => 'Aprobada',
                         'rejected' => 'Rechazada',
+                        'completed' => 'Completada',
+                        'paused' => 'Pausada',
                     ]),
 
                 Tables\Filters\SelectFilter::make('advertising_plan_id')
                     ->label('Plan de Publicidad')
                     ->relationship('advertisingPlan', 'plan_name'),
+
+                Tables\Filters\Filter::make('campaign_date_range')
+                    ->form([
+                        Forms\Components\DatePicker::make('start_date')
+                            ->label('Fecha de Inicio Desde'),
+                        Forms\Components\DatePicker::make('end_date')
+                            ->label('Fecha de Inicio Hasta'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['start_date'],
+                                fn (Builder $query, $date): Builder => $query->whereHas('activeCampaign', function ($q) use ($date) {
+                                    $q->where('campaign_start_time', '>=', $date);
+                                }),
+                            )
+                            ->when(
+                                $data['end_date'],
+                                fn (Builder $query, $date): Builder => $query->whereHas('activeCampaign', function ($q) use ($date) {
+                                    $q->where('campaign_start_time', '<=', $date);
+                                }),
+                            );
+                    })
+                    ->indicateUsing(function (array $data): array {
+                        $indicators = [];
+                        if ($data['start_date'] ?? null) {
+                            $indicators['start_date'] = 'Inicio desde: ' . \Carbon\Carbon::parse($data['start_date'])->format('d/m/Y');
+                        }
+                        if ($data['end_date'] ?? null) {
+                            $indicators['end_date'] = 'Inicio hasta: ' . \Carbon\Carbon::parse($data['end_date'])->format('d/m/Y');
+                        }
+                        return $indicators;
+                    }),
             ])
             ->actions([
                 Action::make('view_transaction')
                     ->label('')
-                    ->button()
+                    // ->button()
+                    ->tooltip('Ver transacción contable')
                     ->size('xs')
-                    ->icon('heroicon-o-banknotes')
+                    ->icon('heroicon-o-eye')
                     ->color('success')
                     ->action(function ($record) {
                         $transaction = \App\Models\AccountingTransaction::where('campaign_reconciliation_id', $record->id)->first();
@@ -265,7 +337,8 @@ class CampaignPlanReconciliationResource extends Resource
                     }),
 
                 Action::make('reject')
-                    ->label('')->button()->size('xs')
+                    ->label('')->size('xs')
+                    ->tooltip('Rechazar conciliación')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
                     ->visible(fn ($record) => $record->reconciliation_status === 'pending')
@@ -288,34 +361,11 @@ class CampaignPlanReconciliationResource extends Resource
                             ->send();
                     }),
 
-                Action::make('delete_reconciliation')
-                    ->label('')
-                    ->button()
-                    ->size('xs')
-                    ->icon('heroicon-o-trash')
-                    ->color('danger')
-                    ->visible(fn ($record) => in_array($record->reconciliation_status, ['completed', 'approved']))
-                    ->requiresConfirmation()
-                    ->modalHeading('Eliminar Conciliación')
-                    ->modalDescription('¿Estás seguro de que quieres eliminar esta conciliación? Esta acción eliminará permanentemente el registro y todas las transacciones contables relacionadas.')
-                    ->modalSubmitActionLabel('Sí, Eliminar')
-                    ->modalCancelActionLabel('Cancelar')
-                    ->action(function ($record) {
-                        // Eliminar transacciones contables relacionadas
-                        \App\Models\AccountingTransaction::where('campaign_reconciliation_id', $record->id)->delete();
-                        
-                        // Eliminar el registro de conciliación
-                        $record->delete();
-                        
-                        Notification::make( )
-                            ->title('Conciliación eliminada')
-                            ->body('La conciliación y todas las transacciones relacionadas han sido eliminadas permanentemente.')
-                            ->danger()
-                            ->send();
-                    }),
+                
 
                 Action::make('configure_profit')
-                    ->label('')
+                    ->label('Configurar Ganancia')
+                    ->tooltip('Configurar ganancia')
                     ->button()
                     ->size('xs')
                     ->icon('heroicon-o-currency-dollar')
