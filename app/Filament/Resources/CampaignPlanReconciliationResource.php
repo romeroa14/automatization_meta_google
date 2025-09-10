@@ -228,16 +228,20 @@ class CampaignPlanReconciliationResource extends Resource
                 TextColumn::make('activeCampaign.campaign_total_budget')
                     ->label('Total')
                     ->getStateUsing(function ($record) {
-                        // Usar el mismo cálculo que ActiveCampaignsResource
-                        $dailyBudget = $record->activeCampaign->campaign_daily_budget ?? $record->activeCampaign->adset_daily_budget;
-                        $duration = $record->activeCampaign->getCampaignDurationDays() ?? $record->activeCampaign->getAdsetDurationDays();
+                        // Los valores ya están convertidos correctamente en ActiveCampaign
+                        $totalBudget = $record->activeCampaign->campaign_total_budget;
                         
-                        if ($dailyBudget && $duration) {
-                            // Meta API devuelve valores en centavos, dividir entre 100
-                            return ($dailyBudget / 100) * $duration;
+                        // Si no hay presupuesto total, calcularlo desde el diario
+                        if (!$totalBudget) {
+                            $dailyBudget = $record->activeCampaign->campaign_daily_budget ?? $record->activeCampaign->adset_daily_budget;
+                            $duration = $record->activeCampaign->getCampaignDurationDays() ?? $record->activeCampaign->getAdsetDurationDays();
+                            
+                            if ($dailyBudget && $duration) {
+                                return $dailyBudget * $duration;
+                            }
                         }
                         
-                        return 0;
+                        return $totalBudget ?? 0;
                     })
                     ->money('USD')
                     ->sortable()
@@ -247,9 +251,9 @@ class CampaignPlanReconciliationResource extends Resource
                 TextColumn::make('activeCampaign.campaign_daily_budget')
                     ->label('Diario')
                     ->getStateUsing(function ($record) {
-                        // Usar el mismo cálculo que ActiveCampaignsResource
+                        // Los valores ya están convertidos correctamente en ActiveCampaign
                         $dailyBudget = $record->activeCampaign->campaign_daily_budget ?? $record->activeCampaign->adset_daily_budget;
-                        return $dailyBudget ? $dailyBudget / 100 : 0;
+                        return $dailyBudget ?? 0;
                     })
                     ->money('USD')
                     ->sortable()
