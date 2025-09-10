@@ -337,11 +337,38 @@ class ActiveCampaign extends Model
                                                 $record->adset_stop_time = \Carbon\Carbon::parse($adsetData['stop_time']);
                                             }
                                             
+                                            // Asignar gasto real al campo del modelo
+                                            $record->amount_spent = $campaignSpend;
+                                            
                                             // Datos JSON completos (incluir gasto real de insights)
                                             $campaignData['amount_spent'] = $campaignSpend; // Agregar gasto real obtenido de insights
                                             $record->campaign_data = $campaignData;
                                             $record->adset_data = $adsetData;
                                             $record->ad_data = $adData;
+                                            
+                                            // LÓGICA INTELIGENTE: Calcular presupuestos desde diferentes fuentes
+                                            $duration = $record->getCampaignDurationDays();
+                                            
+                                            // 1. Si no hay presupuesto diario de campaña pero hay de adset, usar el de adset
+                                            if (!$record->campaign_daily_budget && $record->adset_daily_budget) {
+                                                $record->campaign_daily_budget = $record->adset_daily_budget;
+                                            }
+                                            
+                                            // 2. Si no hay presupuesto total pero hay diario, calcular total
+                                            if (!$record->campaign_total_budget && $record->campaign_daily_budget && $duration > 0) {
+                                                $record->campaign_total_budget = $record->campaign_daily_budget * $duration;
+                                            }
+                                            
+                                            // 3. Calcular presupuesto restante
+                                            if ($record->campaign_total_budget > 0) {
+                                                $record->campaign_remaining_budget = $record->campaign_total_budget - $campaignSpend;
+                                                // Asegurar que no sea negativo
+                                                if ($record->campaign_remaining_budget < 0) {
+                                                    $record->campaign_remaining_budget = 0;
+                                                }
+                                            } else {
+                                                $record->campaign_remaining_budget = 0;
+                                            }
                                             
                                             // Relaciones
                                             $record->facebook_account_id = $facebookAccountId;
