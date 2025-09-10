@@ -13,6 +13,8 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\HtmlString;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Toggle;
@@ -156,7 +158,7 @@ class ExchangeRateResource extends Resource
                     ->label('Error')
                     ->limit(30)
                     ->color('danger')
-                    ->visible(fn ($record) => !$record->is_valid)
+                    ->visible(fn ($record) => $record && !$record->is_valid)
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
@@ -194,7 +196,31 @@ class ExchangeRateResource extends Resource
                     ->color('info')
                     ->tooltip('Ver detalles')
                     ->modalHeading('Detalles de la Tasa')
-                    ->modalContent(fn ($record) => view('filament.modals.exchange-rate-details', ['rate' => $record]))
+                    ->modalContent(fn ($record) => new HtmlString(
+                        '<div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <strong>Moneda:</strong> ' . $record->currency_code . '
+                                </div>
+                                <div>
+                                    <strong>Fuente:</strong> ' . $record->source . '
+                                </div>
+                                <div>
+                                    <strong>Tasa:</strong> ' . number_format($record->rate, 2, ',', '.') . ' Bs.
+                                </div>
+                                <div>
+                                    <strong>Estado:</strong> ' . ($record->is_valid ? 'Válida' : 'Error') . '
+                                </div>
+                                <div>
+                                    <strong>Actualizada:</strong> ' . $record->fetched_at->format('d/m/Y H:i:s') . '
+                                </div>
+                                <div>
+                                    <strong>Hace:</strong> ' . $record->fetched_at->diffForHumans() . '
+                                </div>
+                            </div>
+                            ' . ($record->error_message ? '<div class="mt-4 p-3 bg-red-50 border border-red-200 rounded"><strong>Error:</strong> ' . $record->error_message . '</div>' : '') . '
+                        </div>'
+                    ))
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('Cerrar'),
 
@@ -203,7 +229,7 @@ class ExchangeRateResource extends Resource
                     ->icon('heroicon-o-calculator')
                     ->color('success')
                     ->tooltip('Calcular precio')
-                    ->visible(fn ($record) => $record->is_valid && $record->currency_code === 'USD')
+                    ->visible(fn ($record) => $record && $record->is_valid && $record->currency_code === 'USD')
                     ->form([
                         TextInput::make('usd_price')
                             ->label('Precio en USD')
