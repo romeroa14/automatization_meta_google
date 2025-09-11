@@ -31,6 +31,8 @@ class AutomationTaskResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Tareas de Automatización';
 
+    protected static ?string $navigationGroup = 'Automatizaciones';
+
     protected static ?int $navigationSort = 3;
 
     public static function form(Form $form): Form

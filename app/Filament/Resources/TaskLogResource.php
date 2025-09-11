@@ -25,6 +25,8 @@ class TaskLogResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Logs de Tareas';
 
+    protected static ?string $navigationGroup = 'Automatizaciones';
+
     protected static ?int $navigationSort = 4;
 
     public static function form(Form $form): Form

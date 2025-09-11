@@ -36,9 +36,9 @@ class ExchangeRateResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Tasas de Cambio';
 
-    protected static ?string $navigationGroup = 'ADMETRICAS.COM';
+    protected static ?string $navigationGroup = 'Tasas de USD';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 1;
 
     public static function form(Form $form): Form
     {

@@ -35,6 +35,8 @@ class FacebookAccountResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Cuentas de Facebook';
 
+    protected static ?string $navigationGroup = 'Automatizaciones';
+
     protected static ?int $navigationSort = 1;
 
     public static function form(Form $form): Form

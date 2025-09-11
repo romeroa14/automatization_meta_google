@@ -27,6 +27,8 @@ class GoogleSheetResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Google Sheets';
 
+    protected static ?string $navigationGroup = 'Automatizaciones';
+
     protected static ?int $navigationSort = 2;
 
     public static function form(Form $form): Form

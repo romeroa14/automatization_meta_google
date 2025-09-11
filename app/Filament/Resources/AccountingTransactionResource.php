@@ -40,7 +40,7 @@ class AccountingTransactionResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Transacciones Contables';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 2;
 
     protected static ?string $navigationGroup = 'ADMETRICAS.COM';
 
@@ -149,11 +149,7 @@ class AccountingTransactionResource extends Resource
                     ->sortable()
                     ->color('danger'),
 
-                TextColumn::make('profit')
-                    ->label('Ganancia')
-                    ->money('USD')
-                    ->sortable()
-                    ->color('warning'),
+                
 
                 TextColumn::make('real_profit_binance')
                     ->label('Ganancia Real Binance')

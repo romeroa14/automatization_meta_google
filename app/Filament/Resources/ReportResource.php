@@ -36,11 +36,13 @@ class ReportResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-chart-bar';
 
-    protected static ?string $navigationGroup = 'Reportes';
+    protected static ?string $navigationGroup = 'Automatizaciones';
 
     protected static ?string $modelLabel = 'Reporte';
 
     protected static ?string $pluralModelLabel = 'Reportes';
+
+    protected static ?int $navigationSort = 6;
 
     protected static ?string $navigationLabel = 'Reportes Estadísticos';
 

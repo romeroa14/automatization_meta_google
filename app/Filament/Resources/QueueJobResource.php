@@ -21,7 +21,7 @@ class QueueJobResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-queue-list';
 
-    protected static ?string $navigationGroup = 'Sistema';
+    protected static ?string $navigationGroup = 'Automatizaciones';
 
     protected static ?string $navigationLabel = 'Colas de Trabajo';
 

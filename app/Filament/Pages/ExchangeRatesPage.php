@@ -26,9 +26,9 @@ class ExchangeRatesPage extends Page implements HasActions
     
     protected static ?string $navigationLabel = 'Tasas de Cambio';
     
-    protected static ?string $navigationGroup = 'Finanzas';
+    protected static ?string $navigationGroup = 'Tasas de USD';
     
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 2;
 
     protected function getHeaderActions(): array
     {
