@@ -420,9 +420,31 @@ class CampaignPlanReconciliationResource extends Resource
                             ->minValue(0.01)
                             ->step(0.01)
                             ->helperText('Ingresa el precio que pagará el cliente por este plan personalizado'),
+
+                        Forms\Components\Toggle::make('paid_in_binance_rate')
+                            ->label('Cliente pagó en tasa Binance')
+                            ->helperText('Si el cliente pagó directamente en tasa Binance (no BCV), activa esta opción')
+                            ->default(false)
+                            ->live()
+                            ->afterStateUpdated(function ($state, $set) {
+                                if ($state) {
+                                    $set('conversion_note', 'El cliente pagó directamente en tasa Binance. No se aplicará conversión BCV→Binance.');
+                                } else {
+                                    $set('conversion_note', 'El cliente pagó en tasa BCV. Se aplicará conversión automática BCV→Binance.');
+                                }
+                            }),
+
+                        Forms\Components\Placeholder::make('conversion_note')
+                            ->label('')
+                            ->content(fn ($get) => $get('paid_in_binance_rate') 
+                                ? 'El cliente pagó directamente en tasa Binance. No se aplicará conversión BCV→Binance.'
+                                : 'El cliente pagó en tasa BCV. Se aplicará conversión automática BCV→Binance.'
+                            )
+                            ->visible(fn ($get) => $get('paid_in_binance_rate') !== null),
                     ])
                     ->action(function ($record, array $data) {
                         $clientPrice = (float) $data['client_price'];
+                        $paidInBinanceRate = (bool) ($data['paid_in_binance_rate'] ?? false);
                         $totalBudget = $record->planned_budget; // Presupuesto total del plan personalizado
                         $profitMargin = $clientPrice - $totalBudget; // Comisión = Cliente paga - Presupuesto total
                         $profitPercentage = $totalBudget > 0 ? ($profitMargin / $totalBudget) * 100 : 0;
@@ -432,6 +454,7 @@ class CampaignPlanReconciliationResource extends Resource
                         $customPlanDetails['client_price'] = $clientPrice;
                         $customPlanDetails['profit_margin'] = $profitMargin;
                         $customPlanDetails['profit_percentage'] = $profitPercentage;
+                        $customPlanDetails['paid_in_binance_rate'] = $paidInBinanceRate;
                         $customPlanDetails['configured_at'] = now()->toISOString();
 
                         $reconciliationData = $record->reconciliation_data;
@@ -471,6 +494,7 @@ class CampaignPlanReconciliationResource extends Resource
                                     'configured_at' => now()->toISOString(),
                                     'client_price_configured' => $clientPrice,
                                     'profit_margin_configured' => $profitMargin,
+                                    'paid_in_binance_rate' => $paidInBinanceRate,
                                     'instagram_detected' => $instagramClientName !== 'Cliente Sin Identificar',
                                     'campaign_dates' => [
                                         'start_date' => $campaignStartDate,
@@ -505,6 +529,7 @@ class CampaignPlanReconciliationResource extends Resource
                                     'configured_at' => now()->toISOString(),
                                     'client_price_configured' => $clientPrice,
                                     'profit_margin_configured' => $profitMargin,
+                                    'paid_in_binance_rate' => $paidInBinanceRate,
                                     'instagram_detected' => $instagramClientName !== 'Cliente Sin Identificar',
                                     'campaign_dates' => [
                                         'start_date' => $campaignStartDate,

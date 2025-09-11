@@ -158,12 +158,26 @@ class AccountingTransactionResource extends Resource
                 TextColumn::make('real_profit_binance')
                     ->label('Ganancia Real Binance')
                     ->getStateUsing(function ($record) {
-                        $realProfit = \App\Models\ExchangeRate::calculateRealProfitInUsd($record->income, $record->expense);
-                        return $realProfit ? '$' . number_format($realProfit, 2) : 'N/A';
+                        // Verificar si el cliente pagó directamente en tasa Binance
+                        $paidInBinanceRate = $record->metadata['paid_in_binance_rate'] ?? false;
+                        
+                        if ($paidInBinanceRate) {
+                            // Si pagó en Binance, la ganancia real es la misma que la tradicional
+                            return '$' . number_format($record->profit, 2);
+                        } else {
+                            // Si pagó en BCV, aplicar conversión matemática
+                            $realProfit = \App\Models\ExchangeRate::calculateRealProfitInUsd($record->income, $record->expense);
+                            return $realProfit ? '$' . number_format($realProfit, 2) : 'N/A';
+                        }
                     })
                     ->color('success')
                     ->sortable(false)
-                    ->tooltip('Ganancia real considerando conversión BCV→Binance'),
+                    ->tooltip(function ($record) {
+                        $paidInBinanceRate = $record->metadata['paid_in_binance_rate'] ?? false;
+                        return $paidInBinanceRate 
+                            ? 'Cliente pagó en tasa Binance - Sin conversión aplicada'
+                            : 'Cliente pagó en tasa BCV - Conversión BCV→Binance aplicada';
+                    }),
 
                 TextColumn::make('campaign_start_date')
                     ->label('Inicio')
@@ -242,6 +256,7 @@ class AccountingTransactionResource extends Resource
                     ->tooltip('Ver detalles de conversión BCV→Binance')
                     ->modalHeading('Detalles de Conversión BCV → Binance')
                     ->modalContent(function ($record) {
+                        $paidInBinanceRate = $record->metadata['paid_in_binance_rate'] ?? false;
                         $completeEquivalents = \App\Models\ExchangeRate::calculateCompletePlanEquivalents($record->expense, $record->income);
                         
                         if (!$completeEquivalents) {
@@ -261,13 +276,21 @@ class AccountingTransactionResource extends Resource
                                 </div>
                                 
                                 <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
-                                    <h4 class="font-semibold text-green-900 dark:text-green-100 mb-2">💰 Conversión Real BCV → Binance</h4>
+                                    <h4 class="font-semibold text-green-900 dark:text-green-100 mb-2">💰 ' . ($paidInBinanceRate ? 'Pago Directo en Binance' : 'Conversión Real BCV → Binance') . '</h4>
                                     <div class="grid grid-cols-2 gap-4 text-sm">
+                                        ' . ($paidInBinanceRate ? '
+                                        <div><strong>Cliente pagó directamente:</strong> $' . number_format($record->income, 2) . ' USD</div>
+                                        <div><strong>En tasa Binance:</strong> ' . number_format($record->income * $completeEquivalents['rates']['binance_rate'], 2, ',', '.') . ' Bs.</div>
+                                        <div><strong>Gasto en Meta:</strong> $' . number_format($record->expense, 2) . '</div>
+                                        <div><strong>Ganancia real:</strong> $' . number_format($record->profit, 2) . '</div>
+                                        <div class="col-span-2"><strong>Margen real:</strong> ' . number_format(($record->profit / $record->expense) * 100, 1) . '%</div>
+                                        ' : '
                                         <div><strong>Cliente paga en BCV:</strong> ' . number_format($completeEquivalents['real_profit']['client_payment_bcv'], 2, ',', '.') . ' Bs.</div>
                                         <div><strong>USD reales recibidos:</strong> $' . number_format($completeEquivalents['real_profit']['real_usd_received'], 2) . '</div>
                                         <div><strong>Gasto en Meta:</strong> $' . number_format($record->expense, 2) . '</div>
                                         <div><strong>Ganancia real:</strong> $' . number_format($completeEquivalents['real_profit']['real_profit_usd'], 2) . '</div>
                                         <div class="col-span-2"><strong>Margen real:</strong> ' . number_format($completeEquivalents['real_profit']['profit_percentage'], 1) . '%</div>
+                                        ') . '
                                     </div>
                                 </div>
                                 
@@ -277,6 +300,19 @@ class AccountingTransactionResource extends Resource
                                         <div><strong>Tasa BCV:</strong> ' . number_format($completeEquivalents['rates']['bcv_rate'], 2, ',', '.') . ' Bs./USD</div>
                                         <div><strong>Tasa Binance:</strong> ' . number_format($completeEquivalents['rates']['binance_rate'], 2, ',', '.') . ' Bs./USD</div>
                                         <div class="col-span-2"><strong>Factor de conversión:</strong> ' . number_format($completeEquivalents['traditional']['conversion_factor'], 3) . 'x</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
+                                    <h4 class="font-semibold text-purple-900 dark:text-purple-100 mb-2">💡 Explicación</h4>
+                                    <div class="text-sm text-purple-800 dark:text-purple-200">
+                                        ' . ($paidInBinanceRate ? '
+                                        <p><strong>✅ Pago Directo en Binance:</strong> El cliente pagó directamente en tasa Binance, por lo que no se aplica conversión matemática. La ganancia real es igual a la ganancia tradicional.</p>
+                                        <p><strong>💰 Flujo:</strong> Cliente paga $' . number_format($record->income, 2) . ' USD → Tú pagas $' . number_format($record->expense, 2) . ' USD a Meta → Ganancia: $' . number_format($record->profit, 2) . ' USD</p>
+                                        ' : '
+                                        <p><strong>🔄 Conversión BCV→Binance:</strong> El cliente pagó en tasa BCV, pero tú necesitas comprar USD en Binance para pagar a Meta.</p>
+                                        <p><strong>💰 Flujo:</strong> Cliente paga $' . number_format($record->income, 2) . ' USD a tasa BCV → Recibes ' . number_format($completeEquivalents['real_profit']['client_payment_bcv'], 2, ',', '.') . ' Bs. → Compras $' . number_format($completeEquivalents['real_profit']['real_usd_received'], 2) . ' USD en Binance → Pagas $' . number_format($record->expense, 2) . ' USD a Meta → Ganancia real: $' . number_format($completeEquivalents['real_profit']['real_profit_usd'], 2) . ' USD</p>
+                                        ') . '
                                     </div>
                                 </div>
                             </div>'

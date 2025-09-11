@@ -27,6 +27,25 @@ class AdMetricsOverview extends BaseWidget
         $totalExpenses = AccountingTransaction::sum('expense');
         $totalProfits = AccountingTransaction::sum('profit');
         
+        // Calcular ganancia real en Binance
+        $totalRealProfitBinance = 0;
+        
+        // Obtener todas las transacciones
+        $allTransactions = AccountingTransaction::all();
+        
+        foreach ($allTransactions as $transaction) {
+            $paidInBinanceRate = $transaction->metadata['paid_in_binance_rate'] ?? false;
+            
+            if ($paidInBinanceRate) {
+                // Si pagó en Binance, la ganancia real es la misma que la tradicional
+                $totalRealProfitBinance += $transaction->profit;
+            } else {
+                // Si pagó en BCV, aplicar conversión matemática
+                $realProfit = \App\Models\ExchangeRate::calculateRealProfitInUsd($transaction->income, $transaction->expense);
+                $totalRealProfitBinance += $realProfit ?? $transaction->profit;
+            }
+        }
+        
         // Estadísticas de campañas activas
         $activeCampaigns = \App\Models\ActiveCampaign::count();
         $scheduledCampaigns = \App\Models\ActiveCampaign::where('campaign_start_time', '>', now())->count();
@@ -37,7 +56,7 @@ class AdMetricsOverview extends BaseWidget
         $pausedReconciliations = \App\Models\CampaignPlanReconciliation::where('reconciliation_status', 'paused')->count();
         
         // Calcular métricas adicionales
-        $profitMargin = $totalIncome > 0 ? ($totalProfits / $totalIncome) * 100 : 0;
+        $profitMargin = $totalIncome > 0 ? ($totalRealProfitBinance / $totalIncome) * 100 : 0;
         $averageTransactionValue = $totalTransactions > 0 ? $totalIncome / $totalTransactions : 0;
         $reconciliationRate = $totalReconciliations > 0 ? ($completedReconciliations / $totalReconciliations) * 100 : 0;
 
@@ -60,11 +79,17 @@ class AdMetricsOverview extends BaseWidget
                 ->descriptionIcon('heroicon-m-arrow-trending-down')
                 ->color('danger'),
 
-            // Ganancia Total
-            Stat::make('Ganancia Total', '$' . number_format($totalProfits, 2))
-                ->description('Margen: ' . number_format($profitMargin, 1) . '%')
+            // Ganancia Real Binance
+            Stat::make('Ganancia Real Binance', '$' . number_format($totalRealProfitBinance, 2))
+                ->description('Margen real: ' . number_format($profitMargin, 1) . '%')
                 ->descriptionIcon('heroicon-m-chart-bar')
-                ->color('warning'),
+                ->color('success'),
+
+            // Diferencia de Conversión
+            Stat::make('Diferencia Conversión', '$' . number_format($totalProfits - $totalRealProfitBinance, 2))
+                ->description('Tradicional vs Real Binance')
+                ->descriptionIcon('heroicon-m-arrow-path')
+                ->color($totalProfits > $totalRealProfitBinance ? 'warning' : 'info'),
 
             // Conciliaciones Completadas
             Stat::make('Conciliaciones', $completedReconciliations)
