@@ -20,6 +20,11 @@ return new class extends Migration
             $table->string('source', 20); // BCV, BINANCE, etc.
             $table->string('target_currency', 10)->default('VES'); // Moneda objetivo (VES por defecto)
             
+            // Campos para cálculos de precios de planes
+            $table->decimal('binance_equivalent', 15, 8)->nullable(); // Equivalente en Binance (para cálculos)
+            $table->decimal('bcv_equivalent', 15, 8)->nullable(); // Equivalente en BCV (para cálculos)
+            $table->decimal('conversion_factor', 10, 6)->nullable(); // Factor de conversión entre tasas
+            
             // Metadatos
             $table->timestamp('fetched_at'); // Cuándo se obtuvo la tasa
             $table->boolean('is_valid')->default(true); // Si la tasa es válida

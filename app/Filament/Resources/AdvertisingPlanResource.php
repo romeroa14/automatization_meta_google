@@ -19,9 +19,9 @@ use Filament\Forms\Components\KeyValue;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Columns\TextColumn as TableTextColumn;
 use Filament\Forms\Get;
 use Filament\Forms\Set;
+use Illuminate\Support\HtmlString;
 
 class AdvertisingPlanResource extends Resource
 {
@@ -83,7 +83,7 @@ class AdvertisingPlanResource extends Resource
                                     ->placeholder('3.00')
                                     ->live()
                                     ->afterStateUpdated(function (Set $set, Get $get) {
-                                        $this->calculatePlanTotals($set, $get);
+                                        self::calculatePlanTotals($set, $get);
                                     }),
 
                                 TextInput::make('duration_days')
@@ -95,7 +95,7 @@ class AdvertisingPlanResource extends Resource
                                     ->placeholder('7')
                                     ->live()
                                     ->afterStateUpdated(function (Set $set, Get $get) {
-                                        $this->calculatePlanTotals($set, $get);
+                                        self::calculatePlanTotals($set, $get);
                                     }),
                             ]),
 
@@ -223,6 +223,24 @@ class AdvertisingPlanResource extends Resource
                     ->color('success')
                     ->formatStateUsing(fn (float $state): string => number_format($state, 1) . '%'),
 
+                TextColumn::make('price_in_binance')
+                    ->label('Precio Binance')
+                    ->getStateUsing(function ($record) {
+                        $binancePrice = \App\Models\ExchangeRate::calculatePlanPriceInBinance($record->total_budget);
+                        return $binancePrice ? number_format($binancePrice, 2, ',', '.') . ' Bs.' : 'N/A';
+                    })
+                    ->color('warning')
+                    ->sortable(false),
+
+                TextColumn::make('price_in_bcv')
+                    ->label('Precio BCV')
+                    ->getStateUsing(function ($record) {
+                        $bcvPrice = \App\Models\ExchangeRate::calculatePlanPriceInBcv($record->total_budget);
+                        return $bcvPrice ? number_format($bcvPrice, 2, ',', '.') . ' Bs.' : 'N/A';
+                    })
+                    ->color('info')
+                    ->sortable(false),
+
                 IconColumn::make('is_active')
                     ->label('Estado')
                     ->boolean()
@@ -245,6 +263,78 @@ class AdvertisingPlanResource extends Resource
                     ->falseLabel('Inactivos'),
             ])
             ->actions([
+                Tables\Actions\Action::make('view_prices')
+                    ->label('')
+                    ->icon('heroicon-o-currency-dollar')
+                    ->color('info')
+                    ->tooltip('Ver precios en ambas tasas')
+                    ->modalHeading('Precios del Plan en Ambas Tasas')
+                    ->modalContent(function ($record) {
+                        $equivalents = \App\Models\ExchangeRate::calculatePlanPriceEquivalents($record->total_budget);
+                        $stats = \App\Models\ExchangeRate::getPlanPriceStatistics();
+                        
+                        if (!$equivalents || empty($stats)) {
+                            return new HtmlString('<div class="p-4 text-center text-gray-500">No se pudieron obtener las tasas de cambio</div>');
+                        }
+                        
+                        return new HtmlString(
+                            '<div class="space-y-6">
+                                <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                                    <h3 class="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-3">📊 Información del Plan</h3>
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div><strong>Plan:</strong> ' . $record->plan_name . '</div>
+                                        <div><strong>Presupuesto:</strong> $' . number_format($record->total_budget, 2) . ' USD</div>
+                                        <div><strong>Precio Cliente:</strong> $' . number_format($record->client_price, 2) . ' USD</div>
+                                        <div><strong>Ganancia:</strong> $' . number_format($record->profit_margin, 2) . ' USD</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div class="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                                        <h4 class="font-semibold text-yellow-900 dark:text-yellow-100 mb-2">💰 Precio en Binance</h4>
+                                        <div class="text-2xl font-bold text-yellow-900 dark:text-yellow-100">
+                                            ' . number_format($equivalents['binance_price'], 2, ',', '.') . ' Bs.
+                                        </div>
+                                        <div class="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                                            Tasa: ' . number_format($equivalents['binance_rate'], 2, ',', '.') . ' Bs.
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                                        <h4 class="font-semibold text-blue-900 dark:text-blue-100 mb-2">🏛️ Precio en BCV</h4>
+                                        <div class="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                                            ' . number_format($equivalents['bcv_price'], 2, ',', '.') . ' Bs.
+                                        </div>
+                                        <div class="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                                            Tasa: ' . number_format($equivalents['bcv_rate'], 2, ',', '.') . ' Bs.
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-gray-50 dark:bg-gray-900/20 p-4 rounded-lg border border-gray-200 dark:border-gray-800">
+                                    <h4 class="font-semibold text-gray-900 dark:text-gray-100 mb-3">📈 Estadísticas de Conversión</h4>
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div><strong>Factor de Conversión:</strong> ' . number_format($equivalents['conversion_factor'], 3) . 'x</div>
+                                        <div><strong>Diferencia:</strong> ' . number_format($stats['difference'], 2, ',', '.') . ' Bs.</div>
+                                        <div><strong>Diferencia %:</strong> ' . number_format($stats['percentage_difference'], 1) . '%</div>
+                                        <div><strong>Última Actualización:</strong> ' . $stats['last_updated']->format('d/m/Y H:i') . '</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                                    <h4 class="font-semibold text-green-900 dark:text-green-100 mb-2">💡 Explicación</h4>
+                                    <div class="text-sm text-green-800 dark:text-green-200">
+                                        <p><strong>Precio Binance:</strong> Es el costo real en bolívares para pagar a Meta usando Binance.</p>
+                                        <p><strong>Precio BCV:</strong> Es el precio que cobras al cliente usando la tasa oficial BCV.</p>
+                                        <p><strong>Fórmula:</strong> Precio BCV = Presupuesto USD × (Tasa Binance ÷ Tasa BCV)</p>
+                                    </div>
+                                </div>
+                            </div>'
+                        );
+                    })
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Cerrar'),
+                    
                 Tables\Actions\EditAction::make()
                     ->label('Editar'),
                 Tables\Actions\DeleteAction::make()

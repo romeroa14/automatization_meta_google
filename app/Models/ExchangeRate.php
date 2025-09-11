@@ -15,6 +15,9 @@ class ExchangeRate extends Model
         'rate',
         'source',
         'target_currency',
+        'binance_equivalent',
+        'bcv_equivalent',
+        'conversion_factor',
         'fetched_at',
         'is_valid',
         'error_message',
@@ -23,6 +26,9 @@ class ExchangeRate extends Model
 
     protected $casts = [
         'rate' => 'decimal:8',
+        'binance_equivalent' => 'decimal:8',
+        'bcv_equivalent' => 'decimal:8',
+        'conversion_factor' => 'decimal:6',
         'fetched_at' => 'datetime',
         'is_valid' => 'boolean',
         'metadata' => 'array',
@@ -140,6 +146,91 @@ class ExchangeRate extends Model
         $vesProfit = $usdProfit * $bcvRate->rate;
         
         return $vesProfit;
+    }
+
+    /**
+     * Calcular precio de plan en Binance (USD paralelo)
+     * Fórmula: Precio_Binance = Precio_Plan_USD * Tasa_Binance
+     */
+    public static function calculatePlanPriceInBinance(float $planUsdPrice): ?float
+    {
+        $binanceRate = static::getLatestRate('USD', 'BINANCE');
+        
+        if (!$binanceRate) {
+            Log::warning('No se pudo obtener la tasa Binance para calcular precio');
+            return null;
+        }
+        
+        return $planUsdPrice * $binanceRate->rate;
+    }
+
+    /**
+     * Calcular precio de plan en BCV
+     * Fórmula: Precio_BCV = Precio_Plan_USD * Tasa_BCV
+     */
+    public static function calculatePlanPriceInBcv(float $planUsdPrice): ?float
+    {
+        $bcvRate = static::getLatestRate('USD', 'BCV');
+        
+        if (!$bcvRate) {
+            Log::warning('No se pudo obtener la tasa BCV para calcular precio');
+            return null;
+        }
+        
+        return $planUsdPrice * $bcvRate->rate;
+    }
+
+    /**
+     * Calcular equivalencia entre tasas para un precio de plan
+     * Retorna: ['binance_price' => float, 'bcv_price' => float, 'conversion_factor' => float]
+     */
+    public static function calculatePlanPriceEquivalents(float $planUsdPrice): ?array
+    {
+        $binanceRate = static::getLatestRate('USD', 'BINANCE');
+        $bcvRate = static::getLatestRate('USD', 'BCV');
+        
+        if (!$binanceRate || !$bcvRate) {
+            Log::warning('No se pudieron obtener las tasas para calcular equivalencias');
+            return null;
+        }
+        
+        $binancePrice = $planUsdPrice * $binanceRate->rate;
+        $bcvPrice = $planUsdPrice * $bcvRate->rate;
+        $conversionFactor = $binanceRate->rate / $bcvRate->rate;
+        
+        return [
+            'binance_price' => $binancePrice,
+            'bcv_price' => $bcvPrice,
+            'conversion_factor' => $conversionFactor,
+            'binance_rate' => $binanceRate->rate,
+            'bcv_rate' => $bcvRate->rate,
+        ];
+    }
+
+    /**
+     * Obtener estadísticas de precios de planes
+     */
+    public static function getPlanPriceStatistics(): array
+    {
+        $binanceRate = static::getLatestRate('USD', 'BINANCE');
+        $bcvRate = static::getLatestRate('USD', 'BCV');
+        
+        if (!$binanceRate || !$bcvRate) {
+            return [];
+        }
+        
+        $conversionFactor = $binanceRate->rate / $bcvRate->rate;
+        $difference = $binanceRate->rate - $bcvRate->rate;
+        $percentageDiff = ($difference / $bcvRate->rate) * 100;
+        
+        return [
+            'binance_rate' => $binanceRate->rate,
+            'bcv_rate' => $bcvRate->rate,
+            'conversion_factor' => $conversionFactor,
+            'difference' => $difference,
+            'percentage_difference' => $percentageDiff,
+            'last_updated' => max($binanceRate->fetched_at, $bcvRate->fetched_at),
+        ];
     }
 
     /**
