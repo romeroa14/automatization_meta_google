@@ -155,6 +155,16 @@ class AccountingTransactionResource extends Resource
                     ->sortable()
                     ->color('warning'),
 
+                TextColumn::make('real_profit_binance')
+                    ->label('Ganancia Real Binance')
+                    ->getStateUsing(function ($record) {
+                        $realProfit = \App\Models\ExchangeRate::calculateRealProfitInUsd($record->income, $record->expense);
+                        return $realProfit ? '$' . number_format($realProfit, 2) : 'N/A';
+                    })
+                    ->color('success')
+                    ->sortable(false)
+                    ->tooltip('Ganancia real considerando conversión BCV→Binance'),
+
                 TextColumn::make('campaign_start_date')
                     ->label('Inicio')
                     ->date('d/m/Y')
@@ -223,6 +233,58 @@ class AccountingTransactionResource extends Resource
                     }),
             ])
             ->actions([
+                Tables\Actions\Action::make('view_conversion_details')
+                    ->label('')
+                    ->button()
+                    ->size('xs')
+                    ->icon('heroicon-o-currency-dollar')
+                    ->color('success')
+                    ->tooltip('Ver detalles de conversión BCV→Binance')
+                    ->modalHeading('Detalles de Conversión BCV → Binance')
+                    ->modalContent(function ($record) {
+                        $completeEquivalents = \App\Models\ExchangeRate::calculateCompletePlanEquivalents($record->expense, $record->income);
+                        
+                        if (!$completeEquivalents) {
+                            return new \Illuminate\Support\HtmlString('<div class="p-4 text-center text-gray-500">No se pudieron obtener las tasas de cambio</div>');
+                        }
+                        
+                        return new \Illuminate\Support\HtmlString(
+                            '<div class="space-y-4">
+                                <div class="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                                    <h3 class="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-3">📊 Información de la Transacción</h3>
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div><strong>Cliente:</strong> ' . $record->client_name . '</div>
+                                        <div><strong>Ingreso:</strong> $' . number_format($record->income, 2) . ' USD</div>
+                                        <div><strong>Gasto:</strong> $' . number_format($record->expense, 2) . ' USD</div>
+                                        <div><strong>Ganancia tradicional:</strong> $' . number_format($record->profit, 2) . ' USD</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                                    <h4 class="font-semibold text-green-900 dark:text-green-100 mb-2">💰 Conversión Real BCV → Binance</h4>
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div><strong>Cliente paga en BCV:</strong> ' . number_format($completeEquivalents['real_profit']['client_payment_bcv'], 2, ',', '.') . ' Bs.</div>
+                                        <div><strong>USD reales recibidos:</strong> $' . number_format($completeEquivalents['real_profit']['real_usd_received'], 2) . '</div>
+                                        <div><strong>Gasto en Meta:</strong> $' . number_format($record->expense, 2) . '</div>
+                                        <div><strong>Ganancia real:</strong> $' . number_format($completeEquivalents['real_profit']['real_profit_usd'], 2) . '</div>
+                                        <div class="col-span-2"><strong>Margen real:</strong> ' . number_format($completeEquivalents['real_profit']['profit_percentage'], 1) . '%</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                                    <h4 class="font-semibold text-yellow-900 dark:text-yellow-100 mb-2">📈 Tasas Utilizadas</h4>
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div><strong>Tasa BCV:</strong> ' . number_format($completeEquivalents['rates']['bcv_rate'], 2, ',', '.') . ' Bs./USD</div>
+                                        <div><strong>Tasa Binance:</strong> ' . number_format($completeEquivalents['rates']['binance_rate'], 2, ',', '.') . ' Bs./USD</div>
+                                        <div class="col-span-2"><strong>Factor de conversión:</strong> ' . number_format($completeEquivalents['traditional']['conversion_factor'], 3) . 'x</div>
+                                    </div>
+                                </div>
+                            </div>'
+                        );
+                    })
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Cerrar'),
+
                 Tables\Actions\Action::make('view_reconciliation')
                     ->label('')
                     ->button()

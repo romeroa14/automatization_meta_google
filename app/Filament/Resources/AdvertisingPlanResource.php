@@ -241,6 +241,16 @@ class AdvertisingPlanResource extends Resource
                     ->color('info')
                     ->sortable(false),
 
+                TextColumn::make('real_profit_binance')
+                    ->label('Ganancia Real Binance')
+                    ->getStateUsing(function ($record) {
+                        $realProfit = \App\Models\ExchangeRate::calculateRealProfitInUsd($record->client_price, $record->total_budget);
+                        return $realProfit ? '$' . number_format($realProfit, 2) : 'N/A';
+                    })
+                    ->color('success')
+                    ->sortable(false)
+                    ->tooltip('Ganancia real considerando conversión BCV→Binance'),
+
                 IconColumn::make('is_active')
                     ->label('Estado')
                     ->boolean()
@@ -271,9 +281,10 @@ class AdvertisingPlanResource extends Resource
                     ->modalHeading('Precios del Plan en Ambas Tasas')
                     ->modalContent(function ($record) {
                         $equivalents = \App\Models\ExchangeRate::calculatePlanPriceEquivalents($record->total_budget);
+                        $completeEquivalents = \App\Models\ExchangeRate::calculateCompletePlanEquivalents($record->total_budget, $record->client_price);
                         $stats = \App\Models\ExchangeRate::getPlanPriceStatistics();
                         
-                        if (!$equivalents || empty($stats)) {
+                        if (!$equivalents || !$completeEquivalents || empty($stats)) {
                             return new HtmlString('<div class="p-4 text-center text-gray-500">No se pudieron obtener las tasas de cambio</div>');
                         }
                         
@@ -322,11 +333,24 @@ class AdvertisingPlanResource extends Resource
                                 </div>
                                 
                                 <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
-                                    <h4 class="font-semibold text-green-900 dark:text-green-100 mb-2">💡 Explicación</h4>
-                                    <div class="text-sm text-green-800 dark:text-green-200">
-                                        <p><strong>Precio Binance:</strong> Es el costo real en bolívares para pagar a Meta usando Binance.</p>
-                                        <p><strong>Precio BCV:</strong> Es el precio que cobras al cliente usando la tasa oficial BCV.</p>
-                                        <p><strong>Fórmula:</strong> Precio BCV = Presupuesto USD × (Tasa Binance ÷ Tasa BCV)</p>
+                                    <h4 class="font-semibold text-green-900 dark:text-green-100 mb-2">💰 Ganancia Real (BCV → Binance)</h4>
+                                    <div class="grid grid-cols-2 gap-4 text-sm">
+                                        <div><strong>Cliente paga:</strong> $' . number_format($record->client_price, 2) . ' USD</div>
+                                        <div><strong>En BCV:</strong> ' . number_format($completeEquivalents['real_profit']['client_payment_bcv'], 2, ',', '.') . ' Bs.</div>
+                                        <div><strong>USD reales recibidos:</strong> $' . number_format($completeEquivalents['real_profit']['real_usd_received'], 2) . '</div>
+                                        <div><strong>Gasto en Meta:</strong> $' . number_format($record->total_budget, 2) . '</div>
+                                        <div class="col-span-2"><strong>Ganancia real:</strong> $' . number_format($completeEquivalents['real_profit']['real_profit_usd'], 2) . ' (' . number_format($completeEquivalents['real_profit']['profit_percentage'], 1) . '%)</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                                    <h4 class="font-semibold text-yellow-900 dark:text-yellow-100 mb-2">💡 Explicación del Flujo</h4>
+                                    <div class="text-sm text-yellow-800 dark:text-yellow-200">
+                                        <p><strong>1. Cliente paga:</strong> $' . number_format($record->client_price, 2) . ' USD a tasa BCV</p>
+                                        <p><strong>2. Recibes en BCV:</strong> ' . number_format($completeEquivalents['real_profit']['client_payment_bcv'], 2, ',', '.') . ' Bs.</p>
+                                        <p><strong>3. Compras USD en Binance:</strong> ' . number_format($completeEquivalents['real_profit']['client_payment_bcv'], 2, ',', '.') . ' Bs. ÷ ' . number_format($completeEquivalents['rates']['binance_rate'], 2, ',', '.') . ' = $' . number_format($completeEquivalents['real_profit']['real_usd_received'], 2) . '</p>
+                                        <p><strong>4. Pagas a Meta:</strong> $' . number_format($record->total_budget, 2) . '</p>
+                                        <p><strong>5. Tu ganancia real:</strong> $' . number_format($completeEquivalents['real_profit']['real_profit_usd'], 2) . '</p>
                                     </div>
                                 </div>
                             </div>'

@@ -250,6 +250,89 @@ class ExchangeRate extends Model
     }
 
     /**
+     * Convertir monto en BCV a USD (lo que realmente recibes en Binance)
+     * Fórmula: Monto BCV ÷ Tasa Binance = USD reales
+     */
+    public static function convertBcvToUsd(float $bcvAmount): ?float
+    {
+        $binanceRate = static::getLatestRate('USD', 'BINANCE');
+        if (!$binanceRate) {
+            return null;
+        }
+        
+        return $bcvAmount / $binanceRate->rate;
+    }
+
+    /**
+     * Calcular ganancia real en USD (Binance) para un plan
+     * El cliente paga en BCV, pero tú necesitas comprar en Binance
+     */
+    public static function calculateRealProfitInUsd(float $clientPriceUsd, float $totalBudgetUsd): ?float
+    {
+        $bcvRate = static::getLatestRate('USD', 'BCV');
+        $binanceRate = static::getLatestRate('USD', 'BINANCE');
+        
+        if (!$bcvRate || !$binanceRate) {
+            return null;
+        }
+        
+        // 1. Cliente paga $clientPriceUsd a tasa BCV
+        $clientPaymentInBcv = $clientPriceUsd * $bcvRate->rate;
+        
+        // 2. Con ese monto BCV, compras USD en Binance
+        $realUsdReceived = $clientPaymentInBcv / $binanceRate->rate;
+        
+        // 3. Tu ganancia real = USD recibidos - USD gastados en Meta
+        $realProfit = $realUsdReceived - $totalBudgetUsd;
+        
+        return $realProfit;
+    }
+
+    /**
+     * Calcular equivalencias completas para un plan (incluyendo ganancia real)
+     */
+    public static function calculateCompletePlanEquivalents(float $totalBudgetUsd, float $clientPriceUsd): ?array
+    {
+        $bcvRate = static::getLatestRate('USD', 'BCV');
+        $binanceRate = static::getLatestRate('USD', 'BINANCE');
+        
+        if (!$bcvRate || !$binanceRate) {
+            return null;
+        }
+        
+        // Precios tradicionales
+        $binancePrice = $totalBudgetUsd * $binanceRate->rate;
+        $bcvPrice = $totalBudgetUsd * $bcvRate->rate;
+        
+        // Cálculo de ganancia real
+        $clientPaymentInBcv = $clientPriceUsd * $bcvRate->rate;
+        $realUsdReceived = $clientPaymentInBcv / $binanceRate->rate;
+        $realProfitUsd = $realUsdReceived - $totalBudgetUsd;
+        $realProfitBcv = $realProfitUsd * $bcvRate->rate;
+        $realProfitBinance = $realProfitUsd * $binanceRate->rate;
+        
+        return [
+            'traditional' => [
+                'binance_price' => $binancePrice,
+                'bcv_price' => $bcvPrice,
+                'conversion_factor' => $binanceRate->rate / $bcvRate->rate,
+            ],
+            'real_profit' => [
+                'client_payment_bcv' => $clientPaymentInBcv,
+                'real_usd_received' => $realUsdReceived,
+                'real_profit_usd' => $realProfitUsd,
+                'real_profit_bcv' => $realProfitBcv,
+                'real_profit_binance' => $realProfitBinance,
+                'profit_percentage' => $totalBudgetUsd > 0 ? ($realProfitUsd / $totalBudgetUsd) * 100 : 0,
+            ],
+            'rates' => [
+                'binance_rate' => $binanceRate->rate,
+                'bcv_rate' => $bcvRate->rate,
+            ]
+        ];
+    }
+
+    /**
      * Obtener el tiempo transcurrido desde la última actualización
      */
     public function getTimeAgoAttribute(): string
