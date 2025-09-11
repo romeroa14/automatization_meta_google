@@ -201,13 +201,14 @@ class CampaignPlanReconciliationResource extends Resource
 
                 TextColumn::make('advertisingPlan.plan_name')
                     ->label('Plan de Publicidad')
-                    ->tooltip(fn ($record) => $record->advertisingPlan->plan_summary)
+                    ->tooltip(fn ($record) => $record->advertisingPlan ? $record->advertisingPlan->plan_summary : 'Plan Personalizado - Sin plan asignado')
                     ->searchable()
                     ->sortable()
                     ->badge()
-                    ->color('info')
+                    ->color(fn ($record) => $record->advertisingPlan ? 'info' : 'warning')
                     ->wrap()
-                    ->limit(30),
+                    ->limit(30)
+                    ->formatStateUsing(fn ($record) => $record->advertisingPlan ? $record->advertisingPlan->plan_name : 'Plan Personalizado'),
 
                 TextColumn::make('activeCampaign.campaign_start_time')
                     ->label('Inicio')
@@ -400,12 +401,16 @@ class CampaignPlanReconciliationResource extends Resource
 
                 Action::make('configure_profit')
                     ->label('Configurar Ganancia')
-                    ->tooltip('Configurar ganancia')
+                    ->tooltip('Configurar ganancia para plan personalizado')
                     ->button()
                     ->size('xs')
                     ->icon('heroicon-o-currency-dollar')
                     ->color('success')
-                    ->visible(fn ($record) => str_contains($record->advertisingPlan->plan_name, 'Plan Personalizado') && $record->advertisingPlan->profit_margin == 0)
+                    ->visible(fn ($record) => 
+                        !$record->advertisingPlan && 
+                        $record->reconciliation_data['plan_type'] === 'custom' &&
+                        !isset($record->reconciliation_data['custom_plan_details']['client_price'])
+                    )
                     ->form([
                         Forms\Components\TextInput::make('client_price')
                             ->label('Precio al Cliente ($)')
@@ -417,17 +422,24 @@ class CampaignPlanReconciliationResource extends Resource
                             ->helperText('Ingresa el precio que pagará el cliente por este plan personalizado'),
                     ])
                     ->action(function ($record, array $data) {
-                        $plan = $record->advertisingPlan;
                         $clientPrice = (float) $data['client_price'];
-                        $totalBudget = $plan->total_budget; // Presupuesto total del plan
+                        $totalBudget = $record->planned_budget; // Presupuesto total del plan personalizado
                         $profitMargin = $clientPrice - $totalBudget; // Comisión = Cliente paga - Presupuesto total
                         $profitPercentage = $totalBudget > 0 ? ($profitMargin / $totalBudget) * 100 : 0;
 
-                        // Actualizar el plan con el nuevo precio del cliente y ganancia
-                        $plan->update([
-                            'client_price' => $clientPrice,
-                            'profit_margin' => $profitMargin,
-                            'profit_percentage' => $profitPercentage,
+                        // Actualizar los datos de la conciliación con la información del plan personalizado
+                        $customPlanDetails = $record->reconciliation_data['custom_plan_details'] ?? [];
+                        $customPlanDetails['client_price'] = $clientPrice;
+                        $customPlanDetails['profit_margin'] = $profitMargin;
+                        $customPlanDetails['profit_percentage'] = $profitPercentage;
+                        $customPlanDetails['configured_at'] = now()->toISOString();
+
+                        $reconciliationData = $record->reconciliation_data;
+                        $reconciliationData['custom_plan_details'] = $customPlanDetails;
+
+                        $record->update([
+                            'reconciliation_data' => $reconciliationData,
+                            'notes' => "📋 PLAN PERSONALIZADO CONFIGURADO - Presupuesto: $" . number_format($totalBudget, 2) . ", Precio Cliente: $" . number_format($clientPrice, 2) . ", Ganancia: $" . number_format($profitMargin, 2) . " (" . number_format($profitPercentage, 1) . "%)"
                         ]);
 
                         // Usar el servicio de conciliación para actualizar la transacción con detección automática
@@ -471,8 +483,8 @@ class CampaignPlanReconciliationResource extends Resource
                             // Crear nueva transacción si no existe
                             \App\Models\AccountingTransaction::create([
                                 'campaign_reconciliation_id' => $record->id,
-                                'advertising_plan_id' => $plan->id,
-                                'description' => "Plan personalizado configurado - {$plan->plan_name} - Cliente: {$instagramClientName}",
+                                'advertising_plan_id' => null, // Plan personalizado no tiene registro en AdvertisingPlan
+                                'description' => "Plan personalizado configurado - {$record->reconciliation_data['plan_name']} - Cliente: {$instagramClientName}",
                                 'income' => $clientPrice, // Lo que paga el cliente
                                 'expense' => $totalBudget, // Presupuesto total del plan
                                 'profit' => $profitMargin, // Comisión (Cliente - Presupuesto)
@@ -485,9 +497,9 @@ class CampaignPlanReconciliationResource extends Resource
                                 'transaction_date' => now(),
                                 'notes' => 'Plan personalizado configurado - Comisión calculada: Cliente $' . number_format($clientPrice, 2) . ' - Presupuesto $' . number_format($totalBudget, 2) . ' = Comisión $' . number_format($profitMargin, 2),
                                 'metadata' => [
-                                    'plan_name' => $plan->plan_name,
-                                    'daily_budget' => $plan->daily_budget,
-                                    'duration_days' => $plan->duration_days,
+                                    'plan_name' => $record->reconciliation_data['plan_name'],
+                                    'daily_budget' => $customPlanDetails['daily_budget'],
+                                    'duration_days' => $customPlanDetails['duration_days'],
                                     'is_custom_plan' => true,
                                     'custom_plan_configured' => true,
                                     'configured_at' => now()->toISOString(),

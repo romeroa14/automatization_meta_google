@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('campaign_plan_reconciliations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('active_campaign_id')->constrained('active_campaigns_view')->onDelete('cascade');
-            $table->foreignId('advertising_plan_id')->constrained('advertising_plans')->onDelete('cascade');
+            $table->foreignId('advertising_plan_id')->nullable()->constrained('advertising_plans')->onDelete('set null');
             $table->enum('reconciliation_status', ['pending', 'approved', 'rejected', 'completed', 'paused'])->default('pending');
             $table->timestamp('reconciliation_date')->nullable();
             $table->text('notes')->nullable();
@@ -35,6 +35,7 @@ return new class extends Migration
             $table->index(['active_campaign_id', 'advertising_plan_id']);
             $table->index('reconciliation_status');
             $table->index('reconciliation_date');
+            $table->index('advertising_plan_id'); // Índice separado para consultas con/sin plan
         });
     }
 

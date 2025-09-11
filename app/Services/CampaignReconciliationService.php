@@ -84,7 +84,7 @@ class CampaignReconciliationService
             return [
                 'success' => true,
                 'reconciled' => true,
-                'details' => "Campaña {$campaign->meta_campaign_name} conciliada con plan: " . ($detectedPlan ? $detectedPlan->plan_name : 'Sin plan detectado'),
+                'details' => "Campaña {$campaign->meta_campaign_name} conciliada" . ($detectedPlan ? " con plan: {$detectedPlan->plan_name}" : " con PLAN PERSONALIZADO - $" . number_format($campaignInfo['daily_budget'], 2) . "/día x {$campaignInfo['duration_days']} días"),
                 'error' => null
             ];
 
@@ -345,29 +345,43 @@ class CampaignReconciliationService
      */
     public function createReconciliation(ActiveCampaign $campaign, array $campaignInfo, ?AdvertisingPlan $plan): CampaignPlanReconciliation
     {
-        // Si no hay plan detectado, crear un plan personalizado
+        // Calcular presupuesto total estimado
+        $estimatedTotalBudget = $campaignInfo['daily_budget'] * $campaignInfo['duration_days'];
+        
+        // Determinar el tipo de plan y mensaje
+        $planType = $plan ? 'existing' : 'custom';
+        $planName = $plan ? $plan->plan_name : "Plan Personalizado - $" . number_format($campaignInfo['daily_budget'], 2) . "/día x {$campaignInfo['duration_days']} días";
+        
         if (!$plan) {
-            $plan = $this->createCustomPlan($campaignInfo);
+            Log::info("Plan personalizado detectado para campaña {$campaign->meta_campaign_name}. Presupuesto: $" . number_format($campaignInfo['daily_budget'], 2) . "/día, Duración: {$campaignInfo['duration_days']} días - NO se creará registro en AdvertisingPlan");
         }
-
+        
         $reconciliation = CampaignPlanReconciliation::create([
             'active_campaign_id' => $campaign->id,
-            'advertising_plan_id' => $plan->id,
+            'advertising_plan_id' => $plan ? $plan->id : null, // null para planes personalizados
             'reconciliation_status' => 'pending',
             'reconciliation_date' => now(),
-            'planned_budget' => $plan->total_budget,
+            'planned_budget' => $plan ? $plan->total_budget : $estimatedTotalBudget,
             'actual_spent' => $campaignInfo['actual_spent'],
-            'variance' => $plan->total_budget - $campaignInfo['actual_spent'],
-            'variance_percentage' => $plan->total_budget > 0 ? 
-                (($plan->total_budget - $campaignInfo['actual_spent']) / $plan->total_budget) * 100 : 0,
-            'notes' => $plan->plan_name === 'Plan Personalizado' ? 
-                "Plan personalizado creado automáticamente (Presupuesto: $" . number_format($campaignInfo['daily_budget'], 2) . "/día, Duración: {$campaignInfo['duration_days']} días) - Requiere configuración de ganancia" : 
-                "Plan detectado automáticamente: {$plan->plan_name} (Presupuesto: $" . number_format($campaignInfo['daily_budget'], 2) . "/día, Duración: {$campaignInfo['duration_days']} días)",
+            'variance' => ($plan ? $plan->total_budget : $estimatedTotalBudget) - $campaignInfo['actual_spent'],
+            'variance_percentage' => ($plan ? $plan->total_budget : $estimatedTotalBudget) > 0 ? 
+                ((($plan ? $plan->total_budget : $estimatedTotalBudget) - $campaignInfo['actual_spent']) / ($plan ? $plan->total_budget : $estimatedTotalBudget)) * 100 : 0,
+            'notes' => $plan ? 
+                "Plan detectado automáticamente: {$plan->plan_name} (Presupuesto: $" . number_format($campaignInfo['daily_budget'], 2) . "/día, Duración: {$campaignInfo['duration_days']} días)" :
+                "📋 PLAN PERSONALIZADO - Presupuesto: $" . number_format($campaignInfo['daily_budget'], 2) . "/día, Duración: {$campaignInfo['duration_days']} días. Total estimado: $" . number_format($estimatedTotalBudget, 2) . " - Requiere configuración de precio al cliente.",
             'reconciliation_data' => [
                 'campaign_info' => $campaignInfo,
-                'detection_method' => $plan->plan_name === 'Plan Personalizado' ? 'custom_created' : 'automatic',
+                'detection_method' => $plan ? 'automatic' : 'custom_plan_detected',
+                'plan_type' => $planType,
+                'plan_name' => $planName,
                 'detected_at' => now()->toISOString(),
                 'instagram_client_name' => $campaignInfo['client_name'], // Guardar el nombre de Instagram detectado
+                'custom_plan_details' => $plan ? null : [
+                    'daily_budget' => $campaignInfo['daily_budget'],
+                    'duration_days' => $campaignInfo['duration_days'],
+                    'estimated_total_budget' => $estimatedTotalBudget,
+                    'requires_client_price_configuration' => true
+                ]
             ],
             'last_updated_at' => now(),
         ]);
@@ -377,62 +391,16 @@ class CampaignReconciliationService
 
         Log::info("Conciliación creada para campaña {$campaign->meta_campaign_name}", [
             'reconciliation_id' => $reconciliation->id,
-            'plan_detected' => $plan->plan_name,
+            'plan_detected' => $plan ? $plan->plan_name : 'Sin plan asignado',
             'daily_budget' => $campaignInfo['daily_budget'],
             'duration_days' => $campaignInfo['duration_days'],
-            'is_custom_plan' => $plan->plan_name === 'Plan Personalizado'
+            'has_plan' => $plan !== null,
+            'requires_manual_assignment' => $plan === null
         ]);
 
         return $reconciliation;
     }
 
-    /**
-     * Crear un plan personalizado para campañas que no coinciden con planes existentes
-     */
-    public function createCustomPlan(array $campaignInfo): AdvertisingPlan
-    {
-        $dailyBudget = $campaignInfo['daily_budget'];
-        $durationDays = $campaignInfo['duration_days'];
-        $totalBudget = $dailyBudget * $durationDays;
-        
-        // Crear nombre único para el plan personalizado
-        $planName = "Plan Personalizado - $" . number_format($dailyBudget, 2) . "/día x {$durationDays} días";
-        
-        // Verificar si ya existe un plan personalizado con estas características
-        $existingPlan = AdvertisingPlan::where('plan_name', $planName)->first();
-        
-        if ($existingPlan) {
-            return $existingPlan;
-        }
-        
-        // Crear nuevo plan personalizado
-        $customPlan = AdvertisingPlan::create([
-            'plan_name' => $planName,
-            'description' => "Plan personalizado creado automáticamente para campaña con presupuesto de $" . number_format($dailyBudget, 2) . " diarios por {$durationDays} días",
-            'daily_budget' => $dailyBudget,
-            'duration_days' => $durationDays,
-            'total_budget' => $totalBudget,
-            'client_price' => $totalBudget, // Inicialmente igual al presupuesto total (sin ganancia)
-            'profit_margin' => 0, // Sin ganancia inicial
-            'profit_percentage' => 0, // Sin ganancia inicial
-            'is_active' => true,
-            'features' => [
-                'Facebook Ads' => 'Campaña publicitaria en Facebook',
-                'Instagram Ads' => 'Campaña publicitaria en Instagram',
-                'Reportes Básicos' => 'Reportes de rendimiento básicos',
-                'Soporte' => 'Soporte técnico básico'
-            ]
-        ]);
-        
-        Log::info("Plan personalizado creado: {$planName}", [
-            'plan_id' => $customPlan->id,
-            'daily_budget' => $dailyBudget,
-            'duration_days' => $durationDays,
-            'total_budget' => $totalBudget
-        ]);
-        
-        return $customPlan;
-    }
 
     /**
      * Crear transacciones contables para la conciliación
