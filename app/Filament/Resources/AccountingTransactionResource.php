@@ -40,7 +40,7 @@ class AccountingTransactionResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Transacciones Contables';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
 
     protected static ?string $navigationGroup = 'ADMETRICAS.COM';
 

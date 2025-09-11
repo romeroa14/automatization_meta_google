@@ -35,7 +35,7 @@ class AdvertisingPlanResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Planes de Publicidad';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $navigationGroup = 'ADMETRICAS.COM';
 
@@ -189,21 +189,14 @@ class AdvertisingPlanResource extends Resource
                     ->sortable()
                     ->weight('bold'),
 
-                TextColumn::make('daily_budget')
-                    ->label('Presupuesto Diario')
-                    ->money('USD')
-                    ->sortable(),
-
-                TextColumn::make('duration_days')
-                    ->label('Duración')
-                    ->badge()
+                TextColumn::make('price_in_bcv')
+                    ->label('Precio BCV')
+                    ->getStateUsing(function ($record) {
+                        $bcvPrice = \App\Models\ExchangeRate::calculatePlanPriceInBcv($record->client_price);
+                        return $bcvPrice ? number_format($bcvPrice, 2, ',', '.') . ' Bs.' : 'N/A';
+                    })
                     ->color('info')
-                    ->formatStateUsing(fn (int $state): string => "{$state} días"),
-
-                TextColumn::make('total_budget')
-                    ->label('Presupuesto Total')
-                    ->money('USD')
-                    ->sortable(),
+                    ->sortable(false),
 
                 TextColumn::make('client_price')
                     ->label('Precio Cliente')
@@ -211,38 +204,51 @@ class AdvertisingPlanResource extends Resource
                     ->sortable()
                     ->color('success'),
 
-                TextColumn::make('profit_margin')
-                    ->label('Ganancia')
+                TextColumn::make('total_budget')
+                    ->label('Presupuesto Total')
                     ->money('USD')
-                    ->sortable()
-                    ->color('warning'),
+                    ->sortable(),
 
-                TextColumn::make('profit_percentage')
-                    ->label('Margen %')
-                    ->badge()
-                    ->color('success')
-                    ->formatStateUsing(fn (float $state): string => number_format($state, 1) . '%'),
+                TextColumn::make('daily_budget')
+                    ->label('Presupuesto Diario')
+                    ->money('USD')
+                    ->sortable(),
 
-                TextColumn::make('price_in_binance')
-                    ->label('Precio Binance')
-                    ->getStateUsing(function ($record) {
-                        $binancePrice = \App\Models\ExchangeRate::calculatePlanPriceInBinance($record->total_budget);
-                        return $binancePrice ? number_format($binancePrice, 2, ',', '.') . ' Bs.' : 'N/A';
-                    })
-                    ->color('warning')
-                    ->sortable(false),
+                // TextColumn::make('duration_days')
+                //     ->label('Duración')
+                //     ->badge()
+                //     ->color('info')
+                //     ->formatStateUsing(fn (int $state): string => "{$state} días"),
 
-                TextColumn::make('price_in_bcv')
-                    ->label('Precio BCV')
-                    ->getStateUsing(function ($record) {
-                        $bcvPrice = \App\Models\ExchangeRate::calculatePlanPriceInBcv($record->total_budget);
-                        return $bcvPrice ? number_format($bcvPrice, 2, ',', '.') . ' Bs.' : 'N/A';
-                    })
-                    ->color('info')
-                    ->sortable(false),
+                
+
+                
+
+                // TextColumn::make('profit_margin')
+                //     ->label('Ganancia')
+                //     ->money('USD')
+                //     ->sortable()
+                //     ->color('warning'),
+
+                // TextColumn::make('profit_percentage')
+                //     ->label('Margen %')
+                //     ->badge()
+                //     ->color('success')
+                //     ->formatStateUsing(fn (float $state): string => number_format($state, 1) . '%'),
+
+                // TextColumn::make('price_in_binance')
+                //     ->label('Precio Binance')
+                //     ->getStateUsing(function ($record) {
+                //         $binancePrice = \App\Models\ExchangeRate::calculatePlanPriceInBinance($record->client_price);
+                //         return $binancePrice ? number_format($binancePrice, 2, ',', '.') . ' Bs.' : 'N/A';
+                //     })
+                //     ->color('warning')
+                //     ->sortable(false),
+
+                
 
                 TextColumn::make('real_profit_binance')
-                    ->label('Ganancia Real Binance')
+                    ->label('Ganancia USDT')
                     ->getStateUsing(function ($record) {
                         $realProfit = \App\Models\ExchangeRate::calculateRealProfitInUsd($record->client_price, $record->total_budget);
                         return $realProfit ? '$' . number_format($realProfit, 2) : 'N/A';
@@ -251,13 +257,7 @@ class AdvertisingPlanResource extends Resource
                     ->sortable(false)
                     ->tooltip('Ganancia real considerando conversión BCV→Binance'),
 
-                IconColumn::make('is_active')
-                    ->label('Estado')
-                    ->boolean()
-                    ->trueIcon('heroicon-o-check-circle')
-                    ->falseIcon('heroicon-o-x-circle')
-                    ->trueColor('success')
-                    ->falseColor('danger'),
+           
 
                 TextColumn::make('created_at')
                     ->label('Creado')
