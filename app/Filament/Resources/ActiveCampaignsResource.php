@@ -20,6 +20,7 @@ use Filament\Tables\Actions\BulkAction;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\DatePicker;
 use Filament\Notifications\Notification;
+use Filament\Tables\Columns\Summarizers\Sum;
 use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -33,7 +34,7 @@ class ActiveCampaignsResource extends Resource
 
     protected static ?string $navigationGroup = 'ADMETRICAS.COM';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 1;
 
     public static function form(Form $form): Form
     {
@@ -198,7 +199,8 @@ class ActiveCampaignsResource extends Resource
                     })
                     ->money('USD')
                     ->sortable()
-                    ->color('warning'),
+                    ->color('warning')
+                    ->summarize(Sum::make('amount_spent')),
                     
                 TextColumn::make('campaign_total_budget')
                     ->label('Presupuesto Restante')
@@ -232,7 +234,8 @@ class ActiveCampaignsResource extends Resource
                     })
                     ->money('USD')
                     ->sortable()
-                    ->color('success'),
+                    ->color('success')
+                    ->summarize(Sum::make('campaign_total_budget')),
                     
                 TextColumn::make('campaign_lifetime_budget')
                     ->label('Presupuesto Total')
@@ -257,7 +260,23 @@ class ActiveCampaignsResource extends Resource
                     ->suffix(' días')
                     ->sortable()
                     ->badge()
-                    ->color('info')
+                    ->color('info'),
+                    
+                TextColumn::make('date_range')
+                    ->label('Rango de Fechas')
+                    ->getStateUsing(function ($record) {
+                        $range = $record->campaign_data['amount_spent_range'] ?? null;
+                        if ($range && isset($range['since']) && isset($range['until'])) {
+                            $since = \Carbon\Carbon::parse($range['since'])->format('d/m/Y');
+                            $until = \Carbon\Carbon::parse($range['until'])->format('d/m/Y');
+                            return "{$since} - {$until}";
+                        }
+                        return 'N/A';
+                    })
+                    ->badge()
+                    ->color('warning')
+                    ->sortable(false)
+                    ->tooltip('Rango de fechas usado para calcular el gasto')
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('campaign_status')
@@ -270,6 +289,16 @@ class ActiveCampaignsResource extends Resource
                         'DELETED' => 'Eliminada',
                         'UNKNOWN' => 'Desconocido',
                     ]),
+                    
+                Tables\Filters\TernaryFilter::make('has_date_range')
+                    ->label('Con Rango de Fechas')
+                    ->placeholder('Todas las campañas')
+                    ->trueLabel('Solo con rango')
+                    ->falseLabel('Sin rango')
+                    ->queries(
+                        true: fn ($query) => $query->whereRaw("JSON_EXTRACT(campaign_data, '$.amount_spent_range') IS NOT NULL"),
+                        false: fn ($query) => $query->whereRaw("JSON_EXTRACT(campaign_data, '$.amount_spent_range') IS NULL")
+                    ),
             ])
             ->actions([
                 Action::make('view_json_details')

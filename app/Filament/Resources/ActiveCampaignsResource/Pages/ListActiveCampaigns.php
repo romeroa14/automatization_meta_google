@@ -23,38 +23,7 @@ class ListActiveCampaigns extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('microscopic_accounting')
-                ->label('Contabilidad Microscópica')
-                ->icon('heroicon-o-magnifying-glass')
-                ->color('warning')
-                ->action(function () {
-                    $service = new \App\Services\MicroscopicAccountingService();
-                    $results = $service->processCampaignsByStatus();
-                    
-                    $summary = $results['summary'] ?? [];
-                    $message = "📊 Procesadas: {$summary['total_campaigns_processed']} campañas\n";
-                    $message .= "✅ Conciliadas: {$summary['total_campaigns_reconciled']} campañas\n";
-                    $message .= "❌ Errores: {$summary['total_errors']}\n";
-                    $message .= "📈 Tasa de éxito: " . number_format($summary['success_rate'], 2) . "%\n\n";
-                    
-                    $message .= "📋 Por estado:\n";
-                    foreach ($summary['status_breakdown'] as $status => $count) {
-                        $emoji = match($status) {
-                            'active' => '🟢',
-                            'paused' => '🔴',
-                            'scheduled' => '🔵',
-                            'completed' => '✅',
-                            default => '❓'
-                        };
-                        $message .= "{$emoji} " . strtoupper($status) . ": {$count}\n";
-                    }
-                    
-                    Notification::make()
-                        ->title('Contabilidad Microscópica Completada')
-                        ->body($message)
-                        ->success()
-                        ->send();
-                }),
+            
                 
             Action::make('auto_reconcile_campaigns')
                 ->label('Conciliar Automáticamente')
@@ -96,7 +65,7 @@ class ListActiveCampaigns extends ListRecords
                             $token = $facebookAccount->access_token;
                             // Obtener gastos de los últimos 30 días (rango amplio para datos recientes)
                             $url = "https://graph.facebook.com/v18.0/{$campaignId}/insights?fields=spend&time_range[since]=" . urlencode(now()->subDays(30)->format('Y-m-d')) . "&time_range[until]=" . urlencode(now()->format('Y-m-d')) . "&access_token={$token}";
-                            $response = @file_get_contents($url);
+                            $response = ActiveCampaign::makeHttpRequest($url);
                             if ($response === false) {
                                 continue;
                             }
@@ -136,13 +105,17 @@ class ListActiveCampaigns extends ListRecords
                 ->modalDescription('Selecciona el rango de fechas para obtener los gastos reales desde Meta API y actualizar la tabla.')
                 ->form([
                     \Filament\Forms\Components\DatePicker::make('start_date')
-                        ->label('Fecha de Inicio')
+                        ->label('Fecha de Inicio*')
                         ->required()
-                        ->default(now()->subDays(7)),
+                        ->default(now()->subDays(7)->format('Y-m-d'))
+                        ->displayFormat('d/m/Y')
+                        ->native(false),
                     \Filament\Forms\Components\DatePicker::make('end_date')
-                        ->label('Fecha de Fin')
+                        ->label('Fecha de Fin*')
                         ->required()
-                        ->default(now()),
+                        ->default(now()->format('Y-m-d'))
+                        ->displayFormat('d/m/Y')
+                        ->native(false),
                 ])
                 ->action(function (array $data) {
                     $startDate = $data['start_date'];
@@ -165,7 +138,7 @@ class ListActiveCampaigns extends ListRecords
                             }
                             $token = $facebookAccount->access_token;
                             $url = "https://graph.facebook.com/v18.0/{$campaignId}/insights?fields=spend&time_range[since]=" . urlencode($startDate) . "&time_range[until]=" . urlencode($endDate) . "&access_token={$token}";
-                            $response = @file_get_contents($url);
+                            $response = ActiveCampaign::makeHttpRequest($url);
                             if ($response === false) {
                                 continue;
                             }
@@ -193,8 +166,8 @@ class ListActiveCampaigns extends ListRecords
                     }
 
                     Notification::make()
-                        ->title('Rango aplicado')
-                        ->body("Se actualizaron {$updated} campañas con el gasto del rango seleccionado")
+                        ->title('Rango de fechas aplicado exitosamente')
+                        ->body("Se actualizaron {$updated} campañas con el gasto del rango {$startDate} - {$endDate}")
                         ->success()
                         ->send();
                 }),
