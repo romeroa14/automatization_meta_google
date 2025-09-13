@@ -1,24 +1,24 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\ReportController;
 use App\Http\Controllers\TelegramWebhookController;
 use Illuminate\Support\Facades\Artisan;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register API routes for your application. These
+| routes are loaded by the RouteServiceProvider and all of them will
+| be assigned to the "api" middleware group. Make something great!
+|
+*/
 
-// Rutas para reportes
-Route::prefix('api/reports')->group(function () {
-    Route::post('{report}/generate', [ReportController::class, 'generateReport'])->name('reports.generate');
-    Route::get('{report}/status', [ReportController::class, 'getReportStatus'])->name('reports.status');
-    Route::get('{report}/stats', [ReportController::class, 'getReportStats'])->name('reports.stats');
+Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+    return $request->user();
 });
-
-// Ruta para generar PDF de reportes
-Route::get('/reports/{report}/generate-pdf', [App\Http\Controllers\ReportPdfController::class, 'generatePdf'])
-    ->name('reports.generate-pdf');
 
 /*
 |--------------------------------------------------------------------------
@@ -29,7 +29,7 @@ Route::get('/reports/{report}/generate-pdf', [App\Http\Controllers\ReportPdfCont
 |
 */
 
-Route::prefix('api/telegram')->group(function () {
+Route::prefix('telegram')->group(function () {
     // Webhook para recibir mensajes de Telegram
     Route::post('/webhook', [TelegramWebhookController::class, 'webhook']);
     
@@ -49,7 +49,7 @@ Route::prefix('api/telegram')->group(function () {
 |
 */
 
-Route::prefix('api/exchange-rates')->group(function () {
+Route::prefix('exchange-rates')->group(function () {
     Route::get('/', function () {
         return \App\Models\ExchangeRate::getAllLatestRates();
     });
@@ -73,7 +73,7 @@ Route::prefix('api/exchange-rates')->group(function () {
 |
 */
 
-Route::prefix('api/webhook')->group(function () {
+Route::prefix('webhook')->group(function () {
     Route::post('/bcv/update-rates', function () {
         Artisan::call('exchange:update-all', ['--source' => 'BCV']);
         return response()->json(['status' => 'success', 'message' => 'Tasas BCV actualizadas']);
