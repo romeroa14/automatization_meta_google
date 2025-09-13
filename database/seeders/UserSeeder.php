@@ -14,8 +14,8 @@ class UserSeeder extends Seeder
      */
     public function run(): void
     {
-        // Crear usuario de prueba
-        User::factory()->create([
+        // Crear usuario de prueba sin usar factory
+        User::create([
             'name' => 'Test User',
             'email' => 'test@example.com',
             'password' => Hash::make('12345'),
