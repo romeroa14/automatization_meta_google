@@ -9,6 +9,9 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+// Ruta directa para webhook de Telegram (sin middleware CSRF)
+Route::post('/telegram-webhook', [TelegramWebhookController::class, 'handle']);
+
 // Rutas para reportes
 Route::prefix('api/reports')->group(function () {
     Route::post('{report}/generate', [ReportController::class, 'generateReport'])->name('reports.generate');
