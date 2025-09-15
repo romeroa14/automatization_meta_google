@@ -10,7 +10,7 @@ Route::get('/', function () {
 });
 
 // Ruta directa para webhook de Telegram (sin middleware CSRF)
-Route::post('/telegram-webhook', [TelegramWebhookController::class, 'handle']);
+Route::post('/telegram-webhook', [TelegramWebhookController::class, 'handle'])->withoutMiddleware(['web']);
 
 // Rutas para reportes
 Route::prefix('api/reports')->group(function () {
