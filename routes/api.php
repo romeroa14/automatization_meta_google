@@ -31,7 +31,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 Route::prefix('telegram')->group(function () {
     // Webhook para recibir mensajes de Telegram
-    Route::post('/webhook', [TelegramWebhookController::class, 'webhook']);
+    Route::post('/webhook', [TelegramWebhookController::class, 'handle']);
     
     // Configurar webhook (para uso administrativo)
     Route::post('/set-webhook', [TelegramWebhookController::class, 'setWebhook']);
