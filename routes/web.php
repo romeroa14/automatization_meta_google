@@ -29,10 +29,10 @@ Route::get('/reports/{report}/generate-pdf', [App\Http\Controllers\ReportPdfCont
 |
 */
 
+// Ruta directa para webhook de Telegram (sin middleware CSRF)
+Route::post('/api/telegram/webhook', [TelegramWebhookController::class, 'handle']);
+
 Route::prefix('api/telegram')->group(function () {
-    // Webhook para recibir mensajes de Telegram
-    Route::post('/webhook', [TelegramWebhookController::class, 'handle']);
-    
     // Configurar webhook (para uso administrativo)
     Route::post('/set-webhook', [TelegramWebhookController::class, 'setWebhook']);
     
