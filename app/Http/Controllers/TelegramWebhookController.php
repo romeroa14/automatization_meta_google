@@ -81,7 +81,15 @@ class TelegramWebhookController extends Controller
 
         // Si no es un comando, verificar si hay una conversación activa
         $conversationState = new ConversationStateService();
-        if ($conversationState->isConversationActive($chatId)) {
+        $isActive = $conversationState->isConversationActive($chatId);
+        
+        Log::info('🔍 Verificando conversación activa', [
+            'chat_id' => $chatId,
+            'text' => $text,
+            'is_active' => $isActive
+        ]);
+        
+        if ($isActive) {
             return $this->handleConversationStep($chatId, $text);
         }
 

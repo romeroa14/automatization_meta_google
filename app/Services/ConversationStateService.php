@@ -65,7 +65,8 @@ class ConversationStateService
     public function isConversationActive(int $chatId): bool
     {
         $state = $this->getConversationState($chatId);
-        return !empty($state['step']) && $state['step'] !== 'start';
+        // Una conversación está activa si tiene un step definido (incluyendo 'start')
+        return !empty($state['step']);
     }
 
     public function getConversationProgress(int $chatId): array
