@@ -105,6 +105,10 @@ class ConversationStateService
         if (!empty($state['data'])) {
             $summary .= "📋 *Datos recopilados:*\n";
             foreach ($state['data'] as $key => $value) {
+                // Convertir arrays a string legible
+                if (is_array($value)) {
+                    $value = json_encode($value, JSON_UNESCAPED_UNICODE);
+                }
                 $summary .= "• {$key}: {$value}\n";
             }
         }
