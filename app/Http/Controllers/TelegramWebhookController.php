@@ -372,14 +372,15 @@ class TelegramWebhookController extends Controller
                 return $this->sendMessage($chatId, "❌ *Conversación cancelada.*\n\nUsa /crear_campana para comenzar de nuevo.");
             }
             
-            if (strtoupper($text) === 'SÍ' && $currentStep === 'start') {
-                $conversationState->updateConversationStep($chatId, 'ad_account');
-                $nextMessage = $flowService->getStepMessage('ad_account');
-                return $this->sendMessage($chatId, $nextMessage);
-            }
-            
             // Validar y procesar datos del paso actual
             $validation = $flowService->validateStepData($currentStep, $text);
+            
+            Log::info('🔍 Validación de paso', [
+                'chat_id' => $chatId,
+                'current_step' => $currentStep,
+                'input' => $text,
+                'validation_result' => $validation
+            ]);
             
             if (!$validation['valid']) {
                 $errorMessage = "❌ *Error de validación:*\n\n";
@@ -394,6 +395,12 @@ class TelegramWebhookController extends Controller
             // Obtener siguiente paso
             $nextStep = $flowService->getNextStep($currentStep);
             
+            Log::info('🔄 Avanzando al siguiente paso', [
+                'chat_id' => $chatId,
+                'current_step' => $currentStep,
+                'next_step' => $nextStep
+            ]);
+            
             if ($nextStep === 'complete') {
                 // Crear campaña
                 return $this->createCampaignFromConversation($chatId);
@@ -402,6 +409,12 @@ class TelegramWebhookController extends Controller
             // Avanzar al siguiente paso
             $conversationState->updateConversationStep($chatId, $nextStep);
             $nextMessage = $flowService->getStepMessage($nextStep, $state['data']);
+            
+            Log::info('📤 Enviando mensaje del siguiente paso', [
+                'chat_id' => $chatId,
+                'next_step' => $nextStep,
+                'message_length' => strlen($nextMessage)
+            ]);
             
             return $this->sendMessage($chatId, $nextMessage);
             
