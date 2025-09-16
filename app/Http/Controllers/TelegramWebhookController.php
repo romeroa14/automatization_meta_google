@@ -380,6 +380,33 @@ class TelegramWebhookController extends Controller
                 return $this->sendMessage($chatId, "❌ *Conversación cancelada.*\n\nUsa /crear_campana para comenzar de nuevo.");
             }
             
+            // Manejar paginación de fanpages
+            if ($currentStep === 'fanpage') {
+                if (strtoupper($text) === 'SIGUIENTE' || strtoupper($text) === 'MÁS') {
+                    $currentPage = $state['data']['fanpage_page'] ?? 1;
+                    $nextPage = $currentPage + 1;
+                    
+                    // Guardar página actual
+                    $conversationState->updateConversationData($chatId, 'fanpage_page', $nextPage);
+                    
+                    // Mostrar siguiente página
+                    $message = $flowService->getFanpageMessagePaginated($nextPage);
+                    return $this->sendMessage($chatId, $message);
+                }
+                
+                if (strtoupper($text) === 'ANTERIOR') {
+                    $currentPage = $state['data']['fanpage_page'] ?? 1;
+                    $prevPage = max(1, $currentPage - 1);
+                    
+                    // Guardar página actual
+                    $conversationState->updateConversationData($chatId, 'fanpage_page', $prevPage);
+                    
+                    // Mostrar página anterior
+                    $message = $flowService->getFanpageMessagePaginated($prevPage);
+                    return $this->sendMessage($chatId, $message);
+                }
+            }
+            
             // Validar y procesar datos del paso actual
             $validation = $flowService->validateStepData($currentStep, $text);
             

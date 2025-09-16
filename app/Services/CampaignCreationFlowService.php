@@ -166,25 +166,8 @@ class CampaignCreationFlowService
 
     private function getFanpageMessage(array $data): string
     {
-        $fanpages = $this->getAvailableFanpages($data['ad_account_id'] ?? null);
-        
-        $message = "📱 *Paso 3: Seleccionar Fanpage*\n\n";
-        $message .= "Selecciona la fanpage donde se publicará la campaña:\n\n";
-        
-        if (empty($fanpages)) {
-            return $message . "❌ No hay fanpages disponibles.";
-        }
-        
-        foreach ($fanpages as $index => $page) {
-            $number = $index + 1;
-            $message .= "{$number}. *{$page['page_name']}*\n";
-            $message .= "   ID: `{$page['page_id']}`\n";
-            $message .= "   Categoría: {$page['category']}\n\n";
-        }
-        
-        $message .= "💡 *Escribe el número de la fanpage que deseas usar.*";
-
-        return $message;
+        // Usar paginación por defecto (página 1)
+        return $this->getFanpageMessagePaginated(1);
     }
 
     private function getCampaignNameMessage(): string
@@ -744,5 +727,64 @@ class CampaignCreationFlowService
         }
         
         return $formatted;
+    }
+
+    /**
+     * Obtener fanpages con paginación
+     */
+    public function getFanpagesPaginated(int $page = 1, int $perPage = 20): array
+    {
+        $fanpages = $this->getAvailableFanpages();
+        $total = count($fanpages);
+        $offset = ($page - 1) * $perPage;
+        
+        return [
+            'data' => array_slice($fanpages, $offset, $perPage),
+            'current_page' => $page,
+            'per_page' => $perPage,
+            'total' => $total,
+            'total_pages' => ceil($total / $perPage),
+            'has_next' => $page < ceil($total / $perPage),
+            'has_prev' => $page > 1
+        ];
+    }
+
+    /**
+     * Generar mensaje de fanpages con paginación
+     */
+    public function getFanpageMessagePaginated(int $page = 1): string
+    {
+        $pagination = $this->getFanpagesPaginated($page);
+        $fanpages = $pagination['data'];
+        
+        $message = "📱 *Paso 3: Seleccionar Fanpage*\n\n";
+        $message .= "Selecciona la fanpage donde se publicará la campaña:\n\n";
+        
+        if (empty($fanpages)) {
+            return $message . "❌ No hay fanpages disponibles.";
+        }
+        
+        foreach ($fanpages as $index => $page) {
+            $number = ($pagination['current_page'] - 1) * $pagination['per_page'] + $index + 1;
+            $message .= "{$number}. *{$page['page_name']}*\n";
+            $message .= "   ID: `{$page['page_id']}`\n";
+            $message .= "   Categoría: {$page['category']}\n\n";
+        }
+        
+        // Información de paginación
+        $message .= "📄 *Página {$pagination['current_page']} de {$pagination['total_pages']}*\n";
+        $message .= "📊 *Mostrando " . count($fanpages) . " de {$pagination['total']} fanpages*\n\n";
+        
+        // Navegación
+        if ($pagination['has_prev']) {
+            $message .= "⬅️ *Escribe 'ANTERIOR' para ver la página anterior*\n";
+        }
+        if ($pagination['has_next']) {
+            $message .= "➡️ *Escribe 'SIGUIENTE' para ver la página siguiente*\n";
+        }
+        
+        $message .= "💡 *O escribe el número de la fanpage que deseas usar.*";
+
+        return $message;
     }
 }
