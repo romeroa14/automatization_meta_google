@@ -511,6 +511,38 @@ class CampaignCreationFlowService
         $result = ['valid' => false, 'data' => null, 'error' => null];
         
         switch ($step) {
+            case 'start':
+                // Para el paso start, solo aceptamos "SÍ" o "CANCELAR"
+                if (strtoupper($input) === 'SÍ' || strtoupper($input) === 'SI') {
+                    $result['valid'] = true;
+                    $result['data'] = 'confirmed';
+                } else {
+                    $result['error'] = 'Escribe "SÍ" para continuar o "CANCELAR" para salir';
+                }
+                break;
+                
+            case 'ad_account':
+                // Validar selección de cuenta publicitaria
+                $input = trim($input);
+                if (is_numeric($input) && intval($input) >= 1) {
+                    $result['valid'] = true;
+                    $result['data'] = intval($input);
+                } else {
+                    $result['error'] = 'Selecciona un número válido de la lista';
+                }
+                break;
+                
+            case 'fanpage':
+                // Validar selección de fanpage
+                $input = trim($input);
+                if (is_numeric($input) && intval($input) >= 1) {
+                    $result['valid'] = true;
+                    $result['data'] = intval($input);
+                } else {
+                    $result['error'] = 'Selecciona un número válido de la lista';
+                }
+                break;
+                
             case 'campaign_name':
                 if (strlen(trim($input)) >= 3) {
                     $result['valid'] = true;
@@ -525,7 +557,7 @@ class CampaignCreationFlowService
                     $result['valid'] = true;
                     $result['data'] = strtoupper($input);
                 } else {
-                    $result['error'] = 'Objetivo no válido';
+                    $result['error'] = 'Objetivo no válido. Usa uno de los códigos disponibles';
                 }
                 break;
                 
@@ -534,7 +566,7 @@ class CampaignCreationFlowService
                     $result['valid'] = true;
                     $result['data'] = $input;
                 } else {
-                    $result['error'] = 'Tipo de presupuesto no válido';
+                    $result['error'] = 'Tipo de presupuesto no válido. Escribe "campaign" o "adset"';
                 }
                 break;
                 
@@ -545,6 +577,52 @@ class CampaignCreationFlowService
                     $result['data'] = $budget;
                 } else {
                     $result['error'] = 'El presupuesto debe estar entre $1 y $10,000';
+                }
+                break;
+                
+            case 'dates':
+                // Validar formato de fechas DD/MM/YYYY
+                $dates = explode(' - ', $input);
+                if (count($dates) === 2) {
+                    $startDate = trim($dates[0]);
+                    $endDate = trim($dates[1]);
+                    
+                    if (preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $startDate) && 
+                        preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $endDate)) {
+                        $result['valid'] = true;
+                        $result['data'] = ['start' => $startDate, 'end' => $endDate];
+                    } else {
+                        $result['error'] = 'Formato de fecha inválido. Usa DD/MM/YYYY';
+                    }
+                } else {
+                    $result['error'] = 'Formato inválido. Usa: DD/MM/YYYY - DD/MM/YYYY';
+                }
+                break;
+                
+            case 'audience_type':
+                if (in_array($input, array_keys($this->audienceTypes))) {
+                    $result['valid'] = true;
+                    $result['data'] = $input;
+                } else {
+                    $result['error'] = 'Tipo de audiencia no válido';
+                }
+                break;
+                
+            case 'ad_placement':
+                if (in_array($input, array_keys($this->adPlacements))) {
+                    $result['valid'] = true;
+                    $result['data'] = $input;
+                } else {
+                    $result['error'] = 'Ubicación de anuncios no válida. Escribe "automatic" o "manual"';
+                }
+                break;
+                
+            case 'creative_type':
+                if (in_array($input, array_keys($this->creativeTypes))) {
+                    $result['valid'] = true;
+                    $result['data'] = $input;
+                } else {
+                    $result['error'] = 'Tipo de creativo no válido';
                 }
                 break;
                 
