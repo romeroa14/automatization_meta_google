@@ -168,7 +168,7 @@ class TelegramWebhookController extends Controller
                 $message .= "🔹 *{$plan->name}*\n";
                 $message .= "   Presupuesto diario: \${$plan->daily_budget}\n";
                 $message .= "   Duración: {$plan->duration_days} días\n";
-                $message .= "   Precio: \${$plan->price}\n\n";
+                $message .= "   Precio: \${$plan->client_price}\n\n";
             }
 
             return $this->sendMessage($chatId, $message);
