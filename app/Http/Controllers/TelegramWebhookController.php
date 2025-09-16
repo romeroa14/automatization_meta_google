@@ -222,9 +222,12 @@ class TelegramWebhookController extends Controller
         }
 
         try {
+            // Limpiar el texto para evitar problemas con Markdown
+            $cleanText = $this->cleanMarkdownText($text);
+            
             $response = Http::post("https://api.telegram.org/bot{$botToken}/sendMessage", [
                 'chat_id' => $chatId,
-                'text' => $text,
+                'text' => $cleanText,
                 'parse_mode' => $parseMode,
                 'disable_web_page_preview' => true
             ]);
@@ -238,18 +241,42 @@ class TelegramWebhookController extends Controller
                     ]);
                     return response()->json(['ok' => true]);
                 } else {
-                    Log::error('❌ Error enviando mensaje', ['error' => $data['description']]);
+                    Log::error('❌ Error enviando mensaje', [
+                        'error' => $data['description'],
+                        'response' => $data
+                    ]);
                     return response()->json(['ok' => false, 'error' => $data['description']]);
                 }
             } else {
-                Log::error('❌ Error HTTP enviando mensaje', ['status' => $response->status()]);
+                Log::error('❌ Error HTTP enviando mensaje', [
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
                 return response()->json(['ok' => false, 'error' => 'HTTP error']);
             }
 
         } catch (\Exception $e) {
-            Log::error('❌ Excepción enviando mensaje', ['error' => $e->getMessage()]);
+            Log::error('❌ Excepción enviando mensaje', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json(['ok' => false, 'error' => $e->getMessage()]);
         }
+    }
+    
+    private function cleanMarkdownText($text)
+    {
+        // Escapar caracteres especiales de Markdown que pueden causar problemas
+        $text = str_replace(['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'], 
+                           ['\_', '\*', '\[', '\]', '\(', '\)', '\~', '\`', '\>', '\#', '\+', '\-', '\=', '\|', '\{', '\}', '\.', '\!'], 
+                           $text);
+        
+        // Limitar la longitud del mensaje (máximo 4096 caracteres)
+        if (strlen($text) > 4096) {
+            $text = substr($text, 0, 4093) . '...';
+        }
+        
+        return $text;
     }
 
     private function answerCallbackQuery($queryId, $text = null)
