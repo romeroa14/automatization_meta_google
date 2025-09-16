@@ -263,16 +263,18 @@ class CampaignCreationFlowService
     private function getGeolocationMessage(): string
     {
         $message = "🌍 *Paso 9: Geolocalización*\n\n";
-        $message .= "Especifica las ubicaciones geográficas para tu campaña:\n\n";
-        $message .= "📝 *Formato:*\n";
-        $message .= "• País: Venezuela\n";
-        $message .= "• Ciudades: Caracas, Valencia, Maracaibo\n";
-        $message .= "• Radio: 25 km desde Caracas\n\n";
-        $message .= "📊 *Ejemplos:*\n";
-        $message .= "• País: Venezuela\n";
-        $message .= "• Ciudades: Caracas, Valencia\n";
-        $message .= "• Radio: 50 km desde Maracaibo\n\n";
-        $message .= "💡 *Escribe las ubicaciones geográficas.*";
+        $message .= "Especifica las ubicaciones geográficas para tu campaña.\n\n";
+        $message .= "📝 *Formato requerido para Facebook:*\n";
+        $message .= "• **País:** VE (Venezuela), US (Estados Unidos), ES (España)\n";
+        $message .= "• **Ciudad:** Caracas,VE o Madrid,ES\n";
+        $message .= "• **Región:** Miranda,VE o California,US\n\n";
+        $message .= "💡 *Ejemplos válidos:*\n";
+        $message .= "• VE (todo Venezuela)\n";
+        $message .= "• Caracas,VE (solo Caracas)\n";
+        $message .= "• Miranda,VE (estado Miranda)\n";
+        $message .= "• VE;CO (Venezuela y Colombia)\n";
+        $message .= "• Caracas,VE;Madrid,ES (múltiples ciudades)\n\n";
+        $message .= "💡 *Escribe las ubicaciones en el formato correcto.*";
 
         return $message;
     }
@@ -599,6 +601,25 @@ class CampaignCreationFlowService
                 }
                 break;
                 
+            case 'geolocation':
+                // Validar formato de geolocalización para Facebook
+                $input = trim($input);
+                if (strlen($input) >= 2) {
+                    // Validar formato básico: códigos de país (VE, US, ES) o ciudad,país (Caracas,VE)
+                    if (preg_match('/^[A-Z]{2}$/', $input) || // Código de país (VE, US, ES)
+                        preg_match('/^[A-Za-z\s]+,[A-Z]{2}$/', $input) || // Ciudad,País (Caracas,VE)
+                        preg_match('/^[A-Z]{2};[A-Z]{2}$/', $input) || // Múltiples países (VE;CO)
+                        preg_match('/^[A-Za-z\s]+,[A-Z]{2};[A-Za-z\s]+,[A-Z]{2}$/', $input)) { // Múltiples ciudades
+                        $result['valid'] = true;
+                        $result['data'] = $input;
+                    } else {
+                        $result['error'] = 'Formato de geolocalización inválido. Usa códigos de país (VE, US, ES) o ciudad,país (Caracas,VE)';
+                    }
+                } else {
+                    $result['error'] = 'La geolocalización es requerida y debe tener al menos 2 caracteres';
+                }
+                break;
+                
             case 'audience_type':
                 if (in_array($input, array_keys($this->audienceTypes))) {
                     $result['valid'] = true;
@@ -623,6 +644,42 @@ class CampaignCreationFlowService
                     $result['data'] = $input;
                 } else {
                     $result['error'] = 'Tipo de creativo no válido';
+                }
+                break;
+                
+            case 'creative_content':
+                if (strlen(trim($input)) >= 1) {
+                    $result['valid'] = true;
+                    $result['data'] = trim($input);
+                } else {
+                    $result['error'] = 'El contenido del creativo es requerido';
+                }
+                break;
+                
+            case 'ad_copy':
+                if (strlen(trim($input)) >= 10) {
+                    $result['valid'] = true;
+                    $result['data'] = trim($input);
+                } else {
+                    $result['error'] = 'El copy del anuncio es requerido y debe tener al menos 10 caracteres';
+                }
+                break;
+                
+            case 'conversation_template':
+                if (strlen(trim($input)) >= 1) {
+                    $result['valid'] = true;
+                    $result['data'] = trim($input);
+                } else {
+                    $result['error'] = 'La plantilla de conversación es requerida';
+                }
+                break;
+                
+            case 'review':
+                if (strtoupper($input) === 'CONFIRMAR') {
+                    $result['valid'] = true;
+                    $result['data'] = 'confirmed';
+                } else {
+                    $result['error'] = 'Escribe "CONFIRMAR" para crear la campaña o "EDITAR" para modificar algo';
                 }
                 break;
                 

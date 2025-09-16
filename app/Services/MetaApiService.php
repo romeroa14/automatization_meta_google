@@ -62,7 +62,7 @@ class MetaApiService
             $response = Http::get("{$this->baseUrl}/me/accounts", [
                 'access_token' => $facebookAccount->access_token,
                 'fields' => 'id,name,category,access_token,tasks',
-                'limit' => 100
+                'limit' => 1000  // Aumentar límite para obtener todas las fanpages
             ]);
 
             if ($response->successful()) {
