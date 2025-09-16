@@ -142,15 +142,21 @@ class CampaignCreationFlowService
 
     private function getAdAccountMessage(): string
     {
-        $accounts = $this->getAvailableAdAccounts();
+        $accounts = $this->getAvailableFacebookAccounts();
         
         $message = "💰 *Paso 2: Seleccionar Cuenta Publicitaria*\n\n";
         $message .= "Selecciona la cuenta publicitaria donde se creará la campaña:\n\n";
         
+        if (empty($accounts)) {
+            return $message . "❌ No hay cuentas publicitarias activas disponibles.";
+        }
+        
         foreach ($accounts as $index => $account) {
-            $message .= "{$index}. *{$account['name']}*\n";
-            $message .= "   ID: `{$account['id']}`\n";
-            $message .= "   Moneda: {$account['currency']}\n\n";
+            $number = $index + 1;
+            $message .= "{$number}. *{$account['account_name']}*\n";
+            $message .= "   ID: `{$account['app_id']}`\n";
+            $message .= "   Moneda: {$account['currency']}\n";
+            $message .= "   Estado: {$account['status']}\n\n";
         }
         
         $message .= "💡 *Escribe el número de la cuenta que deseas usar.*";
@@ -165,9 +171,14 @@ class CampaignCreationFlowService
         $message = "📱 *Paso 3: Seleccionar Fanpage*\n\n";
         $message .= "Selecciona la fanpage donde se publicará la campaña:\n\n";
         
+        if (empty($fanpages)) {
+            return $message . "❌ No hay fanpages disponibles.";
+        }
+        
         foreach ($fanpages as $index => $page) {
-            $message .= "{$index}. *{$page['name']}*\n";
-            $message .= "   ID: `{$page['id']}`\n";
+            $number = $index + 1;
+            $message .= "{$number}. *{$page['page_name']}*\n";
+            $message .= "   ID: `{$page['page_id']}`\n";
             $message .= "   Categoría: {$page['category']}\n\n";
         }
         
@@ -476,18 +487,7 @@ class CampaignCreationFlowService
         ];
     }
 
-    private function getAvailableFanpages(?string $adAccountId = null): array
-    {
-        // Aquí obtendríamos las fanpages reales de Meta API
-        // Por ahora retornamos datos de ejemplo
-        return [
-            [
-                'id' => '123456789',
-                'name' => 'ADMETRICAS.COM',
-                'category' => 'Business'
-            ]
-        ];
-    }
+    
 
     public function getSteps(): array
     {
@@ -632,5 +632,60 @@ class CampaignCreationFlowService
         }
         
         return $result;
+    }
+
+    public function getAvailableFacebookAccounts(): array
+    {
+        // Obtener cuentas reales de la API de Meta
+        $facebookAccount = \App\Models\FacebookAccount::where('is_active', true)->first();
+        
+        if (!$facebookAccount) {
+            return [];
+        }
+        
+        $metaService = new \App\Services\MetaApiService();
+        $adAccounts = $metaService->getAdAccounts($facebookAccount);
+        
+        // Formatear para el flujo
+        $formatted = [];
+        foreach ($adAccounts as $index => $account) {
+            $formatted[] = [
+                'id' => $index + 1,
+                'account_name' => $account['name'],
+                'app_id' => $account['id'],
+                'access_token' => $facebookAccount->access_token,
+                'currency' => $account['currency'],
+                'status' => $account['status']
+            ];
+        }
+        
+        return $formatted;
+    }
+
+    public function getAvailableFanpages(?int $adAccountId = null): array
+    {
+        // Obtener fanpages reales de la API de Meta
+        $facebookAccount = \App\Models\FacebookAccount::where('is_active', true)->first();
+        
+        if (!$facebookAccount) {
+            return [];
+        }
+        
+        $metaService = new \App\Services\MetaApiService();
+        $pages = $metaService->getPages($facebookAccount);
+        
+        // Formatear para el flujo
+        $formatted = [];
+        foreach ($pages as $index => $page) {
+            $formatted[] = [
+                'id' => $index + 1,
+                'page_name' => $page['name'],
+                'page_id' => $page['id'],
+                'category' => $page['category'],
+                'access_token' => $page['access_token']
+            ];
+        }
+        
+        return $formatted;
     }
 }
