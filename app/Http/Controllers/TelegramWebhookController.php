@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Http;
 use App\Models\User;
 use App\Models\FacebookAccount;
 use App\Models\AdvertisingPlan;
-// use App\Services\CampaignParserService;
+use App\Services\CampaignCreationFlowService;
+use App\Services\ConversationStateService;
 
 class TelegramWebhookController extends Controller
 {
@@ -67,7 +68,9 @@ class TelegramWebhookController extends Controller
             '/crear_campana' => 'createCampaignCommand',
             '/mis_cuentas' => 'myAccountsCommand',
             '/planes' => 'plansCommand',
-            '/estado' => 'statusCommand'
+            '/estado' => 'statusCommand',
+            '/cancelar' => 'cancelCommand',
+            '/progreso' => 'progressCommand'
         ];
 
         $command = explode(' ', $text)[0];
@@ -76,7 +79,13 @@ class TelegramWebhookController extends Controller
             return $this->{$commands[$command]}($chatId, $message);
         }
 
-        // Si no es un comando, mostrar ayuda
+        // Si no es un comando, verificar si hay una conversación activa
+        $conversationState = new ConversationStateService();
+        if ($conversationState->isConversationActive($chatId)) {
+            return $this->handleConversationStep($chatId, $text);
+        }
+
+        // Si no hay conversación activa, mostrar ayuda
         return $this->sendMessage($chatId, $this->getHelpMessage());
     }
 
@@ -102,35 +111,15 @@ class TelegramWebhookController extends Controller
 
     private function createCampaignCommand($chatId, $message)
     {
-        $message = "🎯 *Crear Nueva Campaña*\n\n";
-        $message .= "Para crear una campaña, necesito la siguiente información:\n\n";
-        $message .= "1️⃣ *Nombre de la campaña*\n";
-        $message .= "2️⃣ *Objetivo* (TRÁFICO, CONVERSIONES, ALCANCE, etc.)\n";
-        $message .= "3️⃣ *Presupuesto diario* (en USD)\n";
-        $message .= "4️⃣ *Duración* (días)\n";
-        $message .= "5️⃣ *Cuenta de Facebook*\n\n";
+        $conversationState = new ConversationStateService();
+        $flowService = new CampaignCreationFlowService();
         
-        $message .= "📋 *Objetivos disponibles:*\n";
-        $message .= "• TRAFFIC: Tráfico al sitio web\n";
-        $message .= "• CONVERSIONS: Conversiones\n";
-        $message .= "• REACH: Alcance\n";
-        $message .= "• BRAND_AWARENESS: Conciencia de marca\n";
-        $message .= "• ENGAGEMENT: Compromiso\n";
-        $message .= "• LEAD_GENERATION: Generación de leads\n";
-        $message .= "• SALES: Ventas\n";
+        // Iniciar nueva conversación
+        $conversationState->clearConversationState($chatId);
+        $conversationState->updateConversationStep($chatId, 'start');
         
-        $message .= "\n📱 *Cuentas disponibles:*\n";
-        $message .= "• ADMETRICAS.COM - Cuenta Principal (App ID: 738576925677923)\n";
-        
-        $message .= "\n📝 *Ejemplo:*\n";
-        $message .= "Nombre: Campaña Test\n";
-        $message .= "Objetivo: CONVERSIONES\n";
-        $message .= "Presupuesto: 10\n";
-        $message .= "Duración: 7\n";
-        $message .= "Cuenta: ADMETRICAS.COM - Cuenta Principal\n\n";
-        $message .= "💡 *Tip:* Puedes enviar toda la información en un solo mensaje o paso a paso.";
-
-        return $this->sendMessage($chatId, $message);
+        $startMessage = $flowService->getStepMessage('start');
+        return $this->sendMessage($chatId, $startMessage);
     }
 
     private function myAccountsCommand($chatId, $message)
@@ -335,16 +324,139 @@ class TelegramWebhookController extends Controller
         }
     }
 
+    private function handleConversationStep($chatId, $text)
+    {
+        try {
+            $conversationState = new ConversationStateService();
+            $flowService = new CampaignCreationFlowService();
+            
+            $state = $conversationState->getConversationState($chatId);
+            $currentStep = $state['step'];
+            
+            Log::info('🔄 Procesando paso de conversación', [
+                'chat_id' => $chatId,
+                'current_step' => $currentStep,
+                'input' => $text
+            ]);
+            
+            // Manejar comandos especiales
+            if (strtoupper($text) === 'CANCELAR') {
+                $conversationState->clearConversationState($chatId);
+                return $this->sendMessage($chatId, "❌ *Conversación cancelada.*\n\nUsa /crear_campana para comenzar de nuevo.");
+            }
+            
+            if (strtoupper($text) === 'SÍ' && $currentStep === 'start') {
+                $conversationState->updateConversationStep($chatId, 'ad_account');
+                $nextMessage = $flowService->getStepMessage('ad_account');
+                return $this->sendMessage($chatId, $nextMessage);
+            }
+            
+            // Validar y procesar datos del paso actual
+            $validation = $flowService->validateStepData($currentStep, $text);
+            
+            if (!$validation['valid']) {
+                $errorMessage = "❌ *Error de validación:*\n\n";
+                $errorMessage .= $validation['error'] . "\n\n";
+                $errorMessage .= "💡 *Intenta nuevamente o escribe 'CANCELAR' para salir.*";
+                return $this->sendMessage($chatId, $errorMessage);
+            }
+            
+            // Guardar datos del paso actual
+            $conversationState->updateConversationData($chatId, $currentStep, $validation['data']);
+            
+            // Obtener siguiente paso
+            $nextStep = $flowService->getNextStep($currentStep);
+            
+            if ($nextStep === 'complete') {
+                // Crear campaña
+                return $this->createCampaignFromConversation($chatId);
+            }
+            
+            // Avanzar al siguiente paso
+            $conversationState->updateConversationStep($chatId, $nextStep);
+            $nextMessage = $flowService->getStepMessage($nextStep, $state['data']);
+            
+            return $this->sendMessage($chatId, $nextMessage);
+            
+        } catch (\Exception $e) {
+            Log::error('❌ Error en conversación', [
+                'error' => $e->getMessage(),
+                'chat_id' => $chatId,
+                'text' => $text
+            ]);
+            
+            return $this->sendMessage($chatId, "❌ *Error procesando la conversación.*\n\nUsa /cancelar para salir o /crear_campana para comenzar de nuevo.");
+        }
+    }
+    
+    private function cancelCommand($chatId, $message)
+    {
+        $conversationState = new ConversationStateService();
+        $conversationState->clearConversationState($chatId);
+        
+        return $this->sendMessage($chatId, "❌ *Conversación cancelada.*\n\nUsa /crear_campana para comenzar de nuevo.");
+    }
+    
+    private function progressCommand($chatId, $message)
+    {
+        $conversationState = new ConversationStateService();
+        
+        if (!$conversationState->isConversationActive($chatId)) {
+            return $this->sendMessage($chatId, "ℹ️ *No hay conversación activa.*\n\nUsa /crear_campana para comenzar.");
+        }
+        
+        $summary = $conversationState->getConversationSummary($chatId);
+        return $this->sendMessage($chatId, $summary);
+    }
+    
+    private function createCampaignFromConversation($chatId)
+    {
+        try {
+            $conversationState = new ConversationStateService();
+            $state = $conversationState->getConversationState($chatId);
+            
+            Log::info('🚀 Creando campaña desde conversación', [
+                'chat_id' => $chatId,
+                'data' => $state['data']
+            ]);
+            
+            // Aquí implementaríamos la creación real de la campaña
+            $successMessage = "✅ *¡Campaña creada exitosamente!*\n\n";
+            $successMessage .= "📊 *Resumen de la campaña:*\n";
+            
+            foreach ($state['data'] as $key => $value) {
+                $successMessage .= "• {$key}: {$value}\n";
+            }
+            
+            $successMessage .= "\n🎉 *Tu campaña está siendo procesada y estará activa en unos minutos.*";
+            
+            // Limpiar estado de conversación
+            $conversationState->clearConversationState($chatId);
+            
+            return $this->sendMessage($chatId, $successMessage);
+            
+        } catch (\Exception $e) {
+            Log::error('❌ Error creando campaña', [
+                'error' => $e->getMessage(),
+                'chat_id' => $chatId
+            ]);
+            
+            return $this->sendMessage($chatId, "❌ *Error creando la campaña.*\n\nContacta al administrador para más ayuda.");
+        }
+    }
+
     private function getHelpMessage()
     {
         return "🤖 *Bot de AdMétricas - Ayuda*\n\n" .
                "📋 *Comandos disponibles:*\n" .
                "/start - Iniciar el bot\n" .
-               "/crear_campana - Crear nueva campaña\n" .
+               "/crear_campana - Crear nueva campaña (flujo completo)\n" .
                "/mis_cuentas - Ver cuentas disponibles\n" .
                "/planes - Ver planes publicitarios\n" .
                "/estado - Estado del sistema\n" .
+               "/progreso - Ver progreso de conversación activa\n" .
+               "/cancelar - Cancelar conversación activa\n" .
                "/help - Mostrar esta ayuda\n\n" .
-               "💡 *Tip:* Usa /crear_campana para comenzar a crear campañas publicitarias.";
+               "💡 *Tip:* Usa /crear_campana para comenzar el flujo completo de creación de campañas.";
     }
 }

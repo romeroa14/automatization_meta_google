@@ -1,0 +1,558 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\FacebookAccount;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
+
+class CampaignCreationFlowService
+{
+    protected array $steps = [
+        'start' => 'Iniciar creación de campaña',
+        'ad_account' => 'Seleccionar cuenta publicitaria',
+        'fanpage' => 'Seleccionar fanpage',
+        'campaign_name' => 'Nombre de la campaña',
+        'campaign_objective' => 'Objetivo de la campaña',
+        'budget_type' => 'Tipo de presupuesto',
+        'daily_budget' => 'Presupuesto diario',
+        'dates' => 'Fechas de la campaña',
+        'geolocation' => 'Geolocalización',
+        'audience_type' => 'Tipo de audiencia',
+        'audience_details' => 'Detalles de la audiencia',
+        'ad_placement' => 'Ubicación de anuncios',
+        'ad_name' => 'Nombre del anuncio',
+        'creative_type' => 'Tipo de creativo',
+        'creative_content' => 'Contenido del creativo',
+        'ad_copy' => 'Copy del anuncio',
+        'conversation_template' => 'Plantilla de conversación',
+        'review' => 'Revisar y confirmar',
+        'create' => 'Crear campaña'
+    ];
+
+    protected array $campaignObjectives = [
+        'TRAFFIC' => 'Tráfico al sitio web',
+        'CONVERSIONS' => 'Conversiones',
+        'REACH' => 'Alcance',
+        'BRAND_AWARENESS' => 'Conciencia de marca',
+        'ENGAGEMENT' => 'Compromiso',
+        'LEAD_GENERATION' => 'Generación de leads',
+        'SALES' => 'Ventas',
+        'MESSAGES' => 'Mensajes',
+        'APP_INSTALLS' => 'Instalaciones de app',
+        'VIDEO_VIEWS' => 'Visualizaciones de video'
+    ];
+
+    protected array $budgetTypes = [
+        'campaign' => 'Nivel Campaña',
+        'adset' => 'Nivel Conjunto de Anuncios'
+    ];
+
+    protected array $audienceTypes = [
+        'no_interests' => 'Sin intereses (Audiencia amplia)',
+        'custom' => 'Audiencia personalizada',
+        'lookalike' => 'Audiencia similar',
+        'saved' => 'Audiencia guardada'
+    ];
+
+    protected array $adPlacements = [
+        'automatic' => 'Advantage+ (Automático)',
+        'manual' => 'Ubicación manual'
+    ];
+
+    protected array $creativeTypes = [
+        'new_image' => 'Subir nueva imagen',
+        'new_video' => 'Subir nuevo video',
+        'existing_post' => 'Publicación existente de Instagram',
+        'existing_facebook' => 'Publicación existente de Facebook'
+    ];
+
+    protected array $conversationTemplates = [
+        'welcome' => 'Mensaje de bienvenida',
+        'product_info' => 'Información del producto',
+        'support' => 'Soporte al cliente',
+        'custom' => 'Mensaje personalizado'
+    ];
+
+    public function getStepMessage(string $step, array $data = []): string
+    {
+        switch ($step) {
+            case 'start':
+                return $this->getStartMessage();
+            case 'ad_account':
+                return $this->getAdAccountMessage();
+            case 'fanpage':
+                return $this->getFanpageMessage($data);
+            case 'campaign_name':
+                return $this->getCampaignNameMessage();
+            case 'campaign_objective':
+                return $this->getCampaignObjectiveMessage();
+            case 'budget_type':
+                return $this->getBudgetTypeMessage();
+            case 'daily_budget':
+                return $this->getDailyBudgetMessage();
+            case 'dates':
+                return $this->getDatesMessage();
+            case 'geolocation':
+                return $this->getGeolocationMessage();
+            case 'audience_type':
+                return $this->getAudienceTypeMessage();
+            case 'audience_details':
+                return $this->getAudienceDetailsMessage($data);
+            case 'ad_placement':
+                return $this->getAdPlacementMessage();
+            case 'ad_name':
+                return $this->getAdNameMessage();
+            case 'creative_type':
+                return $this->getCreativeTypeMessage();
+            case 'creative_content':
+                return $this->getCreativeContentMessage($data);
+            case 'ad_copy':
+                return $this->getAdCopyMessage();
+            case 'conversation_template':
+                return $this->getConversationTemplateMessage();
+            case 'review':
+                return $this->getReviewMessage($data);
+            default:
+                return "❌ Paso no reconocido: {$step}";
+        }
+    }
+
+    private function getStartMessage(): string
+    {
+        $message = "🎯 *Crear Nueva Campaña - Paso 1*\n\n";
+        $message .= "Vamos a crear una campaña publicitaria paso a paso.\n\n";
+        $message .= "📋 *Información que necesitaremos:*\n";
+        $message .= "• Cuenta publicitaria\n";
+        $message .= "• Fanpage de destino\n";
+        $message .= "• Nombre de la campaña\n";
+        $message .= "• Objetivo de la campaña\n";
+        $message .= "• Tipo de presupuesto\n";
+        $message .= "• Presupuesto diario\n";
+        $message .= "• Fechas de la campaña\n";
+        $message .= "• Geolocalización\n";
+        $message .= "• Configuración de audiencia\n";
+        $message .= "• Ubicación de anuncios\n";
+        $message .= "• Creativos y copy\n\n";
+        $message .= "🚀 *¿Estás listo para comenzar?*\n";
+        $message .= "Escribe 'SÍ' para continuar o 'CANCELAR' para salir.";
+
+        return $message;
+    }
+
+    private function getAdAccountMessage(): string
+    {
+        $accounts = $this->getAvailableAdAccounts();
+        
+        $message = "💰 *Paso 2: Seleccionar Cuenta Publicitaria*\n\n";
+        $message .= "Selecciona la cuenta publicitaria donde se creará la campaña:\n\n";
+        
+        foreach ($accounts as $index => $account) {
+            $message .= "{$index}. *{$account['name']}*\n";
+            $message .= "   ID: `{$account['id']}`\n";
+            $message .= "   Moneda: {$account['currency']}\n\n";
+        }
+        
+        $message .= "💡 *Escribe el número de la cuenta que deseas usar.*";
+
+        return $message;
+    }
+
+    private function getFanpageMessage(array $data): string
+    {
+        $fanpages = $this->getAvailableFanpages($data['ad_account_id'] ?? null);
+        
+        $message = "📱 *Paso 3: Seleccionar Fanpage*\n\n";
+        $message .= "Selecciona la fanpage donde se publicará la campaña:\n\n";
+        
+        foreach ($fanpages as $index => $page) {
+            $message .= "{$index}. *{$page['name']}*\n";
+            $message .= "   ID: `{$page['id']}`\n";
+            $message .= "   Categoría: {$page['category']}\n\n";
+        }
+        
+        $message .= "💡 *Escribe el número de la fanpage que deseas usar.*";
+
+        return $message;
+    }
+
+    private function getCampaignNameMessage(): string
+    {
+        $message = "🏷️ *Paso 4: Nombre de la Campaña*\n\n";
+        $message .= "Escribe el nombre que tendrá tu campaña:\n\n";
+        $message .= "📝 *Ejemplos:*\n";
+        $message .= "• Campaña Verano 2025\n";
+        $message .= "• Promoción Producto X\n";
+        $message .= "• Black Friday 2025\n\n";
+        $message .= "💡 *Escribe el nombre de tu campaña.*";
+
+        return $message;
+    }
+
+    private function getCampaignObjectiveMessage(): string
+    {
+        $message = "🎯 *Paso 5: Objetivo de la Campaña*\n\n";
+        $message .= "Selecciona el objetivo principal de tu campaña:\n\n";
+        
+        foreach ($this->campaignObjectives as $key => $description) {
+            $message .= "• *{$key}*: {$description}\n";
+        }
+        
+        $message .= "\n💡 *Escribe el código del objetivo (ej: CONVERSIONS).*";
+
+        return $message;
+    }
+
+    private function getBudgetTypeMessage(): string
+    {
+        $message = "💰 *Paso 6: Tipo de Presupuesto*\n\n";
+        $message .= "Selecciona dónde se configurará el presupuesto:\n\n";
+        
+        foreach ($this->budgetTypes as $key => $description) {
+            $message .= "• *{$key}*: {$description}\n";
+        }
+        
+        $message .= "\n📊 *Explicación:*\n";
+        $message .= "• *Campaña*: El presupuesto se distribuye entre todos los conjuntos de anuncios\n";
+        $message .= "• *Conjunto*: Cada conjunto de anuncios tiene su propio presupuesto\n\n";
+        $message .= "💡 *Escribe 'campaign' o 'adset'.*";
+
+        return $message;
+    }
+
+    private function getDailyBudgetMessage(): string
+    {
+        $message = "💵 *Paso 7: Presupuesto Diario*\n\n";
+        $message .= "Escribe el presupuesto diario en USD:\n\n";
+        $message .= "📊 *Ejemplos:*\n";
+        $message .= "• 10 (para $10 USD por día)\n";
+        $message .= "• 25.50 (para $25.50 USD por día)\n";
+        $message .= "• 100 (para $100 USD por día)\n\n";
+        $message .= "⚠️ *Nota:* El presupuesto mínimo es $1 USD por día.\n\n";
+        $message .= "💡 *Escribe el monto del presupuesto diario.*";
+
+        return $message;
+    }
+
+    private function getDatesMessage(): string
+    {
+        $message = "📅 *Paso 8: Fechas de la Campaña*\n\n";
+        $message .= "Especifica las fechas de inicio y fin de tu campaña:\n\n";
+        $message .= "📝 *Formato:*\n";
+        $message .= "• Fecha inicio: DD/MM/YYYY\n";
+        $message .= "• Fecha fin: DD/MM/YYYY\n\n";
+        $message .= "📊 *Ejemplos:*\n";
+        $message .= "• Inicio: 20/09/2025\n";
+        $message .= "• Fin: 30/09/2025\n\n";
+        $message .= "💡 *Escribe las fechas en el formato indicado.*";
+
+        return $message;
+    }
+
+    private function getGeolocationMessage(): string
+    {
+        $message = "🌍 *Paso 9: Geolocalización*\n\n";
+        $message .= "Especifica las ubicaciones geográficas para tu campaña:\n\n";
+        $message .= "📝 *Formato:*\n";
+        $message .= "• País: Venezuela\n";
+        $message .= "• Ciudades: Caracas, Valencia, Maracaibo\n";
+        $message .= "• Radio: 25 km desde Caracas\n\n";
+        $message .= "📊 *Ejemplos:*\n";
+        $message .= "• País: Venezuela\n";
+        $message .= "• Ciudades: Caracas, Valencia\n";
+        $message .= "• Radio: 50 km desde Maracaibo\n\n";
+        $message .= "💡 *Escribe las ubicaciones geográficas.*";
+
+        return $message;
+    }
+
+    private function getAudienceTypeMessage(): string
+    {
+        $message = "👥 *Paso 10: Tipo de Audiencia*\n\n";
+        $message .= "Selecciona el tipo de audiencia para tu campaña:\n\n";
+        
+        foreach ($this->audienceTypes as $key => $description) {
+            $message .= "• *{$key}*: {$description}\n";
+        }
+        
+        $message .= "\n📊 *Explicación:*\n";
+        $message .= "• *Sin intereses*: Audiencia amplia, menos segmentada\n";
+        $message .= "• *Personalizada*: Define intereses, demografía, etc.\n";
+        $message .= "• *Similar*: Basada en audiencia existente\n";
+        $message .= "• *Guardada*: Audiencia previamente creada\n\n";
+        $message .= "💡 *Escribe el tipo de audiencia que deseas usar.*";
+
+        return $message;
+    }
+
+    private function getAudienceDetailsMessage(array $data): string
+    {
+        $audienceType = $data['audience_type'] ?? 'custom';
+        
+        $message = "🎯 *Paso 11: Detalles de la Audiencia*\n\n";
+        
+        switch ($audienceType) {
+            case 'no_interests':
+                $message .= "Configuración para audiencia amplia:\n\n";
+                $message .= "📝 *Especifica:*\n";
+                $message .= "• Edad mínima: 18\n";
+                $message .= "• Edad máxima: 65\n";
+                $message .= "• Género: Todos\n\n";
+                break;
+                
+            case 'custom':
+                $message .= "Configuración para audiencia personalizada:\n\n";
+                $message .= "📝 *Especifica:*\n";
+                $message .= "• Edad: 25-45\n";
+                $message .= "• Género: Mujeres\n";
+                $message .= "• Intereses: Moda, Belleza, Lifestyle\n";
+                $message .= "• Comportamientos: Compradores online\n\n";
+                break;
+                
+            case 'lookalike':
+                $message .= "Configuración para audiencia similar:\n\n";
+                $message .= "📝 *Especifica:*\n";
+                $message .= "• Audiencia fuente: ID de audiencia\n";
+                $message .= "• Similitud: 1% (más similar) o 10% (más amplia)\n\n";
+                break;
+        }
+        
+        $message .= "💡 *Escribe los detalles de la audiencia.*";
+
+        return $message;
+    }
+
+    private function getAdPlacementMessage(): string
+    {
+        $message = "📍 *Paso 12: Ubicación de Anuncios*\n\n";
+        $message .= "Selecciona dónde aparecerán tus anuncios:\n\n";
+        
+        foreach ($this->adPlacements as $key => $description) {
+            $message .= "• *{$key}*: {$description}\n";
+        }
+        
+        $message .= "\n📊 *Explicación:*\n";
+        $message .= "• *Advantage+*: Meta optimiza automáticamente\n";
+        $message .= "• *Manual*: Tú eliges las ubicaciones específicas\n\n";
+        $message .= "💡 *Escribe 'automatic' o 'manual'.*";
+
+        return $message;
+    }
+
+    private function getAdNameMessage(): string
+    {
+        $message = "🏷️ *Paso 13: Nombre del Anuncio*\n\n";
+        $message .= "Escribe el nombre que tendrá tu anuncio:\n\n";
+        $message .= "📝 *Ejemplos:*\n";
+        $message .= "• Anuncio Principal\n";
+        $message .= "• Promoción Verano\n";
+        $message .= "• Oferta Especial\n\n";
+        $message .= "💡 *Escribe el nombre de tu anuncio.*";
+
+        return $message;
+    }
+
+    private function getCreativeTypeMessage(): string
+    {
+        $message = "🎨 *Paso 14: Tipo de Creativo*\n\n";
+        $message .= "Selecciona el tipo de creativo para tu anuncio:\n\n";
+        
+        foreach ($this->creativeTypes as $key => $description) {
+            $message .= "• *{$key}*: {$description}\n";
+        }
+        
+        $message .= "\n💡 *Escribe el tipo de creativo que deseas usar.*";
+
+        return $message;
+    }
+
+    private function getCreativeContentMessage(array $data): string
+    {
+        $creativeType = $data['creative_type'] ?? 'new_image';
+        
+        $message = "📸 *Paso 15: Contenido del Creativo*\n\n";
+        
+        switch ($creativeType) {
+            case 'new_image':
+                $message .= "Sube una nueva imagen:\n\n";
+                $message .= "📝 *Especificaciones:*\n";
+                $message .= "• Formato: JPG, PNG\n";
+                $message .= "• Tamaño: 1080x1080px (recomendado)\n";
+                $message .= "• Peso: Máximo 30MB\n\n";
+                $message .= "💡 *Sube la imagen o escribe 'SALTAR' para continuar.*";
+                break;
+                
+            case 'new_video':
+                $message .= "Sube un nuevo video:\n\n";
+                $message .= "📝 *Especificaciones:*\n";
+                $message .= "• Formato: MP4, MOV\n";
+                $message .= "• Duración: 15 segundos - 2 minutos\n";
+                $message .= "• Peso: Máximo 4GB\n\n";
+                $message .= "💡 *Sube el video o escribe 'SALTAR' para continuar.*";
+                break;
+                
+            case 'existing_post':
+                $message .= "Selecciona una publicación existente de Instagram:\n\n";
+                $message .= "📝 *Escribe:*\n";
+                $message .= "• URL de la publicación de Instagram\n";
+                $message .= "• O ID de la publicación\n\n";
+                $message .= "💡 *Proporciona la URL o ID de la publicación.*";
+                break;
+                
+            case 'existing_facebook':
+                $message .= "Selecciona una publicación existente de Facebook:\n\n";
+                $message .= "📝 *Escribe:*\n";
+                $message .= "• URL de la publicación de Facebook\n";
+                $message .= "• O ID de la publicación\n\n";
+                $message .= "💡 *Proporciona la URL o ID de la publicación.*";
+                break;
+        }
+
+        return $message;
+    }
+
+    private function getAdCopyMessage(): string
+    {
+        $message = "✍️ *Paso 16: Copy del Anuncio*\n\n";
+        $message .= "Escribe el texto que aparecerá en tu anuncio:\n\n";
+        $message .= "📝 *Ejemplos:*\n";
+        $message .= "• ¡Oferta especial! 50% de descuento\n";
+        $message .= "• Descubre nuestra nueva colección\n";
+        $message .= "• Envío gratis en compras superiores a $50\n\n";
+        $message .= "💡 *Escribe el copy de tu anuncio.*";
+
+        return $message;
+    }
+
+    private function getConversationTemplateMessage(): string
+    {
+        $message = "💬 *Paso 17: Plantilla de Conversación*\n\n";
+        $message .= "Si tu objetivo es generar mensajes, selecciona la plantilla:\n\n";
+        
+        foreach ($this->conversationTemplates as $key => $description) {
+            $message .= "• *{$key}*: {$description}\n";
+        }
+        
+        $message .= "\n💡 *Escribe el tipo de plantilla o 'SALTAR' si no aplica.*";
+
+        return $message;
+    }
+
+    private function getReviewMessage(array $data): string
+    {
+        $message = "📋 *Revisión Final - Paso 18*\n\n";
+        $message .= "Revisa todos los datos de tu campaña:\n\n";
+        
+        $message .= "💰 *Cuenta Publicitaria:* " . ($data['ad_account_name'] ?? 'No especificada') . "\n";
+        $message .= "📱 *Fanpage:* " . ($data['fanpage_name'] ?? 'No especificada') . "\n";
+        $message .= "🏷️ *Nombre Campaña:* " . ($data['campaign_name'] ?? 'No especificado') . "\n";
+        $message .= "🎯 *Objetivo:* " . ($data['campaign_objective'] ?? 'No especificado') . "\n";
+        $message .= "💰 *Tipo Presupuesto:* " . ($data['budget_type'] ?? 'No especificado') . "\n";
+        $message .= "💵 *Presupuesto Diario:* $" . ($data['daily_budget'] ?? 'No especificado') . "\n";
+        $message .= "📅 *Fechas:* " . ($data['start_date'] ?? 'No especificada') . " - " . ($data['end_date'] ?? 'No especificada') . "\n";
+        $message .= "🌍 *Geolocalización:* " . ($data['geolocation'] ?? 'No especificada') . "\n";
+        $message .= "👥 *Audiencia:* " . ($data['audience_type'] ?? 'No especificada') . "\n";
+        $message .= "📍 *Ubicación Anuncios:* " . ($data['ad_placement'] ?? 'No especificada') . "\n";
+        $message .= "🏷️ *Nombre Anuncio:* " . ($data['ad_name'] ?? 'No especificado') . "\n";
+        $message .= "🎨 *Tipo Creativo:* " . ($data['creative_type'] ?? 'No especificado') . "\n";
+        $message .= "✍️ *Copy:* " . ($data['ad_copy'] ?? 'No especificado') . "\n\n";
+        
+        $message .= "✅ *¿Todo está correcto?*\n";
+        $message .= "Escribe 'CONFIRMAR' para crear la campaña o 'EDITAR' para modificar algo.";
+
+        return $message;
+    }
+
+    private function getAvailableAdAccounts(): array
+    {
+        // Aquí obtendríamos las cuentas publicitarias reales de Meta API
+        // Por ahora retornamos datos de ejemplo
+        return [
+            [
+                'id' => 'act_123456789',
+                'name' => 'ADMETRICAS.COM - Cuenta Principal',
+                'currency' => 'USD'
+            ]
+        ];
+    }
+
+    private function getAvailableFanpages(?string $adAccountId = null): array
+    {
+        // Aquí obtendríamos las fanpages reales de Meta API
+        // Por ahora retornamos datos de ejemplo
+        return [
+            [
+                'id' => '123456789',
+                'name' => 'ADMETRICAS.COM',
+                'category' => 'Business'
+            ]
+        ];
+    }
+
+    public function getSteps(): array
+    {
+        return $this->steps;
+    }
+
+    public function getNextStep(string $currentStep): string
+    {
+        $steps = array_keys($this->steps);
+        $currentIndex = array_search($currentStep, $steps);
+        
+        if ($currentIndex !== false && $currentIndex < count($steps) - 1) {
+            return $steps[$currentIndex + 1];
+        }
+        
+        return 'complete';
+    }
+
+    public function validateStepData(string $step, string $input): array
+    {
+        $result = ['valid' => false, 'data' => null, 'error' => null];
+        
+        switch ($step) {
+            case 'campaign_name':
+                if (strlen(trim($input)) >= 3) {
+                    $result['valid'] = true;
+                    $result['data'] = trim($input);
+                } else {
+                    $result['error'] = 'El nombre debe tener al menos 3 caracteres';
+                }
+                break;
+                
+            case 'campaign_objective':
+                if (array_key_exists(strtoupper($input), $this->campaignObjectives)) {
+                    $result['valid'] = true;
+                    $result['data'] = strtoupper($input);
+                } else {
+                    $result['error'] = 'Objetivo no válido';
+                }
+                break;
+                
+            case 'budget_type':
+                if (in_array($input, array_keys($this->budgetTypes))) {
+                    $result['valid'] = true;
+                    $result['data'] = $input;
+                } else {
+                    $result['error'] = 'Tipo de presupuesto no válido';
+                }
+                break;
+                
+            case 'daily_budget':
+                $budget = floatval($input);
+                if ($budget >= 1 && $budget <= 10000) {
+                    $result['valid'] = true;
+                    $result['data'] = $budget;
+                } else {
+                    $result['error'] = 'El presupuesto debe estar entre $1 y $10,000';
+                }
+                break;
+                
+            default:
+                $result['valid'] = true;
+                $result['data'] = $input;
+        }
+        
+        return $result;
+    }
+}
