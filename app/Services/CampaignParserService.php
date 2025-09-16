@@ -294,8 +294,8 @@ class CampaignParserService
             $errors[] = 'Cuenta de Facebook es requerida';
         } else {
             // Verificar si la cuenta existe en la base de datos
-            $account = FacebookAccount::where('name', 'like', '%' . $data['facebook_account'] . '%')
-                ->orWhere('account_id', 'like', '%' . $data['facebook_account'] . '%')
+            $account = FacebookAccount::where('account_name', 'like', '%' . $data['facebook_account'] . '%')
+                ->orWhere('app_id', 'like', '%' . $data['facebook_account'] . '%')
                 ->first();
             
             if (!$account) {
@@ -329,7 +329,7 @@ class CampaignParserService
     public function getAvailableFacebookAccounts(): array
     {
         return FacebookAccount::where('is_active', true)
-            ->select('id', 'name', 'account_id', 'access_token')
+            ->select('id', 'account_name', 'app_id', 'access_token')
             ->get()
             ->toArray();
     }

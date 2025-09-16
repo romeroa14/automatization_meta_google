@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Http;
 use App\Models\User;
 use App\Models\FacebookAccount;
 use App\Models\AdvertisingPlan;
-use App\Services\CampaignParserService;
+// use App\Services\CampaignParserService;
 
 class TelegramWebhookController extends Controller
 {
@@ -76,8 +76,8 @@ class TelegramWebhookController extends Controller
             return $this->{$commands[$command]}($chatId, $message);
         }
 
-        // Si no es un comando, intentar parsear como datos de campaña
-        return $this->processCampaignData($chatId, $text);
+        // Si no es un comando, mostrar ayuda
+        return $this->sendMessage($chatId, $this->getHelpMessage());
     }
 
     private function startCommand($chatId, $message)
@@ -102,10 +102,6 @@ class TelegramWebhookController extends Controller
 
     private function createCampaignCommand($chatId, $message)
     {
-        $parser = new CampaignParserService();
-        $accounts = $parser->getAvailableFacebookAccounts();
-        $objectives = $parser->getAvailableObjectives();
-
         $message = "🎯 *Crear Nueva Campaña*\n\n";
         $message .= "Para crear una campaña, necesito la siguiente información:\n\n";
         $message .= "1️⃣ *Nombre de la campaña*\n";
@@ -115,21 +111,23 @@ class TelegramWebhookController extends Controller
         $message .= "5️⃣ *Cuenta de Facebook*\n\n";
         
         $message .= "📋 *Objetivos disponibles:*\n";
-        foreach ($objectives as $key => $desc) {
-            $message .= "• {$key}: {$desc}\n";
-        }
+        $message .= "• TRAFFIC: Tráfico al sitio web\n";
+        $message .= "• CONVERSIONS: Conversiones\n";
+        $message .= "• REACH: Alcance\n";
+        $message .= "• BRAND_AWARENESS: Conciencia de marca\n";
+        $message .= "• ENGAGEMENT: Compromiso\n";
+        $message .= "• LEAD_GENERATION: Generación de leads\n";
+        $message .= "• SALES: Ventas\n";
         
         $message .= "\n📱 *Cuentas disponibles:*\n";
-        foreach ($accounts as $account) {
-            $message .= "• {$account['name']} (ID: {$account['account_id']})\n";
-        }
+        $message .= "• ADMETRICAS.COM - Cuenta Principal (App ID: 738576925677923)\n";
         
         $message .= "\n📝 *Ejemplo:*\n";
         $message .= "Nombre: Campaña Test\n";
         $message .= "Objetivo: CONVERSIONES\n";
         $message .= "Presupuesto: 10\n";
         $message .= "Duración: 7\n";
-        $message .= "Cuenta: ads vzla\n\n";
+        $message .= "Cuenta: ADMETRICAS.COM - Cuenta Principal\n\n";
         $message .= "💡 *Tip:* Puedes enviar toda la información en un solo mensaje o paso a paso.";
 
         return $this->sendMessage($chatId, $message);
@@ -146,8 +144,8 @@ class TelegramWebhookController extends Controller
 
             $message = "📱 *Cuentas de Facebook Disponibles:*\n\n";
             foreach ($accounts as $account) {
-                $message .= "🔹 *{$account->name}*\n";
-                $message .= "   ID: `{$account->account_id}`\n";
+                $message .= "🔹 *{$account->account_name}*\n";
+                $message .= "   App ID: `{$account->app_id}`\n";
                 $message .= "   Estado: " . ($account->is_active ? "✅ Activa" : "❌ Inactiva") . "\n\n";
             }
 
@@ -286,55 +284,8 @@ class TelegramWebhookController extends Controller
 
     private function processCampaignData($chatId, $text)
     {
-        try {
-            Log::info('🔍 Procesando datos de campaña', [
-                'chat_id' => $chatId,
-                'text' => $text
-            ]);
-
-            $parser = new CampaignParserService();
-            $campaignData = $parser->parseCampaignData($text);
-
-            // Mostrar resumen de la campaña
-            $summary = $parser->formatCampaignSummary($campaignData);
-            $this->sendMessage($chatId, $summary);
-
-            // Si hay errores, no proceder
-            if (!$campaignData['is_valid']) {
-                $errorMessage = "❌ *No se puede crear la campaña debido a errores:*\n\n";
-                foreach ($campaignData['errors'] as $error) {
-                    $errorMessage .= "• " . $error . "\n";
-                }
-                $errorMessage .= "\n💡 *Corrige los errores y vuelve a enviar los datos.*";
-                return $this->sendMessage($chatId, $errorMessage);
-            }
-
-            // Si hay advertencias, preguntar si continuar
-            if (!empty($campaignData['warnings'])) {
-                $warningMessage = "⚠️ *Advertencias encontradas:*\n\n";
-                foreach ($campaignData['warnings'] as $warning) {
-                    $warningMessage .= "• " . $warning . "\n";
-                }
-                $warningMessage .= "\n¿Deseas continuar con la creación de la campaña?";
-                return $this->sendMessage($chatId, $warningMessage);
-            }
-
-            // Crear la campaña
-            return $this->createCampaign($chatId, $campaignData);
-
-        } catch (\Exception $e) {
-            Log::error('❌ Error procesando datos de campaña', [
-                'error' => $e->getMessage(),
-                'chat_id' => $chatId,
-                'text' => $text
-            ]);
-
-            $errorMessage = "❌ *Error procesando los datos de la campaña:*\n\n";
-            $errorMessage .= "Error: " . $e->getMessage() . "\n\n";
-            $errorMessage .= "💡 *Verifica el formato y vuelve a intentar.*";
-            
-            return $this->sendMessage($chatId, $errorMessage);
-        }
+        // Método temporalmente deshabilitado para evitar errores de base de datos
+        return $this->sendMessage($chatId, "🔧 *Funcionalidad en desarrollo*\n\nPor ahora, usa /crear_campana para ver las instrucciones.");
     }
 
     private function createCampaign($chatId, $campaignData)
