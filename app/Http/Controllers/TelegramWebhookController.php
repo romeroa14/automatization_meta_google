@@ -495,15 +495,58 @@ class TelegramWebhookController extends Controller
                 'data' => $state['data']
             ]);
             
-            // Aquí implementaríamos la creación real de la campaña
-            $successMessage = "✅ *¡Campaña creada exitosamente!*\n\n";
-            $successMessage .= "📊 *Resumen de la campaña:*\n";
+            // Convertir datos de la conversación al formato requerido por MetaCampaignCreatorService
+            $campaignData = $this->convertConversationDataToCampaignData($state['data']);
             
-            foreach ($state['data'] as $key => $value) {
-                $successMessage .= "• {$key}: {$value}\n";
+            // Obtener cuenta de Facebook activa
+            $facebookAccount = \App\Models\FacebookAccount::where('is_active', true)->first();
+            
+            if (!$facebookAccount) {
+                return $this->sendMessage($chatId, "❌ *Error:* No hay cuenta de Facebook activa configurada.");
             }
             
-            $successMessage .= "\n🎉 *Tu campaña está siendo procesada y estará activa en unos minutos.*";
+            // Crear campaña usando el servicio
+            $campaignCreator = new \App\Services\MetaCampaignCreatorService($facebookAccount);
+            $result = $campaignCreator->createCampaign($campaignData);
+            
+            if ($result['success']) {
+                $successMessage = "✅ *¡Campaña creada exitosamente!*\n\n";
+                $successMessage .= "📊 *Detalles de la campaña:*\n";
+                $successMessage .= "• Campaña ID: `{$result['campaign']['id']}`\n";
+                $successMessage .= "• Conjunto de Anuncios ID: `{$result['adset']['id']}`\n";
+                $successMessage .= "• Anuncio ID: `{$result['ad']['id']}`\n";
+                $successMessage .= "• Nombre: {$campaignData['name']}\n";
+                $successMessage .= "• Objetivo: {$campaignData['objective']}\n";
+                $successMessage .= "• Presupuesto Diario: \${$campaignData['daily_budget']}\n";
+                
+                if (!empty($result['warnings'])) {
+                    $successMessage .= "\n⚠️ *Advertencias:*\n";
+                    foreach ($result['warnings'] as $warning) {
+                        $successMessage .= "• {$warning}\n";
+                    }
+                }
+                
+                if ($result['is_development_mode']) {
+                    $successMessage .= "\n💡 *Nota:* App en modo desarrollo. El anuncio se creó como placeholder.";
+                    $successMessage .= "\n📝 *Para crear anuncios reales, necesitas hacer la app pública.*";
+                }
+                
+                $successMessage .= "\n🎉 *Tu campaña está siendo procesada y estará activa en unos minutos.*";
+                
+            } else {
+                $errorMessage = "❌ *Error creando la campaña:*\n\n";
+                if (isset($result['error'])) {
+                    $errorMessage .= "• {$result['error']}\n";
+                }
+                if (!empty($result['errors'])) {
+                    foreach ($result['errors'] as $error) {
+                        $errorMessage .= "• {$error}\n";
+                    }
+                }
+                $errorMessage .= "\n💡 *Usa /crear_campana para intentar nuevamente.*";
+                
+                return $this->sendMessage($chatId, $errorMessage);
+            }
             
             // Limpiar estado de conversación
             $conversationState->clearConversationState($chatId);
@@ -513,11 +556,77 @@ class TelegramWebhookController extends Controller
         } catch (\Exception $e) {
             Log::error('❌ Error creando campaña', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
                 'chat_id' => $chatId
             ]);
             
-            return $this->sendMessage($chatId, "❌ *Error creando la campaña.*\n\nContacta al administrador para más ayuda.");
+            return $this->sendMessage($chatId, "❌ *Error creando la campaña.*\n\nUsa /crear_campana para intentar nuevamente.");
         }
+    }
+
+    /**
+     * Convertir datos de la conversación al formato requerido por MetaCampaignCreatorService
+     */
+    private function convertConversationDataToCampaignData(array $conversationData): array
+    {
+        // Obtener servicios necesarios
+        $flowService = new \App\Services\CampaignCreationFlowService();
+        $metaService = new \App\Services\MetaApiService();
+        
+        // Obtener cuenta de Facebook activa
+        $facebookAccount = \App\Models\FacebookAccount::where('is_active', true)->first();
+        
+        // Obtener cuentas publicitarias y fanpages
+        $adAccounts = $flowService->getAvailableFacebookAccounts();
+        $fanpages = $flowService->getAvailableFanpages();
+        
+        // Mapear IDs a datos reales
+        $selectedAdAccount = $adAccounts[$conversationData['ad_account'] - 1] ?? null;
+        $selectedFanpage = $fanpages[$conversationData['fanpage'] - 1] ?? null;
+        
+        if (!$selectedAdAccount || !$selectedFanpage) {
+            throw new \Exception('Cuenta publicitaria o fanpage no encontrada');
+        }
+        
+        // Convertir objetivo de conversación a objetivo de Meta
+        $objectiveMapping = [
+            'TRAFFIC' => 'OUTCOME_TRAFFIC',
+            'CONVERSIONS' => 'OUTCOME_SALES',
+            'MESSAGES' => 'OUTCOME_ENGAGEMENT',
+            'REACH' => 'OUTCOME_AWARENESS'
+        ];
+        
+        $objective = $objectiveMapping[$conversationData['campaign_objective']] ?? 'OUTCOME_TRAFFIC';
+        
+        // Parsear audiencia
+        $audienceDetails = $conversationData['audience_details'] ?? '18-65 Ambos';
+        preg_match('/(\d+)-(\d+)/', $audienceDetails, $ageMatches);
+        $ageMin = $ageMatches[1] ?? 18;
+        $ageMax = $ageMatches[2] ?? 65;
+        
+        $genders = [1, 2]; // Ambos géneros por defecto
+        if (strpos($audienceDetails, 'Hombres') !== false) {
+            $genders = [2];
+        } elseif (strpos($audienceDetails, 'Mujeres') !== false) {
+            $genders = [1];
+        }
+        
+        return [
+            'name' => $conversationData['campaign_name'],
+            'objective' => $objective,
+            'ad_account_id' => $selectedAdAccount['app_id'],
+            'page_id' => $selectedFanpage['page_id'],
+            'daily_budget' => (int) $conversationData['daily_budget'],
+            'geolocation' => $conversationData['geolocation'],
+            'age_min' => (int) $ageMin,
+            'age_max' => (int) $ageMax,
+            'genders' => $genders,
+            'ad_copy' => $conversationData['ad_copy'],
+            'ad_name' => $conversationData['ad_name'],
+            'link' => 'https://example.com', // Por defecto, se puede personalizar
+            'description' => $conversationData['ad_copy'],
+            'special_ad_categories' => []
+        ];
     }
 
     private function getHelpMessage()
