@@ -15,6 +15,7 @@ class FacebookAccount extends Model
         'app_id',
         'app_secret',
         'access_token',
+        'token_expires_at',
         'is_active',
         'settings',
         'selected_ad_account_id',
@@ -25,6 +26,7 @@ class FacebookAccount extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'token_expires_at' => 'datetime',
         'settings' => 'array',
         'selected_campaign_ids' => 'array',
         'selected_ad_ids' => 'array',

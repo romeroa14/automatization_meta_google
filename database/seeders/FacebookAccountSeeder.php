@@ -13,68 +13,69 @@ class FacebookAccountSeeder extends Seeder
      */
     public function run(): void
     {
-        // Verificar si ya existe una cuenta con estos datos
-        $existingAccount = FacebookAccount::where('app_id', '738576925677923')->first();
+        // Crear/actualizar cuenta principal (desarrollo)
+        $this->createOrUpdateAccount(
+            '738576925677923',
+            'ADMETRICAS.COM - Cuenta Principal',
+            '78f022c605d18b045bf85f73460516e2',
+            'EAAKfu1dLWWMBPTGJ97yqnUqnDoa0iC7xson0ZCgJgO86aPAJav8Wav3TJXuGEUV6vxh8zo5lOAOLZANCtr0uaTPExyNzwk6Deeb3No2vPaNZAs6CH8X5kyHE9M7Gp38uRxTV6qkZAZBZC6wZC4mB46AJjtlLZCmEuSNTgFUYQ6ESNnpww0YZB0EIOUob5ZACSZBr9xnt9Fm0oC7AquBjgZDZD'
+        );
+
+        // Crear/actualizar cuenta activa (producción)
+        $this->createOrUpdateAccount(
+            '808947008240397',
+            'TOKEN ADMETRICAS - App Activa',
+            '570c6a1ab1ab8571b59a82f5088e46ca',
+            'EAALfu6cRew0BPUIsgSxJCJFdc7MN7HaggIc1TO4YScjpyLDRVHdMZBaKeWKmWAherb6y2RTkxZBZBGEjH9IOEeKvvqw56vfYZCf0bZAFDQ3pxXfjw2foiGgQBONjNtxZA2RfkCkkfVi1PjZBwn9fEZADukA6fTj9CGNkGrcx8GWgqBi2Tcu26ZCLgPcYZA6h7ByeLUFtQmMjql3LwNygtLZAdDbhvYsSiurC37J8KG9xqsG7nMM7zsD7VlZAQZCUZD'
+        );
         
-        if ($existingAccount) {
-            $this->command->info('Facebook Account ya existe, actualizando datos...');
-            
-            $existingAccount->update([
-                'account_name' => 'ADMETRICAS.COM - Cuenta Principal',
-                'app_id' => '738576925677923',
-                'app_secret' => '78f022c605d18b045bf85f73460516e2',
-                'access_token' => 'EAAKfu1dLWWMBPTGJ97yqnUqnDoa0iC7xson0ZCgJgO86aPAJav8Wav3TJXuGEUV6vxh8zo5lOAOLZANCtr0uaTPExyNzwk6Deeb3No2vPaNZAs6CH8X5kyHE9M7Gp38uRxTV6qkZAZBZC6wZC4mB46AJjtlLZCmEuSNTgFUYQ6ESNnpww0YZB0EIOUob5ZACSZBr9xnt9Fm0oC7AquBjgZDZD',
-                'is_active' => true,
-                'settings' => [
-                    'auto_sync' => true,
-                    'sync_frequency' => 'daily',
-                    'notifications' => true,
-                    'default_currency' => 'USD',
-                    'timezone' => 'America/Caracas'
-                ],
-                'selected_ad_account_id' => null, // Se configurará después
-                'selected_page_id' => null, // Se configurará después
-                'selected_campaign_ids' => null,
-                'selected_ad_ids' => null
-            ]);
-            
-            $this->command->info("✅ Facebook Account actualizada: {$existingAccount->account_name}");
-        } else {
-            $facebookAccount = FacebookAccount::create([
-                'account_name' => 'ADMETRICAS.COM - Cuenta Principal',
-                'app_id' => '738576925677923',
-                'app_secret' => '78f022c605d18b045bf85f73460516e2',
-                'access_token' => 'EAAKfu1dLWWMBPTGJ97yqnUqnDoa0iC7xson0ZCgJgO86aPAJav8Wav3TJXuGEUV6vxh8zo5lOAOLZANCtr0uaTPExyNzwk6Deeb3No2vPaNZAs6CH8X5kyHE9M7Gp38uRxTV6qkZAZBZC6wZC4mB46AJjtlLZCmEuSNTgFUYQ6ESNnpww0YZB0EIOUob5ZACSZBr9xnt9Fm0oC7AquBjgZDZD',
-                'is_active' => true,
-                'settings' => [
-                    'auto_sync' => true,
-                    'sync_frequency' => 'daily',
-                    'notifications' => true,
-                    'default_currency' => 'USD',
-                    'timezone' => 'America/Caracas'
-                ],
-                'selected_ad_account_id' => null, // Se configurará después
-                'selected_page_id' => null, // Se configurará después
-                'selected_campaign_ids' => null,
-                'selected_ad_ids' => null
-            ]);
-            
-            $this->command->info("✅ Facebook Account creada: {$facebookAccount->account_name}");
+        // Mostrar información de todas las cuentas
+        $this->command->info("\n📊 Información de las cuentas:");
+        
+        $accounts = FacebookAccount::all();
+        foreach ($accounts as $account) {
+            $this->command->info("\n   🔹 {$account->account_name}:");
+            $this->command->info("      • App ID: {$account->app_id}");
+            $this->command->info("      • Access Token: " . substr($account->access_token, 0, 20) . "...");
+            $this->command->info("      • Estado: " . ($account->is_active ? 'Activa' : 'Inactiva'));
         }
-        
-        // Mostrar información de la cuenta
-        $account = FacebookAccount::where('app_id', '738576925677923')->first();
-        $this->command->info("\n📊 Información de la cuenta:");
-        $this->command->info("   • Nombre: {$account->account_name}");
-        $this->command->info("   • App ID: {$account->app_id}");
-        $this->command->info("   • Access Token: {$account->masked_access_token}");
-        $this->command->info("   • Estado: {$account->status_label}");
-        $this->command->info("   • Credenciales válidas: " . ($account->hasValidCredentials() ? 'Sí' : 'No'));
-        $this->command->info("   • Puede automatizarse: " . ($account->canBeAutomated() ? 'Sí' : 'No'));
         
         $this->command->info("\n🔧 Próximos pasos:");
         $this->command->info("   1. Configurar selected_ad_account_id en el panel de administración");
         $this->command->info("   2. Configurar selected_page_id en el panel de administración");
         $this->command->info("   3. Probar la conexión con Meta API");
+        $this->command->info("   4. Activar la cuenta 'TOKEN ADMETRICAS - App Activa' para producción");
+    }
+
+    private function createOrUpdateAccount($appId, $accountName, $appSecret, $accessToken)
+    {
+        $existingAccount = FacebookAccount::where('app_id', $appId)->first();
+        
+        $accountData = [
+            'account_name' => $accountName,
+            'app_id' => $appId,
+            'app_secret' => $appSecret,
+            'access_token' => $accessToken,
+            'is_active' => $appId === '808947008240397', // Activar solo la app de producción
+            'settings' => [
+                'auto_sync' => true,
+                'sync_frequency' => 'daily',
+                'notifications' => true,
+                'default_currency' => 'USD',
+                'timezone' => 'America/Caracas'
+            ],
+            'selected_ad_account_id' => null,
+            'selected_page_id' => null,
+            'selected_campaign_ids' => null,
+            'selected_ad_ids' => null
+        ];
+        
+        if ($existingAccount) {
+            $existingAccount->update($accountData);
+            $this->command->info("✅ Facebook Account actualizada: {$accountName}");
+        } else {
+            FacebookAccount::create($accountData);
+            $this->command->info("✅ Facebook Account creada: {$accountName}");
+        }
     }
 }

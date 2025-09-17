@@ -17,6 +17,7 @@ return new class extends Migration
             $table->string('app_id');
             $table->string('app_secret');
             $table->text('access_token');
+            $table->timestamp('token_expires_at')->nullable();
             $table->boolean('is_active')->default(true);
             $table->json('settings')->nullable();
             $table->string('selected_ad_account_id')->nullable();
