@@ -26,7 +26,7 @@ class FacebookAccountSeeder extends Seeder
             '808947008240397',
             'TOKEN ADMETRICAS - App Activa',
             '570c6a1ab1ab8571b59a82f5088e46ca',
-            'EAALfu6cRew0BPUIsgSxJCJFdc7MN7HaggIc1TO4YScjpyLDRVHdMZBaKeWKmWAherb6y2RTkxZBZBGEjH9IOEeKvvqw56vfYZCf0bZAFDQ3pxXfjw2foiGgQBONjNtxZA2RfkCkkfVi1PjZBwn9fEZADukA6fTj9CGNkGrcx8GWgqBi2Tcu26ZCLgPcYZA6h7ByeLUFtQmMjql3LwNygtLZAdDbhvYsSiurC37J8KG9xqsG7nMM7zsD7VlZAQZCUZD'
+            'EAALfu6cRew0BPWUzqBszQdmByLldZCOXY6eZCFUyX5H9iPUHZBNik9CzEYd0EU9YIWc237o1AcFKq60t8Aw6TzKZBf0lA4fZCzMdAjgA7pRoRGVU2E7OgCZAezpEjRyCnbBk7vi3sCFhQkQW0RTVkajwBRzxFnoEUvLhUUlcIMejnFb9AyeCIR98fhHqCec6beksmIhb2JPAZDZD'
         );
         
         // Mostrar información de todas las cuentas
@@ -56,6 +56,7 @@ class FacebookAccountSeeder extends Seeder
             'app_id' => $appId,
             'app_secret' => $appSecret,
             'access_token' => $accessToken,
+            'token_expires_at' => $appId === '808947008240397' ? now()->addDays(60) : null, // Token de larga duración para app activa
             'is_active' => $appId === '808947008240397', // Activar solo la app de producción
             'settings' => [
                 'auto_sync' => true,

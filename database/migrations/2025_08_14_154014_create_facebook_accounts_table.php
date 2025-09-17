@@ -25,8 +25,6 @@ return new class extends Migration
             $table->json('selected_campaign_ids')->nullable();
             $table->json('selected_ad_ids')->nullable();
             $table->timestamps();
-            
-           
         });
     }
 
