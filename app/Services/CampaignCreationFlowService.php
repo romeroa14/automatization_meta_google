@@ -658,11 +658,11 @@ class CampaignCreationFlowService
                 break;
                 
             case 'review':
-                if (strtoupper($input) === 'CONFIRMAR') {
+                if (strtoupper($input) === 'CONFIRMAR' || strtoupper($input) === 'CREATE') {
                     $result['valid'] = true;
                     $result['data'] = 'confirmed';
                 } else {
-                    $result['error'] = 'Escribe "CONFIRMAR" para crear la campaña o "EDITAR" para modificar algo';
+                    $result['error'] = 'Escribe "CONFIRMAR" o "CREATE" para crear la campaña o "EDITAR" para modificar algo';
                 }
                 break;
                 
