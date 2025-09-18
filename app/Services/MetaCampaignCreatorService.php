@@ -320,9 +320,18 @@ class MetaCampaignCreatorService
      */
     private function getOptimizationGoal(): string
     {
-        // Para objetivos OUTCOME_, usar NONE como optimization_goal
+        // Mapeo específico para objetivos OUTCOME_
+        $outcomeMapping = [
+            'OUTCOME_TRAFFIC' => 'LINK_CLICKS',
+            'OUTCOME_ENGAGEMENT' => 'POST_ENGAGEMENT', 
+            'OUTCOME_AWARENESS' => 'REACH',
+            'OUTCOME_LEADS' => 'LEAD_GENERATION',
+            'OUTCOME_SALES' => 'OFFSITE_CONVERSIONS',
+            'OUTCOME_APP_PROMOTION' => 'APP_INSTALLS'
+        ];
+        
         if (strpos($this->campaignData['objective'], 'OUTCOME_') === 0) {
-            return 'NONE';
+            return $outcomeMapping[$this->campaignData['objective']] ?? 'REACH';
         }
         
         $mapping = [
@@ -342,9 +351,18 @@ class MetaCampaignCreatorService
      */
     private function getBillingEvent(): string
     {
-        // Para objetivos OUTCOME_, usar IMPRESSIONS
+        // Mapeo específico para objetivos OUTCOME_
+        $outcomeMapping = [
+            'OUTCOME_TRAFFIC' => 'CLICKS',
+            'OUTCOME_ENGAGEMENT' => 'IMPRESSIONS',
+            'OUTCOME_AWARENESS' => 'IMPRESSIONS', 
+            'OUTCOME_LEADS' => 'IMPRESSIONS',
+            'OUTCOME_SALES' => 'IMPRESSIONS',
+            'OUTCOME_APP_PROMOTION' => 'IMPRESSIONS'
+        ];
+        
         if (strpos($this->campaignData['objective'], 'OUTCOME_') === 0) {
-            return 'IMPRESSIONS';
+            return $outcomeMapping[$this->campaignData['objective']] ?? 'IMPRESSIONS';
         }
         
         $mapping = [
