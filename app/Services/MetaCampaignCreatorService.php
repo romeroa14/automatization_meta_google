@@ -340,6 +340,7 @@ class MetaCampaignCreatorService
             'REACH' => 'REACH',
             'LEAD_GENERATION' => 'LEAD_GENERATION',
             'SALES' => 'OFFSITE_CONVERSIONS',
+            'CONVERSIONS' => 'OFFSITE_CONVERSIONS', // Mapear CONVERSIONS a OFFSITE_CONVERSIONS
             'APP_INSTALLS' => 'APP_INSTALLS'
         ];
 
@@ -371,6 +372,7 @@ class MetaCampaignCreatorService
             'REACH' => 'IMPRESSIONS',
             'LEAD_GENERATION' => 'IMPRESSIONS',
             'SALES' => 'IMPRESSIONS',
+            'CONVERSIONS' => 'IMPRESSIONS', // Mapear CONVERSIONS a IMPRESSIONS
             'APP_INSTALLS' => 'IMPRESSIONS'
         ];
 
@@ -399,20 +401,54 @@ class MetaCampaignCreatorService
      */
     private function getPromotedObject(): ?array
     {
-        // Para objetivos OUTCOME_, no incluir promoted_object
-        if (strpos($this->campaignData['objective'], 'OUTCOME_') === 0) {
-            return null;
-        }
-        
-        // Solo para objetivos de conversión específicos
-        if (in_array($this->campaignData['objective'], ['SALES', 'LEAD_GENERATION'])) {
+        // Para objetivos de conversión, incluir promoted_object
+        if (in_array($this->campaignData['objective'], ['CONVERSIONS', 'SALES', 'LEAD_GENERATION', 'OUTCOME_SALES', 'OUTCOME_LEADS'])) {
             return [
-                'pixel_id' => $this->campaignData['pixel_id'] ?? null,
-                'custom_event_type' => 'PURCHASE'
+                'pixel_id' => $this->campaignData['pixel_id'] ?? $this->getDefaultPixelId(),
+                'custom_event_type' => $this->getCustomEventType()
             ];
         }
         
         return null;
+    }
+    
+    /**
+     * Obtener pixel ID por defecto (usar el primer pixel disponible)
+     */
+    private function getDefaultPixelId(): ?string
+    {
+        try {
+            $response = Http::get("{$this->baseUrl}/me/adspixels", [
+                'access_token' => $this->facebookAccount->access_token
+            ]);
+            
+            if ($response->successful()) {
+                $data = $response->json();
+                if (isset($data['data']) && count($data['data']) > 0) {
+                    return $data['data'][0]['id'];
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('No se pudo obtener pixel ID', ['error' => $e->getMessage()]);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Obtener tipo de evento personalizado basado en el objetivo
+     */
+    private function getCustomEventType(): string
+    {
+        $mapping = [
+            'CONVERSIONS' => 'PURCHASE',
+            'SALES' => 'PURCHASE', 
+            'OUTCOME_SALES' => 'PURCHASE',
+            'LEAD_GENERATION' => 'LEAD',
+            'OUTCOME_LEADS' => 'LEAD'
+        ];
+        
+        return $mapping[$this->campaignData['objective']] ?? 'PURCHASE';
     }
 
     /**
