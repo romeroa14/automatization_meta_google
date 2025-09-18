@@ -348,7 +348,7 @@ class MetaCampaignCreatorService
             'REACH' => 'REACH',
             'LEAD_GENERATION' => 'LEAD_GENERATION',
             'SALES' => 'OFFSITE_CONVERSIONS',
-            'CONVERSION' => 'OFFSITE_CONVERSIONS', // CONVERSION es el objetivo válido
+            'CONVERSION' => 'LINK_CLICKS', // CONVERSION usar LINK_CLICKS en lugar de OFFSITE_CONVERSIONS
             'APP_INSTALLS' => 'APP_INSTALLS'
         ];
 
@@ -377,13 +377,13 @@ class MetaCampaignCreatorService
         }
         
         $mapping = [
-            'TRAFFIC' => 'CLICKS',
-            'ENGAGEMENT' => 'IMPRESSIONS',
+            'TRAFFIC' => 'LINK_CLICKS',
+            'ENGAGEMENT' => 'POST_ENGAGEMENT',
             'REACH' => 'IMPRESSIONS',
             'LEAD_GENERATION' => 'IMPRESSIONS',
             'SALES' => 'IMPRESSIONS',
-            'CONVERSION' => 'PURCHASE', // Para CONVERSION con OFFSITE_CONVERSIONS, usar PURCHASE
-            'APP_INSTALLS' => 'IMPRESSIONS'
+            'CONVERSION' => 'LINK_CLICKS', // Para CONVERSION con LINK_CLICKS, usar LINK_CLICKS
+            'APP_INSTALLS' => 'APP_INSTALLS'
         ];
 
         return $mapping[$this->campaignData['objective']] ?? 'IMPRESSIONS';
