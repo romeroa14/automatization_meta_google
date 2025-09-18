@@ -320,6 +320,12 @@ class MetaCampaignCreatorService
      */
     private function getOptimizationGoal(): string
     {
+        // Log para debuggear
+        Log::info('🔍 Debug optimization_goal', [
+            'objective' => $this->campaignData['objective'],
+            'campaign_data' => $this->campaignData
+        ]);
+        
         // Mapeo específico para objetivos OUTCOME_
         $outcomeMapping = [
             'OUTCOME_TRAFFIC' => 'LINK_CLICKS',
@@ -331,7 +337,9 @@ class MetaCampaignCreatorService
         ];
         
         if (strpos($this->campaignData['objective'], 'OUTCOME_') === 0) {
-            return $outcomeMapping[$this->campaignData['objective']] ?? 'REACH';
+            $result = $outcomeMapping[$this->campaignData['objective']] ?? 'REACH';
+            Log::info('🎯 Using OUTCOME mapping', ['objective' => $this->campaignData['objective'], 'result' => $result]);
+            return $result;
         }
         
         $mapping = [
@@ -340,11 +348,14 @@ class MetaCampaignCreatorService
             'REACH' => 'REACH',
             'LEAD_GENERATION' => 'LEAD_GENERATION',
             'SALES' => 'OFFSITE_CONVERSIONS',
-            'CONVERSIONS' => 'LINK_CLICKS', // Cambiar CONVERSIONS a LINK_CLICKS
+            'CONVERSIONS' => 'OFFSITE_CONVERSIONS', // CONVERSIONS debe usar OFFSITE_CONVERSIONS
+            'CONVERSION' => 'OFFSITE_CONVERSIONS', // También manejar CONVERSION singular
             'APP_INSTALLS' => 'APP_INSTALLS'
         ];
 
-        return $mapping[$this->campaignData['objective']] ?? 'REACH';
+        $result = $mapping[$this->campaignData['objective']] ?? 'REACH';
+        Log::info('🎯 Using standard mapping', ['objective' => $this->campaignData['objective'], 'result' => $result]);
+        return $result;
     }
 
     /**
@@ -372,7 +383,8 @@ class MetaCampaignCreatorService
             'REACH' => 'IMPRESSIONS',
             'LEAD_GENERATION' => 'IMPRESSIONS',
             'SALES' => 'IMPRESSIONS',
-            'CONVERSIONS' => 'CLICKS', // Cambiar CONVERSIONS a CLICKS para compatibilidad
+            'CONVERSIONS' => 'IMPRESSIONS', // CONVERSIONS debe usar IMPRESSIONS
+            'CONVERSION' => 'IMPRESSIONS', // También manejar CONVERSION singular
             'APP_INSTALLS' => 'IMPRESSIONS'
         ];
 
