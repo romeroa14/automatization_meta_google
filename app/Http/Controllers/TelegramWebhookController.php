@@ -220,6 +220,61 @@ class TelegramWebhookController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    private function mapTemplateData(array $templateData, array $existingData): array
+    {
+        $mappedData = $existingData; // Mantener datos existentes (cuenta, fanpage)
+        
+        // Mapear campos de la plantilla
+        if (isset($templateData['campaign_name'])) {
+            $mappedData['campaign_name'] = $templateData['campaign_name'];
+        }
+        
+        if (isset($templateData['campaign_objective'])) {
+            $mappedData['campaign_objective'] = $templateData['campaign_objective'];
+        }
+        
+        if (isset($templateData['budget_type'])) {
+            $mappedData['budget_type'] = $templateData['budget_type'];
+        }
+        
+        if (isset($templateData['daily_budget'])) {
+            $mappedData['daily_budget'] = $templateData['daily_budget'];
+        }
+        
+        if (isset($templateData['start_date']) && isset($templateData['end_date'])) {
+            $mappedData['dates'] = [
+                'start' => $templateData['start_date'],
+                'end' => $templateData['end_date']
+            ];
+        }
+        
+        if (isset($templateData['geolocation'])) {
+            $mappedData['geolocation'] = $templateData['geolocation'];
+        }
+        
+        if (isset($templateData['age_min']) && isset($templateData['age_max'])) {
+            $mappedData['audience_details'] = $templateData['age_min'] . '-' . $templateData['age_max'] . ' ' . ($templateData['gender'] ?? 'ambos');
+        }
+        
+        if (isset($templateData['ad_placement'])) {
+            $mappedData['ad_placement'] = $templateData['ad_placement'];
+        }
+        
+        if (isset($templateData['ad_name'])) {
+            $mappedData['ad_name'] = $templateData['ad_name'];
+        }
+        
+        if (isset($templateData['creative_type'])) {
+            $mappedData['creative_type'] = $templateData['creative_type'];
+        }
+        
+        if (isset($templateData['ad_copy'])) {
+            $mappedData['ad_copy'] = $templateData['ad_copy'];
+        }
+        
+        return $mappedData;
+    }
+
     private function sendMessage($chatId, $text, $parseMode = 'Markdown')
     {
         $botToken = config('services.telegram.bot_token');
@@ -440,14 +495,17 @@ class TelegramWebhookController extends Controller
                 // Procesar todos los datos de la plantilla
                 $templateData = $validation['data'];
                 
-                // Guardar todos los datos de la plantilla
-                foreach ($templateData as $key => $value) {
+                // Mapear datos de la plantilla a formato del sistema
+                $mappedData = $this->mapTemplateData($templateData, $state['data']);
+                
+                // Guardar todos los datos mapeados
+                foreach ($mappedData as $key => $value) {
                     $conversationState->updateConversationData($chatId, $key, $value);
                 }
                 
                 // Saltar directamente a la revisión
                 $conversationState->updateConversationStep($chatId, 'review');
-                $reviewMessage = $flowService->getStepMessage('review', $state['data']);
+                $reviewMessage = $flowService->getStepMessage('review', $mappedData);
                 return $this->sendMessage($chatId, $reviewMessage);
             }
             

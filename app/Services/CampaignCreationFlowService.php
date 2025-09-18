@@ -277,8 +277,10 @@ class CampaignCreationFlowService
                     $data['end_date'] = $value;
                     break;
                 case 'PAIS':
+                    $data['country'] = $value;
+                    break;
                 case 'CIUDAD':
-                    $data['geolocation'] = ($data['geolocation'] ?? '') . $value . ', ';
+                    $data['city'] = $value;
                     break;
                 case 'EDAD_MIN':
                     $data['age_min'] = intval($value);
@@ -304,9 +306,13 @@ class CampaignCreationFlowService
             }
         }
         
-        // Limpiar geolocalización
-        if (isset($data['geolocation'])) {
-            $data['geolocation'] = rtrim($data['geolocation'], ', ');
+        // Construir geolocalización
+        if (isset($data['country']) && isset($data['city'])) {
+            $data['geolocation'] = $data['city'] . ', ' . $data['country'];
+        } elseif (isset($data['country'])) {
+            $data['geolocation'] = $data['country'];
+        } elseif (isset($data['city'])) {
+            $data['geolocation'] = $data['city'];
         }
         
         // Validar campos requeridos
@@ -830,11 +836,11 @@ class CampaignCreationFlowService
                 break;
                 
             case 'review':
-                if (strtoupper($input) === 'CONFIRMAR' || strtoupper($input) === 'CREATE') {
+                if (strtoupper($input) === 'CONFIRMAR') {
                     $result['valid'] = true;
                     $result['data'] = 'confirmed';
                 } else {
-                    $result['error'] = 'Escribe "CONFIRMAR" o "CREATE" para crear la campaña o "EDITAR" para modificar algo';
+                    $result['error'] = 'Escribe "CONFIRMAR" para crear la campaña o "EDITAR" para modificar algo';
                 }
                 break;
                 
