@@ -20,6 +20,7 @@ class CampaignCreationFlowService
         'daily_budget' => 'Presupuesto diario',
         'dates' => 'Fechas de la campaña',
         'geolocation' => 'Geolocalización',
+        'conversion_location' => 'Ubicación de conversión',
         'audience_type' => 'Tipo de audiencia',
         'audience_details' => 'Detalles de la audiencia',
         'ad_placement' => 'Ubicación de anuncios',
@@ -101,6 +102,8 @@ class CampaignCreationFlowService
                 return $this->getDatesMessage();
             case 'geolocation':
                 return $this->getGeolocationMessage();
+            case 'conversion_location':
+                return $this->getConversionLocationMessage();
             case 'audience_type':
                 return $this->getAudienceTypeMessage();
             case 'audience_details':
@@ -206,6 +209,7 @@ class CampaignCreationFlowService
         $message .= "FECHA_FIN: [25/09/2025]\n";
         $message .= "PAIS: [Venezuela]\n";
         $message .= "CIUDAD: [Caracas]\n";
+        $message .= "UBICACION_CONVERSION: [SITIO_WEB|APP|MESSENGER|WHATSAPP|FACEBOOK]\n";
         $message .= "EDAD_MIN: [18]\n";
         $message .= "EDAD_MAX: [65]\n";
         $message .= "GENERO: [ambos|hombres|mujeres]\n";
@@ -224,6 +228,7 @@ class CampaignCreationFlowService
         $message .= "FECHA_FIN: 30/09/2025\n";
         $message .= "PAIS: Venezuela\n";
         $message .= "CIUDAD: Caracas\n";
+        $message .= "UBICACION_CONVERSION: SITIO_WEB\n";
         $message .= "EDAD_MIN: 25\n";
         $message .= "EDAD_MAX: 55\n";
         $message .= "GENERO: ambos\n";
@@ -303,6 +308,9 @@ class CampaignCreationFlowService
                 case 'COPY_ANUNCIO':
                     $data['ad_copy'] = $value;
                     break;
+                case 'UBICACION_CONVERSION':
+                    $data['conversion_location'] = $value;
+                    break;
             }
         }
         
@@ -375,10 +383,11 @@ class CampaignCreationFlowService
         $message = "💵 *Paso 7: Presupuesto Diario*\n\n";
         $message .= "Escribe el presupuesto diario en USD:\n\n";
         $message .= "📊 *Ejemplos:*\n";
+        $message .= "• 1 (para $1 USD por día)\n";
         $message .= "• 5 (para $5 USD por día)\n";
         $message .= "• 25.50 (para $25.50 USD por día)\n";
         $message .= "• 100 (para $100 USD por día)\n\n";
-        $message .= "⚠️ *Nota:* El presupuesto mínimo es $1 USD por día.\n\n";
+        $message .= "💡 *Puedes usar cualquier monto que desees.*\n\n";
         $message .= "💡 *Escribe el monto del presupuesto diario.*";
 
         return $message;
@@ -414,6 +423,25 @@ class CampaignCreationFlowService
         $message .= "• VE;CO (Venezuela y Colombia)\n";
         $message .= "• Caracas,VE;Madrid,ES (múltiples ciudades)\n\n";
         $message .= "💡 *Escribe las ubicaciones en el formato correcto.*";
+
+        return $message;
+    }
+
+    private function getConversionLocationMessage(): string
+    {
+        $message = "🎯 *Paso 10: Ubicación de Conversión*\n\n";
+        $message .= "Especifica dónde quieres que ocurran las conversiones:\n\n";
+        $message .= "📍 *Opciones disponibles:*\n";
+        $message .= "• **SITIO_WEB** - En tu sitio web\n";
+        $message .= "• **APP** - En tu aplicación móvil\n";
+        $message .= "• **MESSENGER** - En Messenger\n";
+        $message .= "• **WHATSAPP** - En WhatsApp\n";
+        $message .= "• **FACEBOOK** - En Facebook/Instagram\n\n";
+        $message .= "💡 *Ejemplos:*\n";
+        $message .= "• SITIO_WEB (para conversiones en tu sitio)\n";
+        $message .= "• APP (para conversiones en tu app)\n";
+        $message .= "• MESSENGER (para conversaciones en Messenger)\n\n";
+        $message .= "💡 *Escribe la ubicación de conversión deseada.*";
 
         return $message;
     }
@@ -603,6 +631,7 @@ class CampaignCreationFlowService
         $message .= "💵 *Presupuesto Diario:* $" . ($data['daily_budget'] ?? 'No especificado') . "\n";
         $message .= "📅 *Fechas:* " . ($data['start_date'] ?? 'No especificada') . " - " . ($data['end_date'] ?? 'No especificada') . "\n";
         $message .= "🌍 *Geolocalización:* " . ($data['geolocation'] ?? 'No especificada') . "\n";
+        $message .= "🎯 *Ubicación Conversión:* " . ($data['conversion_location'] ?? 'No especificada') . "\n";
         $message .= "👥 *Audiencia:* " . ($data['audience_type'] ?? 'No especificada') . "\n";
         $message .= "📍 *Ubicación Anuncios:* " . ($data['ad_placement'] ?? 'No especificada') . "\n";
         $message .= "🏷️ *Nombre Anuncio:* " . ($data['ad_name'] ?? 'No especificado') . "\n";
@@ -735,11 +764,11 @@ class CampaignCreationFlowService
                 
             case 'daily_budget':
                 $budget = floatval($input);
-                if ($budget >= 1 && $budget <= 10000) {
+                if ($budget > 0 && $budget <= 10000) {
                     $result['valid'] = true;
                     $result['data'] = $budget;
                 } else {
-                    $result['error'] = 'El presupuesto debe estar entre $1 y $10,000 USD';
+                    $result['error'] = 'El presupuesto debe ser mayor a $0 y menor a $10,000 USD';
                 }
                 break;
                 
@@ -778,6 +807,17 @@ class CampaignCreationFlowService
                     }
                 } else {
                     $result['error'] = 'La geolocalización es requerida y debe tener al menos 2 caracteres';
+                }
+                break;
+                
+            case 'conversion_location':
+                $input = trim(strtoupper($input));
+                $validLocations = ['SITIO_WEB', 'APP', 'MESSENGER', 'WHATSAPP', 'FACEBOOK'];
+                if (in_array($input, $validLocations)) {
+                    $result['valid'] = true;
+                    $result['data'] = $input;
+                } else {
+                    $result['error'] = 'Ubicación de conversión no válida. Usa: SITIO_WEB, APP, MESSENGER, WHATSAPP, o FACEBOOK';
                 }
                 break;
                 
@@ -946,7 +986,16 @@ class CampaignCreationFlowService
             $number = ($pagination['current_page'] - 1) * $pagination['per_page'] + $index + 1;
             $message .= "{$number}. *{$page['page_name']}*\n";
             $message .= "   ID: `{$page['page_id']}`\n";
-            $message .= "   Categoría: {$page['category']}\n\n";
+            $message .= "   Categoría: {$page['category']}\n";
+            
+            // Verificar si tiene cuenta de Instagram conectada
+            if (isset($page['instagram_account'])) {
+                $message .= "   📸 Instagram: @{$page['instagram_account']['username']}\n";
+                $message .= "   📊 Seguidores: " . number_format($page['instagram_account']['followers_count']) . "\n";
+            } else {
+                $message .= "   📸 Instagram: No conectado\n";
+            }
+            $message .= "\n";
         }
         
         // Información de paginación

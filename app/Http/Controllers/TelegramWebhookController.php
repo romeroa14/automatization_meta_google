@@ -66,6 +66,7 @@ class TelegramWebhookController extends Controller
             '/start' => 'startCommand',
             '/help' => 'helpCommand',
             '/crear_campana' => 'createCampaignCommand',
+            '/otro_ad' => 'createAnotherAdCommand',
             '/mis_cuentas' => 'myAccountsCommand',
             '/planes' => 'plansCommand',
             '/estado' => 'statusCommand',
@@ -103,6 +104,7 @@ class TelegramWebhookController extends Controller
         $welcomeMessage .= "Soy tu asistente para crear campañas publicitarias de Meta de forma rápida y eficiente.\n\n";
         $welcomeMessage .= "📋 *Comandos disponibles:*\n";
         $welcomeMessage .= "/crear_campana - Crear una nueva campaña\n";
+        $welcomeMessage .= "/otro_ad - Crear otro anuncio (mantiene cuenta publicitaria)\n";
         $welcomeMessage .= "/mis_cuentas - Ver cuentas de Facebook disponibles\n";
         $welcomeMessage .= "/planes - Ver planes publicitarios disponibles\n";
         $welcomeMessage .= "/estado - Ver estado del sistema\n";
@@ -128,6 +130,38 @@ class TelegramWebhookController extends Controller
         
         $startMessage = $flowService->getStepMessage('start');
         return $this->sendMessage($chatId, $startMessage);
+    }
+
+    private function createAnotherAdCommand($chatId, $message)
+    {
+        $conversationState = new ConversationStateService();
+        $flowService = new CampaignCreationFlowService();
+        
+        // Verificar si hay una conversación previa con cuenta publicitaria
+        $previousState = $conversationState->getConversationState($chatId);
+        
+        if (!$previousState || !isset($previousState['data']['ad_account'])) {
+            return $this->sendMessage($chatId, 
+                "❌ *No hay cuenta publicitaria seleccionada.*\n\n" .
+                "💡 *Opciones:*\n" .
+                "• Usa /crear_campana para flujo completo\n" .
+                "• O selecciona una cuenta publicitaria primero"
+            );
+        }
+        
+        // Iniciar nueva conversación pero mantener cuenta publicitaria
+        $conversationState->clearConversationState($chatId);
+        $conversationState->updateConversationStep($chatId, 'fanpage');
+        
+        // Preservar la cuenta publicitaria seleccionada
+        $conversationState->updateConversationData($chatId, 'ad_account', $previousState['data']['ad_account']);
+        $conversationState->updateConversationData($chatId, 'ad_account_name', $previousState['data']['ad_account_name']);
+        
+        $message = "🔄 *Crear Otro Anuncio*\n\n";
+        $message .= "✅ *Cuenta publicitaria:* " . $previousState['data']['ad_account_name'] . "\n\n";
+        $message .= $flowService->getStepMessage('fanpage');
+        
+        return $this->sendMessage($chatId, $message);
     }
 
     private function myAccountsCommand($chatId, $message)
@@ -717,12 +751,15 @@ class TelegramWebhookController extends Controller
                "📋 *Comandos disponibles:*\n" .
                "/start - Iniciar el bot\n" .
                "/crear_campana - Crear nueva campaña (flujo completo)\n" .
+               "/otro_ad - Crear otro anuncio (mantiene cuenta publicitaria)\n" .
                "/mis_cuentas - Ver cuentas disponibles\n" .
                "/planes - Ver planes publicitarios\n" .
                "/estado - Estado del sistema\n" .
                "/progreso - Ver progreso de conversación activa\n" .
                "/cancelar - Cancelar conversación activa\n" .
                "/help - Mostrar esta ayuda\n\n" .
-               "💡 *Tip:* Usa /crear_campana para comenzar el flujo completo de creación de campañas.";
+               "💡 *Tips:*\n" .
+               "• Usa /crear_campana para comenzar el flujo completo\n" .
+               "• Usa /otro_ad para crear anuncios adicionales sin repetir configuración";
     }
 }

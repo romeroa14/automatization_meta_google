@@ -61,7 +61,7 @@ class MetaApiService
         try {
             $response = Http::get("{$this->baseUrl}/me/accounts", [
                 'access_token' => $facebookAccount->access_token,
-                'fields' => 'id,name,category,access_token,tasks',
+                'fields' => 'id,name,category,access_token,tasks,instagram_business_account',
                 'limit' => 1000  // Aumentar límite para obtener todas las fanpages
             ]);
 
@@ -195,17 +195,59 @@ class MetaApiService
         $formatted = [];
         
         foreach ($pages as $page) {
+            $instagramInfo = null;
+            
+            // Verificar si tiene cuenta de Instagram conectada
+            if (isset($page['instagram_business_account'])) {
+                $instagramInfo = $this->getInstagramAccountInfo($page['instagram_business_account']['id'], $page['access_token']);
+            }
+            
             $formatted[] = [
                 'id' => $page['id'],
                 'name' => $page['name'],
                 'category' => $page['category'] ?? 'Business',
                 'access_token' => $page['access_token'] ?? null,
                 'tasks' => $page['tasks'] ?? [],
-                'display_name' => "{$page['name']} - {$page['id']}"
+                'display_name' => "{$page['name']} - {$page['id']}",
+                'instagram_account' => $instagramInfo
             ];
         }
         
         return $formatted;
+    }
+
+    /**
+     * Obtener información de cuenta de Instagram
+     */
+    private function getInstagramAccountInfo(string $instagramId, string $pageAccessToken): ?array
+    {
+        try {
+            $response = Http::get("{$this->baseUrl}/{$instagramId}", [
+                'access_token' => $pageAccessToken,
+                'fields' => 'id,username,name,biography,followers_count,follows_count,media_count,profile_picture_url'
+            ]);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                return [
+                    'id' => $data['id'],
+                    'username' => $data['username'],
+                    'name' => $data['name'],
+                    'biography' => $data['biography'] ?? '',
+                    'followers_count' => $data['followers_count'] ?? 0,
+                    'follows_count' => $data['follows_count'] ?? 0,
+                    'media_count' => $data['media_count'] ?? 0,
+                    'profile_picture_url' => $data['profile_picture_url'] ?? null
+                ];
+            }
+        } catch (\Exception $e) {
+            Log::warning('⚠️ Error obteniendo información de Instagram', [
+                'instagram_id' => $instagramId,
+                'error' => $e->getMessage()
+            ]);
+        }
+        
+        return null;
     }
 
     /**

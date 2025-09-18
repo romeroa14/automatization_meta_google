@@ -145,9 +145,9 @@ class MetaCampaignCreatorService
             $this->errors[] = "Objetivo de campaña no válido: {$this->campaignData['objective']}";
         }
 
-        // Validar presupuesto (mínimo $1 USD)
-        if (isset($this->campaignData['daily_budget']) && $this->campaignData['daily_budget'] < 1) {
-            $this->errors[] = "El presupuesto diario debe ser al menos $1 USD";
+        // Validar presupuesto (mínimo $3 USD según pruebas con curl)
+        if (isset($this->campaignData['daily_budget']) && $this->campaignData['daily_budget'] < 3) {
+            $this->errors[] = "El presupuesto diario debe ser al menos $3 USD";
         }
 
         // Validar targeting (construir desde geolocalización)
@@ -382,7 +382,7 @@ class MetaCampaignCreatorService
             'REACH' => 'IMPRESSIONS',
             'LEAD_GENERATION' => 'IMPRESSIONS',
             'SALES' => 'IMPRESSIONS',
-            'CONVERSION' => 'LINK_CLICKS', // Para CONVERSION con LINK_CLICKS, usar LINK_CLICKS
+            'CONVERSION' => 'IMPRESSIONS', // Para CONVERSION con LINK_CLICKS, usar IMPRESSIONS
             'APP_INSTALLS' => 'APP_INSTALLS'
         ];
 
