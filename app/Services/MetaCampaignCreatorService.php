@@ -382,7 +382,7 @@ class MetaCampaignCreatorService
             'REACH' => 'IMPRESSIONS',
             'LEAD_GENERATION' => 'IMPRESSIONS',
             'SALES' => 'IMPRESSIONS',
-            'CONVERSION' => 'IMPRESSIONS', // CONVERSION es el objetivo válido
+            'CONVERSION' => 'PURCHASE', // Para CONVERSION con OFFSITE_CONVERSIONS, usar PURCHASE
             'APP_INSTALLS' => 'IMPRESSIONS'
         ];
 
