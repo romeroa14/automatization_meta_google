@@ -34,7 +34,7 @@ class CampaignCreationFlowService
 
     protected array $campaignObjectives = [
         'TRAFFIC' => 'Tráfico al sitio web',
-        'CONVERSIONS' => 'Conversiones',
+        'CONVERSION' => 'Conversiones',
         'REACH' => 'Alcance',
         'BRAND_AWARENESS' => 'Conciencia de marca',
         'ENGAGEMENT' => 'Compromiso',
@@ -199,7 +199,7 @@ class CampaignCreationFlowService
         $message .= "Copia y pega esta plantilla, luego reemplaza los valores entre corchetes:\n\n";
         $message .= "```\n";
         $message .= "NOMBRE_CAMPANA: [Mi Campaña 2025]\n";
-        $message .= "OBJETIVO: [CONVERSIONS|TRAFFIC|REACH|ENGAGEMENT|SALES|LEAD_GENERATION]\n";
+        $message .= "OBJETIVO: [CONVERSION|TRAFFIC|REACH|ENGAGEMENT|SALES|LEAD_GENERATION]\n";
         $message .= "TIPO_PRESUPUESTO: [campaign|adset]\n";
         $message .= "PRESUPUESTO_DIARIO: [100]\n";
         $message .= "FECHA_INICIO: [18/09/2025]\n";
@@ -217,7 +217,7 @@ class CampaignCreationFlowService
         $message .= "📝 *Ejemplo completo:*\n";
         $message .= "```\n";
         $message .= "NOMBRE_CAMPANA: Campaña Verano 2025\n";
-        $message .= "OBJETIVO: CONVERSIONS\n";
+        $message .= "OBJETIVO: CONVERSION\n";
         $message .= "TIPO_PRESUPUESTO: adset\n";
         $message .= "PRESUPUESTO_DIARIO: 50\n";
         $message .= "FECHA_INICIO: 20/09/2025\n";

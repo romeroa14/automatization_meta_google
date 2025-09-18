@@ -348,8 +348,7 @@ class MetaCampaignCreatorService
             'REACH' => 'REACH',
             'LEAD_GENERATION' => 'LEAD_GENERATION',
             'SALES' => 'OFFSITE_CONVERSIONS',
-            'CONVERSIONS' => 'OFFSITE_CONVERSIONS', // CONVERSIONS debe usar OFFSITE_CONVERSIONS
-            'CONVERSION' => 'OFFSITE_CONVERSIONS', // También manejar CONVERSION singular
+            'CONVERSION' => 'OFFSITE_CONVERSIONS', // CONVERSION es el objetivo válido
             'APP_INSTALLS' => 'APP_INSTALLS'
         ];
 
@@ -383,8 +382,7 @@ class MetaCampaignCreatorService
             'REACH' => 'IMPRESSIONS',
             'LEAD_GENERATION' => 'IMPRESSIONS',
             'SALES' => 'IMPRESSIONS',
-            'CONVERSIONS' => 'IMPRESSIONS', // CONVERSIONS debe usar IMPRESSIONS
-            'CONVERSION' => 'IMPRESSIONS', // También manejar CONVERSION singular
+            'CONVERSION' => 'IMPRESSIONS', // CONVERSION es el objetivo válido
             'APP_INSTALLS' => 'IMPRESSIONS'
         ];
 
@@ -414,7 +412,7 @@ class MetaCampaignCreatorService
     private function getPromotedObject(): ?array
     {
         // Para objetivos de conversión, incluir promoted_object
-        if (in_array($this->campaignData['objective'], ['CONVERSIONS', 'SALES', 'LEAD_GENERATION', 'OUTCOME_SALES', 'OUTCOME_LEADS'])) {
+        if (in_array($this->campaignData['objective'], ['CONVERSION', 'SALES', 'LEAD_GENERATION', 'OUTCOME_SALES', 'OUTCOME_LEADS'])) {
             return [
                 'pixel_id' => $this->campaignData['pixel_id'] ?? $this->getDefaultPixelId(),
                 'custom_event_type' => $this->getCustomEventType()
@@ -453,7 +451,7 @@ class MetaCampaignCreatorService
     private function getCustomEventType(): string
     {
         $mapping = [
-            'CONVERSIONS' => 'PURCHASE',
+            'CONVERSION' => 'PURCHASE',
             'SALES' => 'PURCHASE', 
             'OUTCOME_SALES' => 'PURCHASE',
             'LEAD_GENERATION' => 'LEAD',
