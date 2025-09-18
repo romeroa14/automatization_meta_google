@@ -427,6 +427,30 @@ class TelegramWebhookController extends Controller
             // Guardar datos del paso actual
             $conversationState->updateConversationData($chatId, $currentStep, $validation['data']);
             
+            // Manejar flujo de plantilla
+            if ($currentStep === 'template_choice' && $validation['data'] === 'plantilla') {
+                // Saltar al paso de plantilla
+                $conversationState->updateConversationStep($chatId, 'template_form');
+                $templateMessage = $flowService->getStepMessage('template_form');
+                return $this->sendMessage($chatId, $templateMessage);
+            }
+            
+            // Manejar procesamiento de plantilla
+            if ($currentStep === 'template_form') {
+                // Procesar todos los datos de la plantilla
+                $templateData = $validation['data'];
+                
+                // Guardar todos los datos de la plantilla
+                foreach ($templateData as $key => $value) {
+                    $conversationState->updateConversationData($chatId, $key, $value);
+                }
+                
+                // Saltar directamente a la revisión
+                $conversationState->updateConversationStep($chatId, 'review');
+                $reviewMessage = $flowService->getStepMessage('review', $state['data']);
+                return $this->sendMessage($chatId, $reviewMessage);
+            }
+            
             // Obtener siguiente paso
             $nextStep = $flowService->getNextStep($currentStep);
             

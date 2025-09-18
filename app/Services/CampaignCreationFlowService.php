@@ -12,6 +12,8 @@ class CampaignCreationFlowService
         'start' => 'Iniciar creación de campaña',
         'ad_account' => 'Seleccionar cuenta publicitaria',
         'fanpage' => 'Seleccionar fanpage',
+        'template_choice' => 'Elegir método de creación',
+        'template_form' => 'Formulario de plantilla',
         'campaign_name' => 'Nombre de la campaña',
         'campaign_objective' => 'Objetivo de la campaña',
         'budget_type' => 'Tipo de presupuesto',
@@ -83,6 +85,10 @@ class CampaignCreationFlowService
                 return $this->getAdAccountMessage();
             case 'fanpage':
                 return $this->getFanpageMessage($data);
+            case 'template_choice':
+                return $this->getTemplateChoiceMessage();
+            case 'template_form':
+                return $this->getTemplateFormMessage();
             case 'campaign_name':
                 return $this->getCampaignNameMessage();
             case 'campaign_objective':
@@ -170,6 +176,150 @@ class CampaignCreationFlowService
         return $this->getFanpageMessagePaginated(1);
     }
 
+    private function getTemplateChoiceMessage(): string
+    {
+        $message = "⚡ *Paso 4: Método de Creación*\n\n";
+        $message .= "¿Cómo quieres crear tu campaña?\n\n";
+        $message .= "🔄 *Opción 1: Paso a Paso*\n";
+        $message .= "• Te guiaré pregunta por pregunta\n";
+        $message .= "• Ideal para principiantes\n";
+        $message .= "• Control total sobre cada detalle\n\n";
+        $message .= "📋 *Opción 2: Plantilla Rápida*\n";
+        $message .= "• Completa todos los datos de una vez\n";
+        $message .= "• Ideal para usuarios avanzados\n";
+        $message .= "• Creación más rápida\n\n";
+        $message .= "💡 *Escribe 'paso' para ir paso a paso o 'plantilla' para usar plantilla.*";
+
+        return $message;
+    }
+
+    private function getTemplateFormMessage(): string
+    {
+        $message = "📋 *Plantilla de Creación Rápida*\n\n";
+        $message .= "Copia y pega esta plantilla, luego reemplaza los valores entre corchetes:\n\n";
+        $message .= "```\n";
+        $message .= "NOMBRE_CAMPANA: [Mi Campaña 2025]\n";
+        $message .= "OBJETIVO: [CONVERSIONS|TRAFFIC|REACH|ENGAGEMENT|SALES|LEAD_GENERATION]\n";
+        $message .= "TIPO_PRESUPUESTO: [campaign|adset]\n";
+        $message .= "PRESUPUESTO_DIARIO: [100]\n";
+        $message .= "FECHA_INICIO: [18/09/2025]\n";
+        $message .= "FECHA_FIN: [25/09/2025]\n";
+        $message .= "PAIS: [Venezuela]\n";
+        $message .= "CIUDAD: [Caracas]\n";
+        $message .= "EDAD_MIN: [18]\n";
+        $message .= "EDAD_MAX: [65]\n";
+        $message .= "GENERO: [ambos|hombres|mujeres]\n";
+        $message .= "UBICACION_ANUNCIOS: [automatic|facebook|instagram|messenger|audience_network]\n";
+        $message .= "NOMBRE_ANUNCIO: [Mi Anuncio]\n";
+        $message .= "TIPO_CREATIVO: [existing_post|new_post|carousel|video]\n";
+        $message .= "COPY_ANUNCIO: [Mi mensaje publicitario]\n";
+        $message .= "```\n\n";
+        $message .= "📝 *Ejemplo completo:*\n";
+        $message .= "```\n";
+        $message .= "NOMBRE_CAMPANA: Campaña Verano 2025\n";
+        $message .= "OBJETIVO: CONVERSIONS\n";
+        $message .= "TIPO_PRESUPUESTO: adset\n";
+        $message .= "PRESUPUESTO_DIARIO: 50\n";
+        $message .= "FECHA_INICIO: 20/09/2025\n";
+        $message .= "FECHA_FIN: 30/09/2025\n";
+        $message .= "PAIS: Venezuela\n";
+        $message .= "CIUDAD: Caracas\n";
+        $message .= "EDAD_MIN: 25\n";
+        $message .= "EDAD_MAX: 55\n";
+        $message .= "GENERO: ambos\n";
+        $message .= "UBICACION_ANUNCIOS: automatic\n";
+        $message .= "NOMBRE_ANUNCIO: Promoción Verano\n";
+        $message .= "TIPO_CREATIVO: existing_post\n";
+        $message .= "COPY_ANUNCIO: ¡Oferta especial de verano! No te la pierdas\n";
+        $message .= "```\n\n";
+        $message .= "💡 *Copia la plantilla, completa los datos y pégalos aquí.*";
+
+        return $message;
+    }
+
+    private function parseTemplate(string $input): ?array
+    {
+        $lines = explode("\n", trim($input));
+        $data = [];
+        
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line) || strpos($line, ':') === false) {
+                continue;
+            }
+            
+            [$key, $value] = explode(':', $line, 2);
+            $key = trim($key);
+            $value = trim($value);
+            
+            if (empty($key) || empty($value)) {
+                continue;
+            }
+            
+            // Mapear campos de la plantilla a campos del sistema
+            switch ($key) {
+                case 'NOMBRE_CAMPANA':
+                    $data['campaign_name'] = $value;
+                    break;
+                case 'OBJETIVO':
+                    $data['campaign_objective'] = $value;
+                    break;
+                case 'TIPO_PRESUPUESTO':
+                    $data['budget_type'] = $value;
+                    break;
+                case 'PRESUPUESTO_DIARIO':
+                    $data['daily_budget'] = floatval($value);
+                    break;
+                case 'FECHA_INICIO':
+                    $data['start_date'] = $value;
+                    break;
+                case 'FECHA_FIN':
+                    $data['end_date'] = $value;
+                    break;
+                case 'PAIS':
+                case 'CIUDAD':
+                    $data['geolocation'] = ($data['geolocation'] ?? '') . $value . ', ';
+                    break;
+                case 'EDAD_MIN':
+                    $data['age_min'] = intval($value);
+                    break;
+                case 'EDAD_MAX':
+                    $data['age_max'] = intval($value);
+                    break;
+                case 'GENERO':
+                    $data['gender'] = $value;
+                    break;
+                case 'UBICACION_ANUNCIOS':
+                    $data['ad_placement'] = $value;
+                    break;
+                case 'NOMBRE_ANUNCIO':
+                    $data['ad_name'] = $value;
+                    break;
+                case 'TIPO_CREATIVO':
+                    $data['creative_type'] = $value;
+                    break;
+                case 'COPY_ANUNCIO':
+                    $data['ad_copy'] = $value;
+                    break;
+            }
+        }
+        
+        // Limpiar geolocalización
+        if (isset($data['geolocation'])) {
+            $data['geolocation'] = rtrim($data['geolocation'], ', ');
+        }
+        
+        // Validar campos requeridos
+        $required = ['campaign_name', 'campaign_objective', 'budget_type', 'daily_budget', 'start_date', 'end_date'];
+        foreach ($required as $field) {
+            if (!isset($data[$field]) || empty($data[$field])) {
+                return null;
+            }
+        }
+        
+        return $data;
+    }
+
     private function getCampaignNameMessage(): string
     {
         $message = "🏷️ *Paso 4: Nombre de la Campaña*\n\n";
@@ -219,7 +369,7 @@ class CampaignCreationFlowService
         $message = "💵 *Paso 7: Presupuesto Diario*\n\n";
         $message .= "Escribe el presupuesto diario en USD:\n\n";
         $message .= "📊 *Ejemplos:*\n";
-        $message .= "• 10 (para $10 USD por día)\n";
+        $message .= "• 5 (para $5 USD por día)\n";
         $message .= "• 25.50 (para $25.50 USD por día)\n";
         $message .= "• 100 (para $100 USD por día)\n\n";
         $message .= "⚠️ *Nota:* El presupuesto mínimo es $1 USD por día.\n\n";
@@ -528,6 +678,28 @@ class CampaignCreationFlowService
                 }
                 break;
                 
+            case 'template_choice':
+                // Validar elección de método
+                $input = strtolower(trim($input));
+                if (in_array($input, ['paso', 'plantilla', 'template'])) {
+                    $result['valid'] = true;
+                    $result['data'] = $input;
+                } else {
+                    $result['error'] = 'Escribe "paso" para ir paso a paso o "plantilla" para usar plantilla';
+                }
+                break;
+                
+            case 'template_form':
+                // Procesar plantilla
+                $templateData = $this->parseTemplate($input);
+                if ($templateData) {
+                    $result['valid'] = true;
+                    $result['data'] = $templateData;
+                } else {
+                    $result['error'] = 'Formato de plantilla inválido. Usa el formato correcto con todos los campos requeridos.';
+                }
+                break;
+                
             case 'campaign_name':
                 if (strlen(trim($input)) >= 3) {
                     $result['valid'] = true;
@@ -561,7 +733,7 @@ class CampaignCreationFlowService
                     $result['valid'] = true;
                     $result['data'] = $budget;
                 } else {
-                    $result['error'] = 'El presupuesto debe estar entre $1 y $10,000';
+                    $result['error'] = 'El presupuesto debe estar entre $1 y $10,000 USD';
                 }
                 break;
                 

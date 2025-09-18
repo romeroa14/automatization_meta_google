@@ -145,9 +145,9 @@ class MetaCampaignCreatorService
             $this->errors[] = "Objetivo de campaña no válido: {$this->campaignData['objective']}";
         }
 
-        // Validar presupuesto
-        if (isset($this->campaignData['daily_budget']) && $this->campaignData['daily_budget'] < 100) {
-            $this->errors[] = "El presupuesto diario debe ser al menos $100 USD para esta cuenta";
+        // Validar presupuesto (mínimo $1 USD)
+        if (isset($this->campaignData['daily_budget']) && $this->campaignData['daily_budget'] < 1) {
+            $this->errors[] = "El presupuesto diario debe ser al menos $1 USD";
         }
 
         // Validar targeting (construir desde geolocalización)
