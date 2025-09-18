@@ -340,7 +340,7 @@ class MetaCampaignCreatorService
             'REACH' => 'REACH',
             'LEAD_GENERATION' => 'LEAD_GENERATION',
             'SALES' => 'OFFSITE_CONVERSIONS',
-            'CONVERSIONS' => 'OFFSITE_CONVERSIONS', // Mapear CONVERSIONS a OFFSITE_CONVERSIONS
+            'CONVERSIONS' => 'LINK_CLICKS', // Cambiar CONVERSIONS a LINK_CLICKS
             'APP_INSTALLS' => 'APP_INSTALLS'
         ];
 
@@ -372,7 +372,7 @@ class MetaCampaignCreatorService
             'REACH' => 'IMPRESSIONS',
             'LEAD_GENERATION' => 'IMPRESSIONS',
             'SALES' => 'IMPRESSIONS',
-            'CONVERSIONS' => 'IMPRESSIONS', // Mapear CONVERSIONS a IMPRESSIONS
+            'CONVERSIONS' => 'CLICKS', // Cambiar CONVERSIONS a CLICKS para compatibilidad
             'APP_INSTALLS' => 'IMPRESSIONS'
         ];
 
