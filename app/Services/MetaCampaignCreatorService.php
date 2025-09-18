@@ -242,7 +242,7 @@ class MetaCampaignCreatorService
             'promoted_object' => $this->getPromotedObject()
         ];
 
-        $response = Http::post("{$this->baseUrl}/{$this->campaignData['ad_account_id']}/adsets", [
+        $requestData = [
             'access_token' => $this->facebookAccount->access_token,
             'name' => $data['name'],
             'campaign_id' => $data['campaign_id'],
@@ -251,9 +251,15 @@ class MetaCampaignCreatorService
             'daily_budget' => $data['daily_budget'],
             'targeting' => json_encode($data['targeting']),
             'status' => $data['status'],
-            'bid_strategy' => $data['bid_strategy'],
-            'promoted_object' => json_encode($data['promoted_object'])
-        ]);
+            'bid_strategy' => $data['bid_strategy']
+        ];
+        
+        // Solo incluir promoted_object si no es null
+        if ($data['promoted_object'] !== null) {
+            $requestData['promoted_object'] = json_encode($data['promoted_object']);
+        }
+        
+        $response = Http::post("{$this->baseUrl}/{$this->campaignData['ad_account_id']}/adsets", $requestData);
 
         if ($response->successful()) {
             $result = $response->json();
@@ -314,13 +320,18 @@ class MetaCampaignCreatorService
      */
     private function getOptimizationGoal(): string
     {
+        // Para objetivos OUTCOME_, usar NONE como optimization_goal
+        if (strpos($this->campaignData['objective'], 'OUTCOME_') === 0) {
+            return 'NONE';
+        }
+        
         $mapping = [
-            'OUTCOME_TRAFFIC' => 'LINK_CLICKS',
-            'OUTCOME_ENGAGEMENT' => 'POST_ENGAGEMENT',
-            'OUTCOME_AWARENESS' => 'REACH',
-            'OUTCOME_LEADS' => 'LEAD_GENERATION',
-            'OUTCOME_SALES' => 'OFFSITE_CONVERSIONS',
-            'OUTCOME_APP_PROMOTION' => 'APP_INSTALLS'
+            'TRAFFIC' => 'LINK_CLICKS',
+            'ENGAGEMENT' => 'POST_ENGAGEMENT',
+            'REACH' => 'REACH',
+            'LEAD_GENERATION' => 'LEAD_GENERATION',
+            'SALES' => 'OFFSITE_CONVERSIONS',
+            'APP_INSTALLS' => 'APP_INSTALLS'
         ];
 
         return $mapping[$this->campaignData['objective']] ?? 'REACH';
@@ -331,8 +342,21 @@ class MetaCampaignCreatorService
      */
     private function getBillingEvent(): string
     {
-        // Para cuentas nuevas, usar IMPRESSIONS que es más básico
-        return 'IMPRESSIONS';
+        // Para objetivos OUTCOME_, usar IMPRESSIONS
+        if (strpos($this->campaignData['objective'], 'OUTCOME_') === 0) {
+            return 'IMPRESSIONS';
+        }
+        
+        $mapping = [
+            'TRAFFIC' => 'CLICKS',
+            'ENGAGEMENT' => 'IMPRESSIONS',
+            'REACH' => 'IMPRESSIONS',
+            'LEAD_GENERATION' => 'IMPRESSIONS',
+            'SALES' => 'IMPRESSIONS',
+            'APP_INSTALLS' => 'IMPRESSIONS'
+        ];
+
+        return $mapping[$this->campaignData['objective']] ?? 'IMPRESSIONS';
     }
 
     /**
@@ -355,12 +379,22 @@ class MetaCampaignCreatorService
     /**
      * Obtener objeto promocionado para conversiones
      */
-    private function getPromotedObject(): array
+    private function getPromotedObject(): ?array
     {
-        return [
-            'pixel_id' => $this->campaignData['pixel_id'] ?? null,
-            'custom_event_type' => 'PURCHASE'
-        ];
+        // Para objetivos OUTCOME_, no incluir promoted_object
+        if (strpos($this->campaignData['objective'], 'OUTCOME_') === 0) {
+            return null;
+        }
+        
+        // Solo para objetivos de conversión específicos
+        if (in_array($this->campaignData['objective'], ['SALES', 'LEAD_GENERATION'])) {
+            return [
+                'pixel_id' => $this->campaignData['pixel_id'] ?? null,
+                'custom_event_type' => 'PURCHASE'
+            ];
+        }
+        
+        return null;
     }
 
     /**
