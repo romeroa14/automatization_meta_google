@@ -155,10 +155,13 @@ class TelegramWebhookController extends Controller
         
         // Preservar la cuenta publicitaria seleccionada
         $conversationState->updateConversationData($chatId, 'ad_account', $previousState['data']['ad_account']);
-        $conversationState->updateConversationData($chatId, 'ad_account_name', $previousState['data']['ad_account_name']);
+        
+        // Obtener nombre de la cuenta publicitaria de forma segura
+        $adAccountName = $previousState['data']['ad_account_name'] ?? 'Cuenta seleccionada';
+        $conversationState->updateConversationData($chatId, 'ad_account_name', $adAccountName);
         
         $message = "🔄 *Crear Otro Anuncio*\n\n";
-        $message .= "✅ *Cuenta publicitaria:* " . $previousState['data']['ad_account_name'] . "\n\n";
+        $message .= "✅ *Cuenta publicitaria:* " . $adAccountName . "\n\n";
         $message .= $flowService->getStepMessage('fanpage');
         
         return $this->sendMessage($chatId, $message);
