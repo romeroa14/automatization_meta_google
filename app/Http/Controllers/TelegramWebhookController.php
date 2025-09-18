@@ -516,6 +516,31 @@ class TelegramWebhookController extends Controller
             // Guardar datos del paso actual
             $conversationState->updateConversationData($chatId, $currentStep, $validation['data']);
             
+            // Manejar selección de fanpage - obtener información de Instagram
+            if ($currentStep === 'fanpage') {
+                $selectedPageId = $validation['data'];
+                $instagramInfo = $flowService->getInstagramInfoForPage($selectedPageId);
+                
+                if ($instagramInfo) {
+                    // Guardar información de Instagram
+                    $conversationState->updateConversationData($chatId, 'instagram_info', $instagramInfo);
+                    
+                    // Enviar mensaje con información de Instagram
+                    $instagramMessage = "📸 *Información de Instagram encontrada:*\n\n";
+                    $instagramMessage .= "👤 *Usuario:* @{$instagramInfo['username']}\n";
+                    $instagramMessage .= "📝 *Nombre:* {$instagramInfo['name']}\n";
+                    $instagramMessage .= "👥 *Seguidores:* " . number_format($instagramInfo['followers_count']) . "\n";
+                    $instagramMessage .= "📊 *Seguidos:* " . number_format($instagramInfo['follows_count']) . "\n";
+                    $instagramMessage .= "📸 *Publicaciones:* " . number_format($instagramInfo['media_count']) . "\n\n";
+                    $instagramMessage .= "✅ *Instagram conectado exitosamente!*\n\n";
+                    
+                    $this->sendMessage($chatId, $instagramMessage);
+                } else {
+                    // Enviar mensaje de que no hay Instagram
+                    $this->sendMessage($chatId, "📸 *Instagram:* No conectado a esta fanpage.\n\n✅ *Continuando con la configuración...*");
+                }
+            }
+            
             // Manejar flujo de plantilla
             if ($currentStep === 'template_choice' && $validation['data'] === 'plantilla') {
                 // Saltar al paso de plantilla

@@ -948,6 +948,33 @@ class CampaignCreationFlowService
     }
 
     /**
+     * Obtener información de Instagram para una fanpage específica
+     */
+    public function getInstagramInfoForPage(string $pageId): ?array
+    {
+        $facebookAccount = \App\Models\FacebookAccount::where('is_active', true)->first();
+        
+        if (!$facebookAccount) {
+            return null;
+        }
+        
+        $metaService = new \App\Services\MetaApiService();
+        $pages = $metaService->getPages($facebookAccount);
+        
+        // Buscar la fanpage específica
+        foreach ($pages as $page) {
+            if ($page['id'] === $pageId && isset($page['instagram_business_account'])) {
+                return $metaService->getInstagramAccountInfo(
+                    $page['instagram_business_account']['id'], 
+                    $page['access_token']
+                );
+            }
+        }
+        
+        return null;
+    }
+
+    /**
      * Obtener fanpages con paginación
      */
     public function getFanpagesPaginated(int $page = 1, int $perPage = 20): array
@@ -989,9 +1016,8 @@ class CampaignCreationFlowService
             $message .= "   Categoría: {$page['category']}\n";
             
             // Verificar si tiene cuenta de Instagram conectada
-            if (isset($page['instagram_account'])) {
-                $message .= "   📸 Instagram: @{$page['instagram_account']['username']}\n";
-                $message .= "   📊 Seguidores: " . number_format($page['instagram_account']['followers_count']) . "\n";
+            if (isset($page['has_instagram']) && $page['has_instagram']) {
+                $message .= "   📸 Instagram: Conectado (se cargará al seleccionar)\n";
             } else {
                 $message .= "   📸 Instagram: No conectado\n";
             }

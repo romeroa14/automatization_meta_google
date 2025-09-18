@@ -195,13 +195,6 @@ class MetaApiService
         $formatted = [];
         
         foreach ($pages as $page) {
-            $instagramInfo = null;
-            
-            // Verificar si tiene cuenta de Instagram conectada
-            if (isset($page['instagram_business_account'])) {
-                $instagramInfo = $this->getInstagramAccountInfo($page['instagram_business_account']['id'], $page['access_token']);
-            }
-            
             $formatted[] = [
                 'id' => $page['id'],
                 'name' => $page['name'],
@@ -209,7 +202,8 @@ class MetaApiService
                 'access_token' => $page['access_token'] ?? null,
                 'tasks' => $page['tasks'] ?? [],
                 'display_name' => "{$page['name']} - {$page['id']}",
-                'instagram_account' => $instagramInfo
+                'has_instagram' => isset($page['instagram_business_account']),
+                'instagram_id' => $page['instagram_business_account']['id'] ?? null
             ];
         }
         
@@ -219,7 +213,7 @@ class MetaApiService
     /**
      * Obtener información de cuenta de Instagram
      */
-    private function getInstagramAccountInfo(string $instagramId, string $pageAccessToken): ?array
+    public function getInstagramAccountInfo(string $instagramId, string $pageAccessToken): ?array
     {
         try {
             $response = Http::get("{$this->baseUrl}/{$instagramId}", [
@@ -230,9 +224,9 @@ class MetaApiService
             if ($response->successful()) {
                 $data = $response->json();
                 return [
-                    'id' => $data['id'],
-                    'username' => $data['username'],
-                    'name' => $data['name'],
+                    'id' => $data['id'] ?? $instagramId,
+                    'username' => $data['username'] ?? 'N/A',
+                    'name' => $data['name'] ?? $data['username'] ?? 'Instagram Account',
                     'biography' => $data['biography'] ?? '',
                     'followers_count' => $data['followers_count'] ?? 0,
                     'follows_count' => $data['follows_count'] ?? 0,
