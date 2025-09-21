@@ -325,4 +325,126 @@ class MetaApiService
             return null;
         }
     }
+
+    /**
+     * Obtener el saldo de fondos prepagados de una cuenta publicitaria
+     */
+    public function getAccountBalance($adAccountId, $facebookAccountId = null)
+    {
+        try {
+            $facebookAccount = $facebookAccountId 
+                ? FacebookAccount::find($facebookAccountId)
+                : FacebookAccount::where('is_active', true)->first();
+
+            if (!$facebookAccount) {
+                throw new \Exception('No se encontró cuenta de Facebook activa');
+            }
+
+            $accessToken = $facebookAccount->access_token;
+            
+            // Endpoint para obtener el saldo de la cuenta publicitaria
+            $url = "https://graph.facebook.com/v18.0/{$adAccountId}";
+            
+            $response = Http::get($url, [
+                'access_token' => $accessToken,
+                'fields' => 'balance,currency,account_status,name,amount_spent'
+            ]);
+            
+            if (!$response->successful()) {
+                throw new \Exception('Error en la llamada a la API: ' . $response->body());
+            }
+            
+            $response = $response->json();
+            
+            if (isset($response['error'])) {
+                throw new \Exception($response['error']['message']);
+            }
+
+            return [
+                'success' => true,
+                'data' => $response,
+                'ad_account_id' => $adAccountId,
+                'facebook_account_id' => $facebookAccount->id
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Error obteniendo saldo de cuenta publicitaria', [
+                'ad_account_id' => $adAccountId,
+                'facebook_account_id' => $facebookAccountId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'ad_account_id' => $adAccountId
+            ];
+        }
+    }
+
+    /**
+     * Obtener información detallada de la cuenta publicitaria incluyendo saldo
+     */
+    public function getAccountInfo($adAccountId, $facebookAccountId = null)
+    {
+        try {
+            $facebookAccount = $facebookAccountId 
+                ? FacebookAccount::find($facebookAccountId)
+                : FacebookAccount::where('is_active', true)->first();
+
+            if (!$facebookAccount) {
+                throw new \Exception('No se encontró cuenta de Facebook activa');
+            }
+
+            $accessToken = $facebookAccount->access_token;
+            
+            // Obtener información completa de la cuenta incluyendo saldo
+            $accountUrl = "https://graph.facebook.com/v18.0/{$adAccountId}";
+            $accountResponse = Http::get($accountUrl, [
+                'access_token' => $accessToken,
+                'fields' => 'balance,currency,account_status,name,amount_spent'
+            ]);
+            
+            if (!$accountResponse->successful()) {
+                throw new \Exception('Error obteniendo información de cuenta: ' . $accountResponse->body());
+            }
+            
+            $accountResponse = $accountResponse->json();
+            
+            if (isset($accountResponse['error'])) {
+                throw new \Exception($accountResponse['error']['message']);
+            }
+
+            // Extraer información de saldo de la respuesta
+            $balanceData = [
+                'amount' => $accountResponse['balance'] ?? null,
+                'currency' => $accountResponse['currency'] ?? null,
+                'account_status' => $accountResponse['account_status'] ?? null,
+                'amount_spent' => $accountResponse['amount_spent'] ?? null
+            ];
+
+            return [
+                'success' => true,
+                'data' => [
+                    'account_info' => $accountResponse,
+                    'balance' => $balanceData
+                ],
+                'ad_account_id' => $adAccountId,
+                'facebook_account_id' => $facebookAccount->id
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Error obteniendo información de cuenta publicitaria', [
+                'ad_account_id' => $adAccountId,
+                'facebook_account_id' => $facebookAccountId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'ad_account_id' => $adAccountId
+            ];
+        }
+    }
 }

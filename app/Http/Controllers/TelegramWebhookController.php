@@ -10,6 +10,7 @@ use App\Models\FacebookAccount;
 use App\Models\AdvertisingPlan;
 use App\Services\CampaignCreationFlowService;
 use App\Services\ConversationStateService;
+use App\Services\MetaApiService;
 
 class TelegramWebhookController extends Controller
 {
@@ -68,6 +69,7 @@ class TelegramWebhookController extends Controller
             '/crear_campana' => 'createCampaignCommand',
             '/otro_ad' => 'createAnotherAdCommand',
             '/mis_cuentas' => 'myAccountsCommand',
+            '/saldo' => 'balanceCommand',
             '/planes' => 'plansCommand',
             '/estado' => 'statusCommand',
             '/cancelar' => 'cancelCommand',
@@ -781,6 +783,7 @@ class TelegramWebhookController extends Controller
                "/crear_campana - Crear nueva campaña (flujo completo)\n" .
                "/otro_ad - Crear otro anuncio (mantiene cuenta publicitaria)\n" .
                "/mis_cuentas - Ver cuentas disponibles\n" .
+               "/saldo - Consultar saldo de fondos prepagados\n" .
                "/planes - Ver planes publicitarios\n" .
                "/estado - Estado del sistema\n" .
                "/progreso - Ver progreso de conversación activa\n" .
@@ -788,6 +791,104 @@ class TelegramWebhookController extends Controller
                "/help - Mostrar esta ayuda\n\n" .
                "💡 *Tips:*\n" .
                "• Usa /crear_campana para comenzar el flujo completo\n" .
-               "• Usa /otro_ad para crear anuncios adicionales sin repetir configuración";
+               "• Usa /otro_ad para crear anuncios adicionales sin repetir configuración\n" .
+               "• Usa /saldo para verificar fondos disponibles";
+    }
+
+    private function balanceCommand($chatId, $message)
+    {
+        try {
+            $conversationState = new ConversationStateService();
+            $metaApiService = new MetaApiService();
+            
+            // Verificar si hay una conversación previa con cuenta publicitaria
+            $previousState = $conversationState->getConversationState($chatId);
+            
+            if (!$previousState || !isset($previousState['data']['ad_account'])) {
+                return $this->sendMessage($chatId, 
+                    "❌ *No hay cuenta publicitaria seleccionada.*\n\n" .
+                    "💡 *Opciones:*\n" .
+                    "• Usa /crear_campana para seleccionar cuenta\n" .
+                    "• O usa /mis_cuentas para ver cuentas disponibles"
+                );
+            }
+
+            $adAccountId = $previousState['data']['ad_account'];
+            $adAccountName = $previousState['data']['ad_account_name'] ?? 'Cuenta seleccionada';
+            
+            // Obtener información de la cuenta incluyendo saldo
+            $result = $metaApiService->getAccountInfo($adAccountId);
+            
+            if (!$result['success']) {
+                return $this->sendMessage($chatId, 
+                    "❌ *Error consultando saldo:*\n" .
+                    "```\n" . $result['error'] . "\n```"
+                );
+            }
+
+            $accountInfo = $result['data']['account_info'];
+            $balance = $result['data']['balance'];
+            
+            $message = "💰 *Saldo Actual de Cuenta Publicitaria*\n\n";
+            $message .= "🏢 *Cuenta:* " . $adAccountName . "\n";
+            $message .= "🆔 *ID:* `" . $adAccountId . "`\n\n";
+            
+            if ($balance && isset($balance['amount'])) {
+                $message .= "💵 *Saldo actual (pendiente de pago):*\n";
+                
+                // Formatear saldo (viene en centavos)
+                $amount = $balance['amount'] / 100; // Convertir de centavos a dólares
+                $currency = $balance['currency'] ?? 'USD';
+                $message .= "• **" . number_format($amount, 2) . " " . $currency . "**\n";
+                
+                if (isset($balance['amount_spent'])) {
+                    $amountSpent = $balance['amount_spent'] / 100; // Convertir de centavos a dólares
+                    $message .= "• **Gastado:** " . number_format($amountSpent, 2) . " " . $currency . "\n";
+                }
+                
+                if (isset($balance['account_status'])) {
+                    $statusText = $balance['account_status'] == 1 ? 'Activa' : 'Inactiva';
+                    $message .= "• **Estado:** " . $statusText . "\n";
+                }
+            } else {
+                $message .= "⚠️ *No se pudo obtener información del saldo*\n";
+                $message .= "• La cuenta puede no tener fondos prepagados\n";
+                $message .= "• O puede requerir permisos adicionales\n";
+            }
+            
+            // Información adicional de la cuenta
+            if (isset($accountInfo['name'])) {
+                $message .= "\n📊 *Información de la cuenta:*\n";
+                $message .= "• **Nombre:** " . $accountInfo['name'] . "\n";
+            }
+            
+            if (isset($accountInfo['account_status'])) {
+                $message .= "• **Estado:** " . $accountInfo['account_status'] . "\n";
+            }
+            
+            if (isset($accountInfo['currency'])) {
+                $message .= "• **Moneda:** " . $accountInfo['currency'] . "\n";
+            }
+            
+            $message .= "\n📝 *Nota importante:*\n";
+            $message .= "• Este es el **saldo actual** (pendiente de pago)\n";
+            $message .= "• Los **fondos prepagados** no están disponibles via API\n";
+            $message .= "• Para ver fondos completos, revisa Meta Ads Manager\n\n";
+            $message .= "💡 *Tip:* Usa /crear_campana para crear anuncios";
+            
+            return $this->sendMessage($chatId, $message);
+            
+        } catch (\Exception $e) {
+            Log::error('Error en comando de saldo', [
+                'chat_id' => $chatId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return $this->sendMessage($chatId, 
+                "❌ *Error consultando saldo:*\n" .
+                "```\n" . $e->getMessage() . "\n```"
+            );
+        }
     }
 }

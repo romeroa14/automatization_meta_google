@@ -15,6 +15,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \App\Http\Middleware\VerifyCsrfToken::class,
         ]);
+        
+        $middleware->alias([
+            'redirect.admin' => \App\Http\Middleware\RedirectToAdminLogin::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
