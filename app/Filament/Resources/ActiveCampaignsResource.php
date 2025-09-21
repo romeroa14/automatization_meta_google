@@ -262,6 +262,22 @@ class ActiveCampaignsResource extends Resource
                     ->badge()
                     ->color('info'),
                     
+                TextColumn::make('adsets_count')
+                    ->label('AdSets')
+                    ->getStateUsing(function ($record) {
+                        return $record->adsets_count ?? $record->getAdsetsCount();
+                    })
+                    ->badge()
+                    ->color('info'),
+                    
+                TextColumn::make('ads_count')
+                    ->label('Anuncios')
+                    ->getStateUsing(function ($record) {
+                        return $record->ads_count ?? $record->getAdsCount();
+                    })
+                    ->badge()
+                    ->color('success'),
+                    
                 TextColumn::make('date_range')
                     ->label('Rango de Fechas')
                     ->getStateUsing(function ($record) {
@@ -288,7 +304,48 @@ class ActiveCampaignsResource extends Resource
                         'PAUSED' => 'Pausada',
                         'DELETED' => 'Eliminada',
                         'UNKNOWN' => 'Desconocido',
-                    ]),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        if (!$data['value']) {
+                            return $query;
+                        }
+                        
+                        // Filtrar por estado real calculado
+                        return $query->whereRaw("
+                            CASE 
+                                WHEN JSON_EXTRACT(campaign_data, '$.status') = 'ACTIVE' 
+                                    AND JSON_EXTRACT(campaign_data, '$.start_time') IS NOT NULL 
+                                    AND JSON_EXTRACT(campaign_data, '$.stop_time') IS NOT NULL
+                                    AND NOW() BETWEEN JSON_EXTRACT(campaign_data, '$.start_time') AND JSON_EXTRACT(campaign_data, '$.stop_time')
+                                THEN 'ACTIVE'
+                                WHEN JSON_EXTRACT(campaign_data, '$.start_time') IS NOT NULL 
+                                    AND NOW() < JSON_EXTRACT(campaign_data, '$.start_time')
+                                THEN 'SCHEDULED'
+                                WHEN JSON_EXTRACT(campaign_data, '$.stop_time') IS NOT NULL 
+                                    AND NOW() > JSON_EXTRACT(campaign_data, '$.stop_time')
+                                THEN 'COMPLETED'
+                                ELSE JSON_EXTRACT(campaign_data, '$.status')
+                            END = ?
+                        ", [$data['value']]);
+                    }),
+                    
+                Tables\Filters\SelectFilter::make('ad_account_id')
+                    ->label('Cuenta Publicitaria')
+                    ->options(function () {
+                        return \App\Models\ActiveCampaign::select('ad_account_id')
+                            ->distinct()
+                            ->pluck('ad_account_id', 'ad_account_id')
+                            ->mapWithKeys(function ($id) {
+                                return [$id => 'ID: ' . $id];
+                            });
+                    })
+                    ->query(function (Builder $query, array $data): Builder {
+                        if (!$data['value']) {
+                            return $query;
+                        }
+                        
+                        return $query->where('ad_account_id', $data['value']);
+                    }),
                     
                 Tables\Filters\TernaryFilter::make('has_date_range')
                     ->label('Con Rango de Fechas')
@@ -335,7 +392,16 @@ class ActiveCampaignsResource extends Resource
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('Cerrar'),
                     
-                
+                Action::make('view_adsets')
+                    ->label('Ver AdSets')
+                    ->icon('heroicon-o-rectangle-stack')
+                    ->color('warning')
+                    ->modalHeading('AdSets de la Campaña')
+                    ->modalContent(fn ($record) => view('components.raw-html', [
+                        'html' => self::getAdsetsDetailsHtml($record)
+                    ]))
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Cerrar'),
                     
             ])
             ->bulkActions([
@@ -343,7 +409,45 @@ class ActiveCampaignsResource extends Resource
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ])
-            ->defaultSort('created_at', 'desc');
+            ->defaultSort('created_at', 'desc')
+            ->modifyQueryUsing(function (Builder $query) {
+                // Agrupar por campaña para evitar duplicados (usando MIN para ID y array_agg para JSON)
+                return $query->selectRaw('
+                    MIN(id) as id,
+                    meta_campaign_id,
+                    meta_campaign_name,
+                    campaign_daily_budget,
+                    campaign_total_budget,
+                    amount_spent,
+                    campaign_status,
+                    campaign_objective,
+                    facebook_account_id,
+                    ad_account_id,
+                    campaign_start_time,
+                    campaign_stop_time,
+                    campaign_created_time,
+                    MAX(created_at) as created_at,
+                    COUNT(DISTINCT meta_adset_id) as adsets_count,
+                    COUNT(DISTINCT meta_ad_id) as ads_count,
+                    (array_agg(campaign_data))[1] as campaign_data,
+                    (array_agg(adset_data))[1] as adset_data,
+                    (array_agg(ad_data))[1] as ad_data
+                ')
+                ->groupBy([
+                    'meta_campaign_id',
+                    'meta_campaign_name', 
+                    'campaign_daily_budget',
+                    'campaign_total_budget',
+                    'amount_spent',
+                    'campaign_status',
+                    'campaign_objective',
+                    'facebook_account_id',
+                    'ad_account_id',
+                    'campaign_start_time',
+                    'campaign_stop_time',
+                    'campaign_created_time'
+                ]);
+            });
     }
 
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
@@ -356,5 +460,36 @@ class ActiveCampaignsResource extends Resource
         return [
             'index' => Pages\ListActiveCampaigns::route('/'),
         ];
+    }
+    
+    /**
+     * Generar HTML para detalles de AdSets
+     */
+    private static function getAdsetsDetailsHtml($record)
+    {
+        $adsets = $record->getAdsets();
+        
+        $html = '<div class="space-y-4">';
+        $html .= '<div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">';
+        $html .= '<h3 class="text-lg font-bold text-yellow-800 mb-3">📊 AdSets de la Campaña</h3>';
+        $html .= '<p class="text-sm text-yellow-700">Total de AdSets: ' . $adsets->count() . '</p>';
+        $html .= '</div>';
+        
+        foreach ($adsets as $adset) {
+            $html .= '<div class="bg-white p-4 rounded-lg border border-gray-200">';
+            $html .= '<h4 class="font-bold text-gray-800">' . ($adset->meta_adset_name ?? 'N/A') . '</h4>';
+            $html .= '<div class="grid grid-cols-2 gap-2 mt-2 text-sm">';
+            $html .= '<div><strong>Estado:</strong> ' . ($adset->adset_status ?? 'N/A') . '</div>';
+            $html .= '<div><strong>Presupuesto Diario:</strong> $' . number_format($adset->adset_daily_budget ?? 0, 2) . '</div>';
+            $html .= '<div><strong>Presupuesto Total:</strong> $' . number_format($adset->adset_lifetime_budget ?? 0, 2) . '</div>';
+            $html .= '<div><strong>Inicio:</strong> ' . ($adset->adset_start_time ? $adset->adset_start_time->format('d/m/Y H:i') : 'N/A') . '</div>';
+            $html .= '<div><strong>Fin:</strong> ' . ($adset->adset_stop_time ? $adset->adset_stop_time->format('d/m/Y H:i') : 'N/A') . '</div>';
+            $html .= '</div>';
+            $html .= '</div>';
+        }
+        
+        $html .= '</div>';
+        
+        return $html;
     }
 }
