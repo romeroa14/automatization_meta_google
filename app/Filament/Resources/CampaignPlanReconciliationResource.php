@@ -296,7 +296,8 @@ class CampaignPlanReconciliationResource extends Resource
                         }
                         
                         // Determinar si el presupuesto es a nivel campaña o AdSet
-                        $isCampaignLevel = $campaign->isCampaignLevelBudget();
+                        $budgetLevel = $campaign->getBudgetLevel();
+                        $isCampaignLevel = ($budgetLevel === 'campaign');
                         
                         if ($isCampaignLevel) {
                             // PRESUPUESTO A NIVEL CAMPAÑA: usar solo el gasto de la campaña principal
@@ -324,7 +325,8 @@ class CampaignPlanReconciliationResource extends Resource
                             return 'N/A';
                         }
                         
-                        $isCampaignLevel = $campaign->isCampaignLevelBudget();
+                        $budgetLevel = $campaign->getBudgetLevel();
+                        $isCampaignLevel = ($budgetLevel === 'campaign');
                         
                         if ($isCampaignLevel) {
                             return 'Gasto a nivel campaña (no sumado de AdSets)';
@@ -354,14 +356,15 @@ class CampaignPlanReconciliationResource extends Resource
                             return $customDetails['total_budget'];
                         }
                         
-                        // Fallback: calcular desde presupuesto diario
+                        // Fallback: calcular desde presupuesto diario usando SOLO fechas de API
                         $campaign = self::getMainCampaign($record);
                         if (!$campaign) {
                             return 0;
                         }
                         
-                        $dailyBudget = $campaign->campaign_daily_budget ?? $campaign->adset_daily_budget;
-                        $duration = $campaign->getCampaignDurationFromAdsets();
+                        // Usar SOLO fechas de la API para calcular duración
+                        $dailyBudget = $campaign->getEffectiveDailyBudget();
+                        $duration = $campaign->getEffectiveDuration(); // Solo fechas de API
                         
                         if ($dailyBudget && $duration) {
                             return $dailyBudget * $duration;
@@ -385,9 +388,8 @@ class CampaignPlanReconciliationResource extends Resource
                             return 0;
                         }
                         
-                        // Mostrar el presupuesto diario de la campaña
-                        $dailyBudget = $campaign->campaign_daily_budget ?? $campaign->adset_daily_budget;
-                        return $dailyBudget ?? 0;
+                        // Usar el nuevo método para obtener el presupuesto diario efectivo
+                        return $campaign->getEffectiveDailyBudget();
                     })
                     ->money('USD')
                     ->sortable()

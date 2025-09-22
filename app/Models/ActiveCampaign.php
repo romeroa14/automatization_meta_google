@@ -667,11 +667,11 @@ class ActiveCampaign extends Model
     }
     
     /**
-     * Obtener la duración efectiva según las fechas disponibles
+     * Obtener la duración efectiva: API primero, parser como fallback
      */
     public function getEffectiveDuration(): int
     {
-        // Priorizar fechas de AdSet si existen
+        // PRIMERO: Intentar usar fechas de la API (stop_time - start_time)
         $adsetStart = $this->adset_start_time;
         $adsetStop = $this->adset_stop_time;
         $campaignStart = $this->campaign_start_time;
@@ -681,13 +681,70 @@ class ActiveCampaign extends Model
         $stopTime = $adsetStop ?? $campaignStop;
         
         if ($startTime && $stopTime) {
+            // Hay fechas de API, usar API
             return $startTime->diffInDays($stopTime) + 1;
-        } elseif ($startTime) {
-            // Solo fecha de inicio, usar duración estimada
-            return 7; // 7 días por defecto
-        } else {
-            return 0;
         }
+        
+        // SEGUNDO: Si NO hay stop_time en la API, usar parser como fallback
+        $durationFromName = $this->calculateDurationFromName();
+        if ($durationFromName > 0) {
+            return $durationFromName;
+        }
+        
+        // Si no hay ni API ni parser, no se puede calcular
+        return 0;
+    }
+    
+    /**
+     * Calcular duración desde el nombre de la campaña usando parser de fechas
+     */
+    public function calculateDurationFromName(): int
+    {
+        $campaignName = $this->meta_campaign_name ?? '';
+        
+        // Patrones para detectar fechas en el nombre
+        $patterns = [
+            '/(\d{1,2}\/\d{1,2})\s*-\s*(\d{1,2}\/\d{1,2})/',  // 19/09 - 23/09
+            '/(\d{1,2}\/\d{1,2}\/\d{4})\s*-\s*(\d{1,2}\/\d{1,2}\/\d{4})/',  // 19/09/2025 - 23/09/2025
+        ];
+        
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $campaignName, $matches)) {
+                try {
+                    if (count($matches) >= 3) {
+                        // Tiene fecha de inicio y fin
+                        $startDate = $matches[1];
+                        $endDate = $matches[2];
+                        
+                        // Determinar formato según el patrón
+                        if (strpos($startDate, '/') !== false && strlen($startDate) <= 5) {
+                            // Formato d/m
+                            $start = \Carbon\Carbon::createFromFormat('d/m', $startDate);
+                            $end = \Carbon\Carbon::createFromFormat('d/m', $endDate);
+                        } else {
+                            // Formato d/m/Y
+                            $start = \Carbon\Carbon::createFromFormat('d/m/Y', $startDate);
+                            $end = \Carbon\Carbon::createFromFormat('d/m/Y', $endDate);
+                        }
+                        
+                        $duration = $start->diffInDays($end) + 1;
+                        return $duration;
+                    }
+                } catch (\Exception $e) {
+                    // Si hay error, continuar con el siguiente patrón
+                    continue;
+                }
+            }
+        }
+        
+        // Si no se encuentra patrón de fechas, buscar solo fecha de inicio
+        $singleDatePattern = '/(\d{1,2}\/\d{1,2})/';
+        if (preg_match($singleDatePattern, $campaignName, $matches)) {
+            // Solo tiene fecha de inicio, usar duración por defecto
+            return 1; // 1 día por defecto
+        }
+        
+        return 0; // No se encontraron fechas
     }
     
     /**
@@ -1252,31 +1309,5 @@ class ActiveCampaign extends Model
         return null;
     }
     
-    /**
-     * Calcular duración basada en el nombre de la campaña
-     * Busca patrones como "19/09 - 23/09" en el nombre
-     */
-    public function calculateDurationFromName()
-    {
-        $campaignName = $this->meta_campaign_name ?? '';
-        
-        // Buscar patrón de fechas en el nombre (ej: "19/09 - 23/09")
-        if (preg_match('/(\d{1,2}\/\d{1,2})\s*-\s*(\d{1,2}\/\d{1,2})/', $campaignName, $matches)) {
-            try {
-                $startDate = \Carbon\Carbon::createFromFormat('d/m', $matches[1]);
-                $endDate = \Carbon\Carbon::createFromFormat('d/m', $matches[2]);
-                
-                // Calcular duración (inclusive)
-                $duration = $startDate->diffInDays($endDate) + 1;
-                
-                return $duration;
-            } catch (\Exception $e) {
-                // Si hay error, usar duración por defecto
-            }
-        }
-        
-        // Si no se puede calcular, usar duración por defecto
-        return 5; // 5 días por defecto
-    }
     
 }

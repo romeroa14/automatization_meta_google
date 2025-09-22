@@ -351,7 +351,8 @@ class ActiveCampaignsResource extends Resource
                                 ELSE campaign_data->>'status'
                             END = ?
                         ", [$data['value']]);
-                    }),
+                    })
+                    ->default('ACTIVE'),
                     
                 Tables\Filters\SelectFilter::make('ad_account_id')
                     ->label('Cuenta Publicitaria')

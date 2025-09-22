@@ -345,8 +345,8 @@ class CampaignReconciliationService
      */
     public function createReconciliation(ActiveCampaign $campaign, array $campaignInfo, ?AdvertisingPlan $plan): CampaignPlanReconciliation
     {
-        // Calcular presupuesto total estimado
-        $estimatedTotalBudget = $campaignInfo['daily_budget'] * $campaignInfo['duration_days'];
+        // Usar los nuevos métodos para calcular presupuesto total
+        $estimatedTotalBudget = $campaign->getEffectiveTotalBudget();
         
         // Determinar el tipo de plan y mensaje
         $planType = $plan ? 'existing' : 'custom';
@@ -362,10 +362,10 @@ class CampaignReconciliationService
             'reconciliation_status' => 'pending',
             'reconciliation_date' => now(),
             'planned_budget' => $plan ? $plan->total_budget : $estimatedTotalBudget,
-            'actual_spent' => $campaignInfo['actual_spent'],
-            'variance' => ($plan ? $plan->total_budget : $estimatedTotalBudget) - $campaignInfo['actual_spent'],
-            'variance_percentage' => ($plan ? $plan->total_budget : $estimatedTotalBudget) > 0 ? 
-                ((($plan ? $plan->total_budget : $estimatedTotalBudget) - $campaignInfo['actual_spent']) / ($plan ? $plan->total_budget : $estimatedTotalBudget)) * 100 : 0,
+            'actual_spent' => $campaign->amount_spent,
+            'variance' => $campaign->getRemainingBudget(),
+            'variance_percentage' => $estimatedTotalBudget > 0 ? 
+                (($campaign->getRemainingBudget() / $estimatedTotalBudget) * 100) : 0,
             'notes' => $plan ? 
                 "Plan detectado automáticamente: {$plan->plan_name} (Presupuesto: $" . number_format($campaignInfo['daily_budget'], 2) . "/día, Duración: {$campaignInfo['duration_days']} días)" :
                 "📋 PLAN PERSONALIZADO - Presupuesto: $" . number_format($campaignInfo['daily_budget'], 2) . "/día, Duración: {$campaignInfo['duration_days']} días. Total estimado: $" . number_format($estimatedTotalBudget, 2) . " - Requiere configuración de precio al cliente.",
