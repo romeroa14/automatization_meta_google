@@ -24,19 +24,14 @@ class LoadActiveCampaigns extends Command
         $this->info("📱 Cuenta: {$account->account_name}");
         
         try {
-            // Obtener cuentas publicitarias
-            $url = "https://graph.facebook.com/v18.0/me/adaccounts?limit=250&access_token={$account->access_token}";
-            $response = file_get_contents($url);
-            $data = json_decode($response, true);
-            
-            if (!isset($data['data']) || empty($data['data'])) {
-                $this->error('❌ No se encontraron cuentas publicitarias');
+            // Usar la cuenta publicitaria seleccionada
+            if (!$account->selected_ad_account_id) {
+                $this->error('❌ No se ha configurado selected_ad_account_id');
                 return;
             }
             
-            $adAccount = $data['data'][0]; // Usar la primera cuenta
-            $adAccountId = str_replace('act_', '', $adAccount['id']);
-            $accountName = $adAccount['name'] ?? 'Cuenta ' . $adAccountId;
+            $adAccountId = str_replace('act_', '', $account->selected_ad_account_id);
+            $accountName = 'Cuenta ' . $adAccountId;
             $this->info("🎯 Usando cuenta publicitaria: {$accountName} (ID: {$adAccountId})");
             
             // Limpiar campañas existentes

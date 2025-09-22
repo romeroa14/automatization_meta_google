@@ -601,6 +601,107 @@ class ActiveCampaign extends Model
     }
     
     /**
+     * Detectar el nivel de presupuesto (campaign, adset, unknown)
+     */
+    public function getBudgetLevel(): string
+    {
+        $campaignDaily = $this->campaign_daily_budget ?? 0;
+        $campaignLifetime = $this->campaign_total_budget ?? 0;
+        $adsetDaily = $this->adset_daily_budget ?? 0;
+        $adsetLifetime = $this->adset_lifetime_budget ?? 0;
+        
+        if ($campaignDaily > 0 || $campaignLifetime > 0) {
+            return 'campaign';
+        } elseif ($adsetDaily > 0 || $adsetLifetime > 0) {
+            return 'adset';
+        } else {
+            return 'unknown';
+        }
+    }
+    
+    /**
+     * Obtener el presupuesto diario según el nivel detectado
+     */
+    public function getEffectiveDailyBudget(): float
+    {
+        $level = $this->getBudgetLevel();
+        
+        if ($level === 'campaign') {
+            return $this->campaign_daily_budget ?? 0;
+        } elseif ($level === 'adset') {
+            return $this->adset_daily_budget ?? 0;
+        } else {
+            return 0;
+        }
+    }
+    
+    /**
+     * Obtener el presupuesto total según el nivel detectado
+     */
+    public function getEffectiveTotalBudget(): float
+    {
+        $level = $this->getBudgetLevel();
+        $duration = $this->getEffectiveDuration();
+        
+        if ($level === 'campaign') {
+            $lifetime = $this->campaign_total_budget ?? 0;
+            $daily = $this->campaign_daily_budget ?? 0;
+            
+            if ($lifetime > 0) {
+                return $lifetime;
+            } elseif ($daily > 0 && $duration > 0) {
+                return $daily * $duration;
+            }
+        } elseif ($level === 'adset') {
+            $lifetime = $this->adset_lifetime_budget ?? 0;
+            $daily = $this->adset_daily_budget ?? 0;
+            
+            if ($lifetime > 0) {
+                return $lifetime;
+            } elseif ($daily > 0 && $duration > 0) {
+                return $daily * $duration;
+            }
+        }
+        
+        return 0;
+    }
+    
+    /**
+     * Obtener la duración efectiva según las fechas disponibles
+     */
+    public function getEffectiveDuration(): int
+    {
+        // Priorizar fechas de AdSet si existen
+        $adsetStart = $this->adset_start_time;
+        $adsetStop = $this->adset_stop_time;
+        $campaignStart = $this->campaign_start_time;
+        $campaignStop = $this->campaign_stop_time;
+        
+        $startTime = $adsetStart ?? $campaignStart;
+        $stopTime = $adsetStop ?? $campaignStop;
+        
+        if ($startTime && $stopTime) {
+            return $startTime->diffInDays($stopTime) + 1;
+        } elseif ($startTime) {
+            // Solo fecha de inicio, usar duración estimada
+            return 7; // 7 días por defecto
+        } else {
+            return 0;
+        }
+    }
+    
+    /**
+     * Calcular presupuesto restante
+     */
+    public function getRemainingBudget(): float
+    {
+        $totalBudget = $this->getEffectiveTotalBudget();
+        $spent = $this->amount_spent ?? 0;
+        
+        return max(0, $totalBudget - $spent);
+    }
+    
+    /**
      * Contar cuántos AdSets tiene esta campaña
      */
     public function getAdsetsCount()
@@ -1178,38 +1279,4 @@ class ActiveCampaign extends Model
         return 5; // 5 días por defecto
     }
     
-    /**
-     * Detectar el nivel del presupuesto (campaña o AdSet)
-     */
-    public function getBudgetLevel(): string
-    {
-        // Si tiene presupuesto a nivel campaña, es nivel campaña
-        if ($this->campaign_daily_budget > 0) {
-            return 'campaign';
-        }
-        
-        // Si solo tiene presupuesto a nivel AdSet, es nivel AdSet
-        if ($this->adset_daily_budget > 0) {
-            return 'adset';
-        }
-        
-        // Si no tiene ninguno, es desconocido
-        return 'unknown';
-    }
-    
-    /**
-     * Verificar si el presupuesto es a nivel campaña
-     */
-    public function isCampaignLevelBudget(): bool
-    {
-        return $this->getBudgetLevel() === 'campaign';
-    }
-    
-    /**
-     * Verificar si el presupuesto es a nivel AdSet
-     */
-    public function isAdsetLevelBudget(): bool
-    {
-        return $this->getBudgetLevel() === 'adset';
-    }
 }

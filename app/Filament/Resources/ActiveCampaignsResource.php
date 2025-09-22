@@ -287,7 +287,8 @@ class ActiveCampaignsResource extends Resource
                 TextColumn::make('adsets_count')
                     ->label('AdSets')
                     ->getStateUsing(function ($record) {
-                        return $record->adsets_count ?? $record->getAdsetsCount();
+                        // Usar el método directamente ya que el query agrupado no está funcionando
+                        return $record->getAdsetsCount();
                     })
                     ->badge()
                     ->color('info'),
@@ -295,7 +296,8 @@ class ActiveCampaignsResource extends Resource
                 TextColumn::make('ads_count')
                     ->label('Anuncios')
                     ->getStateUsing(function ($record) {
-                        return $record->ads_count ?? $record->getAdsCount();
+                        // Usar el método directamente ya que el query agrupado no está funcionando
+                        return $record->getAdsCount();
                     })
                     ->badge()
                     ->color('success'),
