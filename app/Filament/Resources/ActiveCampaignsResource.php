@@ -205,12 +205,18 @@ class ActiveCampaignsResource extends Resource
                 TextColumn::make('campaign_total_budget')
                     ->label('Presupuesto Restante')
                     ->getStateUsing(function ($record) {
-                        // Obtener presupuesto total (diario × duración) - valores ya convertidos a dólares
+                        // Usar el nuevo método que maneja todos los casos
+                        $remainingBudget = $record->getCampaignRemainingBudgetFromAdsets();
+                        
+                        if ($remainingBudget !== null) {
+                            return $remainingBudget;
+                        }
+                        
+                        // Fallback a la lógica anterior si no funciona
                         $dailyBudget = $record->campaign_daily_budget ?? $record->adset_daily_budget;
                         $duration = $record->getCampaignDurationDays() ?? $record->getAdsetDurationDays();
                         
                         if ($dailyBudget && $duration) {
-                            // Los valores ya están en dólares, no dividir por 100
                             $totalBudget = $dailyBudget * $duration;
                             
                             // Usar override si existe
@@ -219,12 +225,11 @@ class ActiveCampaignsResource extends Resource
                                 return max(0, $totalBudget - (float) $override);
                             }
 
-                            // Obtener gastado (ya está en formato correcto)
+                            // Obtener gastado
                             $spent = $record->amount_spent ?? $record->getAmountSpentFromMeta();
                             
                             if ($spent !== null) {
-                                $remaining = $totalBudget - $spent;
-                                return max(0, $remaining);
+                                return max(0, $totalBudget - $spent);
                             }
                             
                             return $totalBudget;
@@ -240,11 +245,18 @@ class ActiveCampaignsResource extends Resource
                 TextColumn::make('campaign_lifetime_budget')
                     ->label('Presupuesto Total')
                     ->getStateUsing(function ($record) {
+                        // Usar la nueva lógica de análisis de AdSets
+                        $totalBudgetFromAdsets = $record->getCampaignTotalBudgetFromAdsets();
+                        
+                        if ($totalBudgetFromAdsets !== null) {
+                            return $totalBudgetFromAdsets;
+                        }
+                        
+                        // Fallback a la lógica anterior
                         $dailyBudget = $record->campaign_daily_budget ?? $record->adset_daily_budget;
                         $duration = $record->getCampaignDurationDays() ?? $record->getAdsetDurationDays();
                         
                         if ($dailyBudget && $duration) {
-                            // Los valores ya están en dólares, no dividir por 100
                             return $dailyBudget * $duration;
                         }
                         
@@ -256,7 +268,17 @@ class ActiveCampaignsResource extends Resource
                     
                 TextColumn::make('campaign_duration_days')
                     ->label('Duración')
-                    ->getStateUsing(fn ($record) => $record->getCampaignDurationDays())
+                    ->getStateUsing(function ($record) {
+                        // Usar la nueva lógica de análisis de AdSets
+                        $durationFromAdsets = $record->getCampaignDurationFromAdsets();
+                        
+                        if ($durationFromAdsets !== null) {
+                            return $durationFromAdsets;
+                        }
+                        
+                        // Fallback a la lógica anterior
+                        return $record->getCampaignDurationDays();
+                    })
                     ->suffix(' días')
                     ->sortable()
                     ->badge()
@@ -310,21 +332,21 @@ class ActiveCampaignsResource extends Resource
                             return $query;
                         }
                         
-                        // Filtrar por estado real calculado
+                        // Filtrar por estado real calculado (PostgreSQL compatible)
                         return $query->whereRaw("
                             CASE 
-                                WHEN JSON_EXTRACT(campaign_data, '$.status') = 'ACTIVE' 
-                                    AND JSON_EXTRACT(campaign_data, '$.start_time') IS NOT NULL 
-                                    AND JSON_EXTRACT(campaign_data, '$.stop_time') IS NOT NULL
-                                    AND NOW() BETWEEN JSON_EXTRACT(campaign_data, '$.start_time') AND JSON_EXTRACT(campaign_data, '$.stop_time')
+                                WHEN campaign_data->>'status' = 'ACTIVE' 
+                                    AND campaign_data->>'start_time' IS NOT NULL 
+                                    AND campaign_data->>'stop_time' IS NOT NULL
+                                    AND NOW() BETWEEN (campaign_data->>'start_time')::timestamp AND (campaign_data->>'stop_time')::timestamp
                                 THEN 'ACTIVE'
-                                WHEN JSON_EXTRACT(campaign_data, '$.start_time') IS NOT NULL 
-                                    AND NOW() < JSON_EXTRACT(campaign_data, '$.start_time')
+                                WHEN campaign_data->>'start_time' IS NOT NULL 
+                                    AND NOW() < (campaign_data->>'start_time')::timestamp
                                 THEN 'SCHEDULED'
-                                WHEN JSON_EXTRACT(campaign_data, '$.stop_time') IS NOT NULL 
-                                    AND NOW() > JSON_EXTRACT(campaign_data, '$.stop_time')
+                                WHEN campaign_data->>'stop_time' IS NOT NULL 
+                                    AND NOW() > (campaign_data->>'stop_time')::timestamp
                                 THEN 'COMPLETED'
-                                ELSE JSON_EXTRACT(campaign_data, '$.status')
+                                ELSE campaign_data->>'status'
                             END = ?
                         ", [$data['value']]);
                     }),
@@ -353,8 +375,8 @@ class ActiveCampaignsResource extends Resource
                     ->trueLabel('Solo con rango')
                     ->falseLabel('Sin rango')
                     ->queries(
-                        true: fn ($query) => $query->whereRaw("JSON_EXTRACT(campaign_data, '$.amount_spent_range') IS NOT NULL"),
-                        false: fn ($query) => $query->whereRaw("JSON_EXTRACT(campaign_data, '$.amount_spent_range') IS NULL")
+                        true: fn ($query) => $query->whereRaw("campaign_data->>'amount_spent_range' IS NOT NULL"),
+                        false: fn ($query) => $query->whereRaw("campaign_data->>'amount_spent_range' IS NULL")
                     ),
             ])
             ->actions([
@@ -403,10 +425,72 @@ class ActiveCampaignsResource extends Resource
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('Cerrar'),
                     
+                Action::make('delete_campaign_complete')
+                    ->label('Eliminar Campaña Completa')
+                    ->icon('heroicon-o-trash')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading('Eliminar Campaña Completa')
+                    ->modalDescription(fn($record) => 'Esta acción eliminará TODA la campaña "' . $record->meta_campaign_name . '" incluyendo todos sus AdSets y Anuncios. Esta acción no se puede deshacer.')
+                    ->action(function ($record) {
+                        $campaignId = $record->meta_campaign_id;
+                        $campaignName = $record->meta_campaign_name;
+                        
+                        // Contar registros antes de eliminar
+                        $totalRecords = \App\Models\ActiveCampaign::where('meta_campaign_id', $campaignId)->count();
+                        
+                        // Eliminar todos los registros de la campaña
+                        \App\Models\ActiveCampaign::where('meta_campaign_id', $campaignId)->delete();
+                        
+                        \Filament\Notifications\Notification::make()
+                            ->title('Campaña Eliminada Completamente')
+                            ->body("Se eliminó la campaña '{$campaignName}' con {$totalRecords} registros (AdSets y Anuncios).")
+                            ->success()
+                            ->send();
+                    }),
+                    
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->label('Eliminar Seleccionados')
+                        ->action(function ($records) {
+                            // Eliminar todos los registros de las campañas seleccionadas
+                            $campaignIds = $records->pluck('meta_campaign_id')->unique();
+                            
+                            foreach ($campaignIds as $campaignId) {
+                                \App\Models\ActiveCampaign::where('meta_campaign_id', $campaignId)->delete();
+                            }
+                            
+                            \Filament\Notifications\Notification::make()
+                                ->title('Campañas Eliminadas')
+                                ->body('Se eliminaron ' . $campaignIds->count() . ' campañas completas con todos sus anuncios.')
+                                ->success()
+                                ->send();
+                        }),
+                        
+                    Tables\Actions\BulkAction::make('delete_campaign_complete')
+                        ->label('Eliminar Campaña Completa')
+                        ->icon('heroicon-o-trash')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->modalHeading('Eliminar Campaña Completa')
+                        ->modalDescription('Esta acción eliminará TODA la campaña incluyendo todos sus AdSets y Anuncios. Esta acción no se puede deshacer.')
+                        ->action(function ($records) {
+                            $campaignIds = $records->pluck('meta_campaign_id')->unique();
+                            $totalDeleted = 0;
+                            
+                            foreach ($campaignIds as $campaignId) {
+                                $deleted = \App\Models\ActiveCampaign::where('meta_campaign_id', $campaignId)->delete();
+                                $totalDeleted += $deleted;
+                            }
+                            
+                            \Filament\Notifications\Notification::make()
+                                ->title('Campañas Completas Eliminadas')
+                                ->body("Se eliminaron {$campaignIds->count()} campañas completas con {$totalDeleted} registros totales.")
+                                ->success()
+                                ->send();
+                        }),
                 ]),
             ])
             ->defaultSort('created_at', 'desc')

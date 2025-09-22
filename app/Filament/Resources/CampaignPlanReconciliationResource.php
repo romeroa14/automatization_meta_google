@@ -163,13 +163,16 @@ class CampaignPlanReconciliationResource extends Resource
                 TextColumn::make('instagram_client_name')
                     ->label('Cliente (Instagram)')
                     ->getStateUsing(function ($record) {
+                        // Obtener la campaña principal
+                        $campaign = self::getMainCampaign($record);
+                        
                         // Leer el nombre de Instagram desde los datos guardados en reconciliation_data
                         $reconciliationData = $record->reconciliation_data ?? [];
                         $instagramName = $reconciliationData['instagram_client_name'] ?? null;
                         
                         // Si no está guardado, usar fallback del nombre de campaña
                         if (!$instagramName) {
-                            $campaignName = $record->activeCampaign->meta_campaign_name;
+                            $campaignName = $campaign->meta_campaign_name;
                             // Extraer nombre del cliente del texto de la campaña como fallback
                             if (preg_match('/^([^|]+?)\s*\|\s*/', $campaignName, $matches)) {
                                 $instagramName = trim($matches[1]);
@@ -189,8 +192,12 @@ class CampaignPlanReconciliationResource extends Resource
                     ->color('info')
                     ->tooltip('Nombre de la cuenta de Instagram del cliente'),
 
-                TextColumn::make('activeCampaign.meta_campaign_name')
+                TextColumn::make('campaign_name')
                     ->label('Campaña')
+                    ->getStateUsing(function ($record) {
+                        $campaign = self::getMainCampaign($record);
+                        return $campaign->meta_campaign_name ?? 'N/A';
+                    })
                     ->searchable()
                     ->sortable()
                     ->limit(20)
@@ -199,70 +206,194 @@ class CampaignPlanReconciliationResource extends Resource
                     ->color('gray')
                     ->tooltip('Nombre de la campaña publicitaria'),
 
-                TextColumn::make('advertisingPlan.plan_name')
-                    ->label('Plan de Publicidad')
-                    ->tooltip(fn ($record) => $record->advertisingPlan ? $record->advertisingPlan->plan_summary : 'Plan Personalizado - Sin plan asignado')
-                    ->searchable()
-                    ->sortable()
+                TextColumn::make('plan_assignment')
+                    ->label('Plan Asignado')
+                    ->getStateUsing(function ($record) {
+                        // Si tiene plan asignado
+                        if ($record->advertisingPlan) {
+                            return $record->advertisingPlan->plan_name;
+                        }
+                        
+                        // Si no tiene plan, verificar si necesita configuración
+                        $reconciliationData = $record->reconciliation_data ?? [];
+                        $planType = $reconciliationData['plan_type'] ?? null;
+                        
+                        if ($planType === 'custom') {
+                            $customDetails = $reconciliationData['custom_plan_details'] ?? [];
+                            if (isset($customDetails['client_price'])) {
+                                return 'Plan Personalizado (Configurado)';
+                            } else {
+                                return 'Plan Personalizado (Pendiente)';
+                            }
+                        }
+                        
+                        return 'Sin Plan Asignado';
+                    })
                     ->badge()
-                    ->color(fn ($record) => $record->advertisingPlan ? 'info' : 'warning')
-                    ->wrap()
-                    ->limit(30)
-                    ->formatStateUsing(fn ($record) => $record->advertisingPlan ? $record->advertisingPlan->plan_name : 'Plan Personalizado'),
+                    ->color(function ($record) {
+                        if ($record->advertisingPlan) {
+                            return 'success';
+                        }
+                        
+                        $reconciliationData = $record->reconciliation_data ?? [];
+                        $planType = $reconciliationData['plan_type'] ?? null;
+                        
+                        if ($planType === 'custom') {
+                            $customDetails = $reconciliationData['custom_plan_details'] ?? [];
+                            return isset($customDetails['client_price']) ? 'info' : 'warning';
+                        }
+                        
+                        return 'danger';
+                    })
+                    ->tooltip(function ($record) {
+                        if ($record->advertisingPlan) {
+                            return $record->advertisingPlan->plan_summary;
+                        }
+                        
+                        $reconciliationData = $record->reconciliation_data ?? [];
+                        $planType = $reconciliationData['plan_type'] ?? null;
+                        
+                        if ($planType === 'custom') {
+                            $customDetails = $reconciliationData['custom_plan_details'] ?? [];
+                            if (isset($customDetails['client_price'])) {
+                                return 'Plan personalizado ya configurado - Cliente: $' . number_format($customDetails['client_price'], 2);
+                            } else {
+                                return 'Plan personalizado pendiente de configuración - Hacer clic en "Configurar Ganancia"';
+                            }
+                        }
+                        
+                        return 'No se pudo asignar a ningún plan estándar';
+                    }),
 
-                TextColumn::make('activeCampaign.campaign_start_time')
+                TextColumn::make('campaign_start_time')
                     ->label('Inicio')
-                    ->dateTime('d/m')
+                    ->getStateUsing(function ($record) {
+                        $campaign = self::getMainCampaign($record);
+                        return $campaign->campaign_start_time?->format('d/m');
+                    })
                     ->sortable()
                     ->color('info')
                     ->tooltip('Fecha de inicio de la campaña publicitaria'),
 
-                TextColumn::make('activeCampaign.campaign_stop_time')
+                TextColumn::make('campaign_stop_time')
                     ->label('Fin')
-                    ->dateTime('d/m')
+                    ->getStateUsing(function ($record) {
+                        $campaign = self::getMainCampaign($record);
+                        return $campaign->campaign_stop_time?->format('d/m');
+                    })
                     ->sortable()
                     ->color('warning')
                     ->tooltip('Fecha de finalización de la campaña publicitaria'),
 
                
 
-                TextColumn::make('activeCampaign.campaign_total_budget')
-                    ->label('Total')
+                TextColumn::make('investment')
+                    ->label('Presupeusto Gastado')
                     ->getStateUsing(function ($record) {
-                        // Los valores ya están convertidos correctamente en ActiveCampaign
-                        $totalBudget = $record->activeCampaign->campaign_total_budget;
-                        
-                        // Si no hay presupuesto total, calcularlo desde el diario
-                        if (!$totalBudget) {
-                            $dailyBudget = $record->activeCampaign->campaign_daily_budget ?? $record->activeCampaign->adset_daily_budget;
-                            $duration = $record->activeCampaign->getCampaignDurationDays() ?? $record->activeCampaign->getAdsetDurationDays();
-                            
-                            if ($dailyBudget && $duration) {
-                                return $dailyBudget * $duration;
-                            }
+                        $campaign = self::getMainCampaign($record);
+                        if (!$campaign) {
+                            return 0;
                         }
                         
-                        return $totalBudget ?? 0;
+                        // Determinar si el presupuesto es a nivel campaña o AdSet
+                        $isCampaignLevel = $campaign->isCampaignLevelBudget();
+                        
+                        if ($isCampaignLevel) {
+                            // PRESUPUESTO A NIVEL CAMPAÑA: usar solo el gasto de la campaña principal
+                            $spent = $campaign->amount_spent ?? 0;
+                            
+                            // Si hay override, usarlo
+                            $override = $campaign->campaign_data['amount_spent_override'] ?? null;
+                            if ($override !== null) {
+                                return (float) $override;
+                            }
+                            
+                            return $spent;
+                        } else {
+                            // PRESUPUESTO A NIVEL ADSET: sumar todos los gastos
+                            return $record->actual_spent ?? 0;
+                        }
                     })
                     ->money('USD')
                     ->sortable()
-                    ->color('success')
-                    ->size('sm'),
+                    ->color('warning')
+                    ->size('sm')
+                    ->tooltip(function ($record) {
+                        $campaign = self::getMainCampaign($record);
+                        if (!$campaign) {
+                            return 'N/A';
+                        }
+                        
+                        $isCampaignLevel = $campaign->isCampaignLevelBudget();
+                        
+                        if ($isCampaignLevel) {
+                            return 'Gasto a nivel campaña (no sumado de AdSets)';
+                        } else {
+                            return 'Gasto consolidado de todos los AdSets';
+                        }
+                    }),
                 
-                TextColumn::make('activeCampaign.campaign_daily_budget')
-                    ->label('Diario')
+                TextColumn::make('plan_budget')
+                    ->label('Presupuesto Total')
                     ->getStateUsing(function ($record) {
-                        // Los valores ya están convertidos correctamente en ActiveCampaign
-                        $dailyBudget = $record->activeCampaign->campaign_daily_budget ?? $record->activeCampaign->adset_daily_budget;
+                        // Usar el planned_budget consolidado de la consulta agrupada
+                        if ($record->planned_budget) {
+                            return $record->planned_budget;
+                        }
+                        
+                        // Si tiene plan asignado, usar el presupuesto del plan
+                        if ($record->advertisingPlan) {
+                            return $record->planned_budget ?? 0;
+                        }
+                        
+                        // Si es plan personalizado, usar el presupuesto calculado
+                        $reconciliationData = $record->reconciliation_data ?? [];
+                        $customDetails = $reconciliationData['custom_plan_details'] ?? [];
+                        
+                        if (isset($customDetails['total_budget'])) {
+                            return $customDetails['total_budget'];
+                        }
+                        
+                        // Fallback: calcular desde presupuesto diario
+                        $campaign = self::getMainCampaign($record);
+                        if (!$campaign) {
+                            return 0;
+                        }
+                        
+                        $dailyBudget = $campaign->campaign_daily_budget ?? $campaign->adset_daily_budget;
+                        $duration = $campaign->getCampaignDurationFromAdsets();
+                        
+                        if ($dailyBudget && $duration) {
+                            return $dailyBudget * $duration;
+                        }
+                        
+                        return 0;
+                    })
+                    ->money('USD')
+                    ->sortable()
+                    ->color('info')
+                    ->size('sm')
+                    ->tooltip('Presupuesto total consolidado del plan'),
+                
+                TextColumn::make('daily_budget')
+                    ->label('Presupuesto Diario')
+                    ->getStateUsing(function ($record) {
+                        // Usar el método helper para obtener la campaña
+                        $campaign = self::getMainCampaign($record);
+                        
+                        if (!$campaign) {
+                            return 0;
+                        }
+                        
+                        // Mostrar el presupuesto diario de la campaña
+                        $dailyBudget = $campaign->campaign_daily_budget ?? $campaign->adset_daily_budget;
                         return $dailyBudget ?? 0;
                     })
                     ->money('USD')
                     ->sortable()
                     ->color('success')
-                    ->size('sm'),
-                
-                
-                
+                    ->size('sm')
+                    ->tooltip('Presupuesto diario de la campaña'),
                 
 
                 
@@ -277,10 +408,15 @@ class CampaignPlanReconciliationResource extends Resource
                 
                 
 
-                TextColumn::make('activeCampaign.debug_info')
+                TextColumn::make('debug_info')
                     ->label('Debug Presupuestos')
                     ->getStateUsing(function ($record) {
-                        $debug = $record->activeCampaign->getBudgetDebugInfo();
+                        $campaign = self::getMainCampaign($record);
+                        if (!$campaign) {
+                            return 'N/A';
+                        }
+                        
+                        $debug = $campaign->getBudgetDebugInfo();
                         $dailyRaw = $debug['meta_campaign']['daily_budget'] ?? $debug['meta_adset']['daily_budget'] ?? 'N/A';
                         $dailyConverted = $debug['database']['campaign_daily_budget'] ?? $debug['database']['adset_daily_budget'] ?? 'N/A';
                         $spentRaw = $debug['meta_campaign']['amount_spent'] ?? $debug['meta_adset']['amount_spent'] ?? 'N/A';
@@ -290,7 +426,12 @@ class CampaignPlanReconciliationResource extends Resource
                     })
                     ->limit(50)
                     ->tooltip(function ($record) {
-                        $debug = $record->activeCampaign->getBudgetDebugInfo();
+                        $campaign = self::getMainCampaign($record);
+                        if (!$campaign) {
+                            return 'N/A';
+                        }
+                        
+                        $debug = $campaign->getBudgetDebugInfo();
                         return json_encode($debug, JSON_PRETTY_PRINT);
                     })
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -403,14 +544,27 @@ class CampaignPlanReconciliationResource extends Resource
                     ->label('Configurar Ganancia')
                     ->tooltip('Configurar ganancia para plan personalizado')
                     ->button()
-                    ->size('xs')
+                    ->size('sm')
                     ->icon('heroicon-o-currency-dollar')
                     ->color('success')
-                    ->visible(fn ($record) => 
-                        !$record->advertisingPlan && 
-                        $record->reconciliation_data['plan_type'] === 'custom' &&
-                        !isset($record->reconciliation_data['custom_plan_details']['client_price'])
-                    )
+                    ->visible(function ($record) {
+                        // Mostrar si no tiene plan asignado O si es plan personalizado sin configurar
+                        if ($record->advertisingPlan) {
+                            return false; // Ya tiene plan asignado
+                        }
+                        
+                        $reconciliationData = $record->reconciliation_data ?? [];
+                        $planType = $reconciliationData['plan_type'] ?? null;
+                        
+                        // Mostrar si es plan personalizado sin configurar
+                        if ($planType === 'custom') {
+                            $customDetails = $reconciliationData['custom_plan_details'] ?? [];
+                            return !isset($customDetails['client_price']);
+                        }
+                        
+                        // Mostrar si no tiene plan asignado
+                        return true;
+                    })
                     ->form([
                         Forms\Components\TextInput::make('client_price')
                             ->label('Precio al Cliente ($)')
@@ -554,7 +708,67 @@ class CampaignPlanReconciliationResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->label('Eliminar Conciliaciones Seleccionadas')
+                        ->action(function ($records) {
+                            $deletedCount = $records->count();
+                            $records->each->delete();
+                            
+                            \Filament\Notifications\Notification::make()
+                                ->title('Conciliaciones Eliminadas')
+                                ->body("Se eliminaron {$deletedCount} conciliaciones seleccionadas.")
+                                ->success()
+                                ->send();
+                        }),
+                        
+                    Tables\Actions\BulkAction::make('delete_all_campaigns')
+                        ->label('Eliminar TODAS las Campañas')
+                        ->icon('heroicon-o-trash')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->modalHeading('⚠️ ELIMINAR TODAS LAS CAMPAÑAS')
+                        ->modalDescription('Esta acción eliminará TODAS las conciliaciones de campañas de la base de datos. Esta acción NO se puede deshacer.')
+                        ->modalSubmitActionLabel('SÍ, ELIMINAR TODAS')
+                        ->modalCancelActionLabel('Cancelar')
+                        ->action(function () {
+                            // Eliminar todas las conciliaciones
+                            $totalDeleted = \App\Models\CampaignPlanReconciliation::count();
+                            \App\Models\CampaignPlanReconciliation::truncate();
+                            
+                            \Filament\Notifications\Notification::make()
+                                ->title('Todas las Campañas Eliminadas')
+                                ->body("Se eliminaron {$totalDeleted} conciliaciones de campañas de la base de datos.")
+                                ->warning()
+                                ->send();
+                        }),
+                        
+                    Tables\Actions\BulkAction::make('delete_campaigns_by_status')
+                        ->label('Eliminar por Estado')
+                        ->icon('heroicon-o-funnel')
+                        ->color('warning')
+                        ->form([
+                            \Filament\Forms\Components\Select::make('status')
+                                ->label('Estado a Eliminar')
+                                ->options([
+                                    'pending' => 'Pendientes',
+                                    'approved' => 'Aprobadas',
+                                    'rejected' => 'Rechazadas',
+                                    'completed' => 'Completadas',
+                                    'paused' => 'Pausadas',
+                                ])
+                                ->required(),
+                        ])
+                        ->action(function (array $data) {
+                            $status = $data['status'];
+                            $deletedCount = \App\Models\CampaignPlanReconciliation::where('reconciliation_status', $status)->count();
+                            \App\Models\CampaignPlanReconciliation::where('reconciliation_status', $status)->delete();
+                            
+                            \Filament\Notifications\Notification::make()
+                                ->title('Conciliaciones Eliminadas por Estado')
+                                ->body("Se eliminaron {$deletedCount} conciliaciones con estado '{$status}'.")
+                                ->success()
+                                ->send();
+                        }),
                 ])
             ])
             ->defaultSort('created_at', 'desc');
@@ -564,8 +778,36 @@ class CampaignPlanReconciliationResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
+        // Crear una subconsulta para obtener el meta_campaign_id y detectar el nivel del presupuesto
+        $subQuery = \App\Models\ActiveCampaign::select('id', 'meta_campaign_id', 'campaign_daily_budget', 'adset_daily_budget');
+        
         return static::getModel()::query()
-            ->with(['activeCampaign', 'advertisingPlan']);
+            ->joinSub($subQuery, 'campaigns', function ($join) {
+                $join->on('campaign_plan_reconciliations.active_campaign_id', '=', 'campaigns.id');
+            })
+            ->with(['activeCampaign', 'advertisingPlan'])
+            ->selectRaw('
+                MIN(campaign_plan_reconciliations.id) as id,
+                campaigns.meta_campaign_id,
+                MAX(campaign_plan_reconciliations.advertising_plan_id) as advertising_plan_id,
+                MAX(campaign_plan_reconciliations.reconciliation_status) as reconciliation_status,
+                MAX(campaign_plan_reconciliations.reconciliation_date) as reconciliation_date,
+                MAX(campaign_plan_reconciliations.notes) as notes,
+                MAX(campaign_plan_reconciliations.planned_budget) as planned_budget,
+                CASE 
+                    WHEN MAX(campaigns.campaign_daily_budget) > 0 THEN MAX(campaign_plan_reconciliations.actual_spent)
+                    ELSE SUM(campaign_plan_reconciliations.actual_spent)
+                END as actual_spent,
+                CASE 
+                    WHEN MAX(campaigns.campaign_daily_budget) > 0 THEN MAX(campaign_plan_reconciliations.variance)
+                    ELSE SUM(campaign_plan_reconciliations.variance)
+                END as variance,
+                AVG(campaign_plan_reconciliations.variance_percentage) as variance_percentage,
+                MIN(campaign_plan_reconciliations.created_at) as created_at,
+                MAX(campaign_plan_reconciliations.updated_at) as updated_at,
+                (array_agg(campaign_plan_reconciliations.reconciliation_data))[1] as reconciliation_data
+            ')
+            ->groupBy('campaigns.meta_campaign_id');
     }
 
     public static function getPages(): array
@@ -575,5 +817,26 @@ class CampaignPlanReconciliationResource extends Resource
             'create' => Pages\CreateCampaignPlanReconciliation::route('/create'),
             'edit' => Pages\EditCampaignPlanReconciliation::route('/{record}/edit'),
         ];
+    }
+    
+    /**
+     * Obtener la campaña principal para un registro consolidado
+     */
+    public static function getMainCampaign($record)
+    {
+        // Si el record tiene meta_campaign_id, buscar la campaña principal
+        if (isset($record->meta_campaign_id)) {
+            return \App\Models\ActiveCampaign::where('meta_campaign_id', $record->meta_campaign_id)
+                ->where('meta_campaign_id', '!=', null)
+                ->first();
+        }
+        
+        // Usar la relación activeCampaign del record
+        if ($record->activeCampaign) {
+            return $record->activeCampaign;
+        }
+        
+        // Fallback: buscar por active_campaign_id
+        return \App\Models\ActiveCampaign::find($record->active_campaign_id);
     }
 }

@@ -966,4 +966,250 @@ class ActiveCampaign extends Model
         
         return $response;
     }
+    
+    /**
+     * Analizar stop_time de todos los AdSets de una campaña
+     * Retorna información sobre la consistencia de fechas
+     */
+    public function analyzeAdsetsStopTimes()
+    {
+        // Obtener todos los AdSets de esta campaña
+        $adsets = $this->getAdsets();
+        
+        if ($adsets->isEmpty()) {
+            return [
+                'status' => 'no_adsets',
+                'message' => 'No se encontraron AdSets para esta campaña',
+                'duration_days' => null,
+                'stop_time' => null,
+                'adsets_count' => 0
+            ];
+        }
+        
+        $stopTimes = [];
+        $startTimes = [];
+        
+        foreach ($adsets as $adset) {
+            // Recopilar stop_times
+            if (isset($adset->adset_data['stop_time']) && $adset->adset_data['stop_time']) {
+                $stopTimes[] = $adset->adset_data['stop_time'];
+            }
+            
+            // Recopilar start_times para referencia
+            if (isset($adset->adset_data['start_time']) && $adset->adset_data['start_time']) {
+                $startTimes[] = $adset->adset_data['start_time'];
+            }
+        }
+        
+        // Si no hay stop_times en ningún AdSet, verificar si la campaña tiene stop_time
+        if (empty($stopTimes)) {
+            // Verificar si la campaña tiene stop_time como fallback
+            $campaignStopTime = $this->campaign_data['stop_time'] ?? null;
+            $campaignStartTime = $this->campaign_data['start_time'] ?? null;
+            
+            if ($campaignStopTime) {
+                // Calcular duración basada en stop_time de la campaña
+                $durationDays = null;
+                if ($campaignStartTime) {
+                    try {
+                        $start = \Carbon\Carbon::parse($campaignStartTime);
+                        $stop = \Carbon\Carbon::parse($campaignStopTime);
+                        
+                        // Para campañas publicitarias, contar días de ejecución (inclusive)
+                        $durationDays = $start->diffInDays($stop) + 1;
+                    } catch (\Exception $e) {
+                        Log::error("Error calculando duración desde campaña: " . $e->getMessage());
+                    }
+                }
+                
+                return [
+                    'status' => 'campaign_fallback',
+                    'message' => 'Usando fecha de finalización de la campaña (AdSets sin stop_time)',
+                    'duration_days' => $durationDays,
+                    'stop_time' => $campaignStopTime,
+                    'start_time' => $campaignStartTime,
+                    'adsets_count' => $adsets->count(),
+                    'source' => 'campaign'
+                ];
+            }
+            
+            // Si no hay stop_times, calcular duración basada en el nombre de la campaña
+            $defaultDuration = $this->calculateDurationFromName();
+            
+            return [
+                'status' => 'no_stop_times',
+                'message' => 'Ningún AdSet ni la campaña tienen fecha de finalización configurada. Calculando duración del nombre.',
+                'duration_days' => $defaultDuration,
+                'stop_time' => null,
+                'adsets_count' => $adsets->count(),
+                'start_times' => $startTimes,
+                'source' => 'name_calculation'
+            ];
+        }
+        
+        // Verificar si todos los stop_times son iguales
+        $uniqueStopTimes = array_unique($stopTimes);
+        
+        if (count($uniqueStopTimes) === 1) {
+            // Todos los AdSets tienen la misma fecha de finalización
+            $stopTime = $uniqueStopTimes[0];
+            $startTime = !empty($startTimes) ? $startTimes[0] : null;
+            
+            // Calcular duración
+            $durationDays = null;
+            if ($startTime && $stopTime) {
+                try {
+                    $start = \Carbon\Carbon::parse($startTime);
+                    $stop = \Carbon\Carbon::parse($stopTime);
+                    
+                    // Para campañas publicitarias, contar días de ejecución (inclusive)
+                    // Si empieza el 19 y termina el 23, son 5 días de ejecución
+                    $durationDays = $start->diffInDays($stop) + 1;
+                } catch (\Exception $e) {
+                    Log::error("Error calculando duración: " . $e->getMessage());
+                }
+            }
+            
+            return [
+                'status' => 'consistent',
+                'message' => 'Todos los AdSets tienen la misma fecha de finalización',
+                'duration_days' => $durationDays,
+                'stop_time' => $stopTime,
+                'start_time' => $startTime,
+                'adsets_count' => $adsets->count(),
+                'stop_times' => $stopTimes
+            ];
+        } else {
+            // Los AdSets tienen fechas de finalización diferentes
+            return [
+                'status' => 'inconsistent',
+                'message' => 'Los AdSets tienen fechas de finalización diferentes',
+                'duration_days' => null,
+                'stop_time' => null,
+                'adsets_count' => $adsets->count(),
+                'stop_times' => $stopTimes,
+                'unique_stop_times' => $uniqueStopTimes
+            ];
+        }
+    }
+    
+    /**
+     * Obtener duración de campaña basada en análisis de AdSets
+     */
+    public function getCampaignDurationFromAdsets()
+    {
+        $analysis = $this->analyzeAdsetsStopTimes();
+        
+        if (in_array($analysis['status'], ['consistent', 'campaign_fallback', 'no_stop_times'])) {
+            return $analysis['duration_days'];
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Obtener presupuesto total basado en análisis de AdSets
+     */
+    public function getCampaignTotalBudgetFromAdsets()
+    {
+        $analysis = $this->analyzeAdsetsStopTimes();
+        
+        if (in_array($analysis['status'], ['consistent', 'campaign_fallback', 'no_stop_times']) && $analysis['duration_days']) {
+            $dailyBudget = $this->campaign_daily_budget ?? $this->adset_daily_budget;
+            if ($dailyBudget) {
+                return $dailyBudget * $analysis['duration_days'];
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Obtener presupuesto restante basado en análisis de AdSets
+     */
+    public function getCampaignRemainingBudgetFromAdsets()
+    {
+        $analysis = $this->analyzeAdsetsStopTimes();
+        
+        if (in_array($analysis['status'], ['consistent', 'campaign_fallback', 'no_stop_times']) && $analysis['duration_days']) {
+            $dailyBudget = $this->campaign_daily_budget ?? $this->adset_daily_budget;
+            if ($dailyBudget) {
+                $totalBudget = $dailyBudget * $analysis['duration_days'];
+                
+                // Usar override si existe
+                $override = $this->campaign_data['amount_spent_override'] ?? null;
+                if ($override !== null) {
+                    return max(0, $totalBudget - (float) $override);
+                }
+                
+                // Usar gastado normal
+                $spent = $this->amount_spent ?? 0;
+                return max(0, $totalBudget - $spent);
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Calcular duración basada en el nombre de la campaña
+     * Busca patrones como "19/09 - 23/09" en el nombre
+     */
+    public function calculateDurationFromName()
+    {
+        $campaignName = $this->meta_campaign_name ?? '';
+        
+        // Buscar patrón de fechas en el nombre (ej: "19/09 - 23/09")
+        if (preg_match('/(\d{1,2}\/\d{1,2})\s*-\s*(\d{1,2}\/\d{1,2})/', $campaignName, $matches)) {
+            try {
+                $startDate = \Carbon\Carbon::createFromFormat('d/m', $matches[1]);
+                $endDate = \Carbon\Carbon::createFromFormat('d/m', $matches[2]);
+                
+                // Calcular duración (inclusive)
+                $duration = $startDate->diffInDays($endDate) + 1;
+                
+                return $duration;
+            } catch (\Exception $e) {
+                // Si hay error, usar duración por defecto
+            }
+        }
+        
+        // Si no se puede calcular, usar duración por defecto
+        return 5; // 5 días por defecto
+    }
+    
+    /**
+     * Detectar el nivel del presupuesto (campaña o AdSet)
+     */
+    public function getBudgetLevel(): string
+    {
+        // Si tiene presupuesto a nivel campaña, es nivel campaña
+        if ($this->campaign_daily_budget > 0) {
+            return 'campaign';
+        }
+        
+        // Si solo tiene presupuesto a nivel AdSet, es nivel AdSet
+        if ($this->adset_daily_budget > 0) {
+            return 'adset';
+        }
+        
+        // Si no tiene ninguno, es desconocido
+        return 'unknown';
+    }
+    
+    /**
+     * Verificar si el presupuesto es a nivel campaña
+     */
+    public function isCampaignLevelBudget(): bool
+    {
+        return $this->getBudgetLevel() === 'campaign';
+    }
+    
+    /**
+     * Verificar si el presupuesto es a nivel AdSet
+     */
+    public function isAdsetLevelBudget(): bool
+    {
+        return $this->getBudgetLevel() === 'adset';
+    }
 }
