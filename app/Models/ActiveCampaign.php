@@ -264,7 +264,9 @@ class ActiveCampaign extends Model
                                             $record->meta_adset_name = $adsetData['name'];
                                             $record->meta_ad_name = $adData['name'];
                                             
-                                            // Presupuestos de campaña (usar método convertMetaNumber)
+                                            // LÓGICA INTELIGENTE DE PRESUPUESTOS: Buscar en todos los niveles
+                                            
+                                            // 1. Presupuestos de campaña (usar método convertMetaNumber)
                                             if (isset($campaignData['daily_budget'])) {
                                                 $record->campaign_daily_budget = (new self())->convertMetaNumber($campaignData['daily_budget'], 'budget');
                                             }
@@ -273,13 +275,22 @@ class ActiveCampaign extends Model
                                                 $record->campaign_total_budget = (new self())->convertMetaNumber($campaignData['lifetime_budget'], 'budget');
                                             }
                                             
-                                            // Presupuestos de adset (usar método convertMetaNumber)
+                                            // 2. Presupuestos de adset (usar método convertMetaNumber)
                                             if (isset($adsetData['daily_budget'])) {
                                                 $record->adset_daily_budget = (new self())->convertMetaNumber($adsetData['daily_budget'], 'budget');
                                             }
                                             
                                             if (isset($adsetData['lifetime_budget'])) {
                                                 $record->adset_lifetime_budget = (new self())->convertMetaNumber($adsetData['lifetime_budget'], 'budget');
+                                            }
+                                            
+                                            // 3. LÓGICA DE FALLBACK: Si no hay presupuesto en Campaign, usar AdSet
+                                            if (!$record->campaign_daily_budget && $record->adset_daily_budget) {
+                                                $record->campaign_daily_budget = $record->adset_daily_budget;
+                                            }
+                                            
+                                            if (!$record->campaign_total_budget && $record->adset_lifetime_budget) {
+                                                $record->campaign_total_budget = $record->adset_lifetime_budget;
                                             }
                                             
                                             // LÓGICA INTELIGENTE: Calcular presupuestos desde diferentes fuentes
@@ -643,27 +654,45 @@ class ActiveCampaign extends Model
         $level = $this->getBudgetLevel();
         $duration = $this->getEffectiveDuration();
         
+        // Calcular presupuesto base
+        $baseBudget = 0;
         if ($level === 'campaign') {
             $lifetime = $this->campaign_total_budget ?? 0;
             $daily = $this->campaign_daily_budget ?? 0;
             
             if ($lifetime > 0) {
-                return $lifetime;
+                $baseBudget = $lifetime;
             } elseif ($daily > 0 && $duration > 0) {
-                return $daily * $duration;
+                $baseBudget = $daily * $duration;
             }
         } elseif ($level === 'adset') {
             $lifetime = $this->adset_lifetime_budget ?? 0;
             $daily = $this->adset_daily_budget ?? 0;
             
             if ($lifetime > 0) {
-                return $lifetime;
+                $baseBudget = $lifetime;
             } elseif ($daily > 0 && $duration > 0) {
-                return $daily * $duration;
+                $baseBudget = $daily * $duration;
             }
         }
         
-        return 0;
+        // Verificar si tiene múltiples planes en campaign_data
+        $campaignData = $this->campaign_data ?? [];
+        $hasMultiplePlans = $campaignData['multiple_plan'] ?? false;
+        $totalPlans = $campaignData['total_plans'] ?? 1;
+        $totalBudget = $campaignData['total_budget'] ?? null;
+        
+        if ($hasMultiplePlans && $totalPlans > 1) {
+            // Cliente pagó múltiples planes = usar total_budget del campaign_data
+            if ($totalBudget && $totalBudget > 0) {
+                return $totalBudget;
+            } else {
+                // Fallback: duplicar presupuesto base
+                return $baseBudget * $totalPlans;
+            }
+        }
+        
+        return $baseBudget;
     }
     
     /**
@@ -695,6 +724,155 @@ class ActiveCampaign extends Model
         return 0;
     }
     
+    /**
+     * Detect and create multiple plans for the same campaign_id
+     * This function detects when a client pays multiple times for the same campaign
+     * and creates separate campaign records to track each payment
+     */
+    public static function detectAndCreateMultiplePlans($campaignData, $facebookAccountId, $adAccountId = null)
+    {
+        $campaignId = $campaignData['id'] ?? null;
+        $campaignName = $campaignData['name'] ?? '';
+        
+        if (!$campaignId) {
+            return null;
+        }
+        
+        // Buscar campañas existentes con el mismo campaign_id
+        $existingCampaigns = self::where('meta_campaign_id', $campaignId)
+            ->whereNotNull('meta_campaign_id')
+            ->get();
+        
+        if ($existingCampaigns->count() == 0) {
+            // Primera campaña, crear normalmente
+            return self::createMultiplePlanRecord($campaignData, $facebookAccountId, $adAccountId);
+        }
+        
+        // Verificar si ya existe una campaña con múltiples planes
+        $hasMultiplePlans = false;
+        $totalPlans = 1;
+        
+        foreach ($existingCampaigns as $campaign) {
+            $data = $campaign->campaign_data ?? [];
+            if (($data['multiple_plan'] ?? false) && ($data['total_plans'] ?? 1) > 1) {
+                $hasMultiplePlans = true;
+                $totalPlans = $data['total_plans'] ?? 1;
+                break;
+            }
+        }
+        
+        if ($hasMultiplePlans) {
+            // Ya tiene múltiples planes, actualizar el total
+            $totalPlans++;
+            
+            // Actualizar todas las campañas existentes con el nuevo total
+            foreach ($existingCampaigns as $campaign) {
+                $data = $campaign->campaign_data ?? [];
+                $data['total_plans'] = $totalPlans;
+                
+                // Calcular total_budget correctamente
+                $dailyBudget = $data['daily_budget'] ?? $campaign->campaign_daily_budget ?? 0;
+                $duration = $campaign->calculateDurationFromName();
+                if ($duration == 0) {
+                    $duration = $campaign->getEffectiveDuration();
+                }
+                $data['total_budget'] = $dailyBudget * $duration * $totalPlans;
+                
+                $campaign->update([
+                    'campaign_data' => $data,
+                    'campaign_daily_budget' => $dailyBudget,
+                    'campaign_total_budget' => $data['total_budget']
+                ]);
+            }
+            
+            // Crear nueva campaña para el nuevo pago
+            $newCampaignData = $campaignData;
+            $newCampaignData['multiple_plan'] = true;
+            $newCampaignData['plan_number'] = $totalPlans;
+            $newCampaignData['total_plans'] = $totalPlans;
+            
+            // Calcular total_budget correctamente
+            $dailyBudget = $newCampaignData['daily_budget'] ?? 0;
+            $duration = $campaign->calculateDurationFromName();
+            if ($duration == 0) {
+                $duration = $campaign->getEffectiveDuration();
+            }
+            $newCampaignData['total_budget'] = $dailyBudget * $duration * $totalPlans;
+            
+            return self::createMultiplePlanRecord($newCampaignData, $facebookAccountId, $adAccountId);
+        } else {
+            // Primera vez que se detecta múltiples planes
+            $totalPlans = 2; // Cliente pagó dos veces
+            
+            // Actualizar la campaña existente
+            $existingCampaign = $existingCampaigns->first();
+            $data = $existingCampaign->campaign_data ?? [];
+            $data['multiple_plan'] = true;
+            $data['plan_number'] = 1;
+            $data['total_plans'] = $totalPlans;
+            
+            // Calcular total_budget correctamente
+            $dailyBudget = $data['daily_budget'] ?? $existingCampaign->campaign_daily_budget ?? 0;
+            $duration = $existingCampaign->calculateDurationFromName();
+            if ($duration == 0) {
+                $duration = $existingCampaign->getEffectiveDuration();
+            }
+            $data['total_budget'] = $dailyBudget * $duration * $totalPlans;
+            
+            $existingCampaign->update([
+                'campaign_data' => $data,
+                'campaign_daily_budget' => $dailyBudget,
+                'campaign_total_budget' => $data['total_budget']
+            ]);
+            
+            // Crear nueva campaña para el segundo pago
+            $newCampaignData = $campaignData;
+            $newCampaignData['multiple_plan'] = true;
+            $newCampaignData['plan_number'] = 2;
+            $newCampaignData['total_plans'] = $totalPlans;
+            
+            // Calcular total_budget correctamente
+            $dailyBudget = $newCampaignData['daily_budget'] ?? 0;
+            $duration = $existingCampaign->calculateDurationFromName();
+            if ($duration == 0) {
+                $duration = $existingCampaign->getEffectiveDuration();
+            }
+            $newCampaignData['total_budget'] = $dailyBudget * $duration * $totalPlans;
+            
+            return self::createMultiplePlanRecord($newCampaignData, $facebookAccountId, $adAccountId);
+        }
+    }
+    
+    /**
+     * Create a new campaign record for multiple plans
+     */
+    private static function createMultiplePlanRecord($campaignData, $facebookAccountId, $adAccountId = null)
+    {
+        // Obtener ad_account_id dinámicamente si no se proporciona
+        if (!$adAccountId) {
+            $facebookAccount = \App\Models\FacebookAccount::find($facebookAccountId);
+            $adAccountId = $facebookAccount?->selected_ad_account_id ?? 'act_unknown';
+        }
+        
+        return self::create([
+            'facebook_account_id' => $facebookAccountId,
+            'ad_account_id' => $adAccountId,
+            'meta_campaign_id' => $campaignData['id'] ?? null,
+            'meta_campaign_name' => $campaignData['name'] ?? '',
+            'campaign_start_time' => isset($campaignData['start_time']) ? 
+                \Carbon\Carbon::parse($campaignData['start_time']) : null,
+            'campaign_stop_time' => isset($campaignData['stop_time']) ? 
+                \Carbon\Carbon::parse($campaignData['stop_time']) : null,
+            'campaign_daily_budget' => $campaignData['daily_budget'] ?? 0,
+            'campaign_total_budget' => $campaignData['total_budget'] ?? 0,
+            'amount_spent' => $campaignData['amount_spent'] ?? 0,
+            'campaign_status' => $campaignData['status'] ?? 'ACTIVE',
+            'campaign_data' => $campaignData,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+    }
+
     /**
      * Calcular duración desde el nombre de la campaña usando parser de fechas
      */
@@ -1311,3 +1489,4 @@ class ActiveCampaign extends Model
     
     
 }
+

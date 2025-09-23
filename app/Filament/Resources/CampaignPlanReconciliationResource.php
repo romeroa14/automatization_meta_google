@@ -209,25 +209,53 @@ class CampaignPlanReconciliationResource extends Resource
                 TextColumn::make('plan_assignment')
                     ->label('Plan Asignado')
                     ->getStateUsing(function ($record) {
-                        // Si tiene plan asignado
-                        if ($record->advertisingPlan) {
-                            return $record->advertisingPlan->plan_name;
+                        $campaign = self::getMainCampaign($record);
+                        if (!$campaign) {
+                            return 'N/A';
                         }
                         
-                        // Si no tiene plan, verificar si necesita configuración
-                        $reconciliationData = $record->reconciliation_data ?? [];
-                        $planType = $reconciliationData['plan_type'] ?? null;
+                        // Verificar si tiene múltiples planes (cliente pagó dos veces con FECHAS DIFERENTES)
+                        $campaignsWithSameId = \App\Models\ActiveCampaign::where('meta_campaign_id', $campaign->meta_campaign_id)
+                            ->whereNotNull('meta_campaign_id')
+                            ->get();
                         
-                        if ($planType === 'custom') {
-                            $customDetails = $reconciliationData['custom_plan_details'] ?? [];
-                            if (isset($customDetails['client_price'])) {
-                                return 'Plan Personalizado (Configurado)';
+                        $multiplePlans = false;
+                        if ($campaignsWithSameId->count() > 1) {
+                            // Verificar si tienen FECHAS DIFERENTES (no solo múltiples AdSets)
+                            $uniqueDates = $campaignsWithSameId->map(function($campaign) {
+                                return $campaign->campaign_start_time?->format('Y-m-d') ?? 
+                                       $campaign->adset_start_time?->format('Y-m-d') ?? 
+                                       'no-date';
+                            })->unique()->count();
+                            
+                            $multiplePlans = $uniqueDates > 1;
+                        }
+                        
+                        $baseText = '';
+                        if ($record->advertisingPlan) {
+                            $baseText = $record->advertisingPlan->plan_name;
+                        } else {
+                            $reconciliationData = $record->reconciliation_data ?? [];
+                            $planType = $reconciliationData['plan_type'] ?? null;
+                            
+                            if ($planType === 'custom') {
+                                $customDetails = $reconciliationData['custom_plan_details'] ?? [];
+                                if (isset($customDetails['client_price'])) {
+                                    $baseText = 'Plan Personalizado (Configurado)';
+                                } else {
+                                    $baseText = 'Plan Personalizado (Pendiente)';
+                                }
                             } else {
-                                return 'Plan Personalizado (Pendiente)';
+                                $baseText = 'Sin Plan Asignado';
                             }
                         }
                         
-                        return 'Sin Plan Asignado';
+                        // Agregar indicador de múltiples planes
+                        if ($multiplePlans) {
+                            $baseText .= ' 🔄';
+                        }
+                        
+                        return $baseText;
                     })
                     ->badge()
                     ->color(function ($record) {
@@ -460,6 +488,43 @@ class CampaignPlanReconciliationResource extends Resource
                 Tables\Filters\SelectFilter::make('advertising_plan_id')
                     ->label('Plan de Publicidad')
                     ->relationship('advertisingPlan', 'plan_name'),
+
+                Tables\Filters\SelectFilter::make('facebook_account_id')
+                    ->label('Cuenta Publicitaria')
+                    ->relationship('activeCampaign.facebookAccount', 'account_name')
+                    ->searchable()
+                    ->preload(),
+
+                Tables\Filters\SelectFilter::make('multiple_plans')
+                    ->label('Múltiples Planes')
+                    ->options([
+                        'yes' => 'Sí (Múltiples planes)',
+                        'no' => 'No (Plan único)',
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        if ($data['value'] === 'yes') {
+                            return $query->whereHas('activeCampaign', function ($q) {
+                                $q->whereIn('meta_campaign_id', function ($subQuery) {
+                                    $subQuery->select('meta_campaign_id')
+                                        ->from('active_campaigns')
+                                        ->whereNotNull('meta_campaign_id')
+                                        ->groupBy('meta_campaign_id')
+                                        ->havingRaw('COUNT(*) > 1');
+                                });
+                            });
+                        } elseif ($data['value'] === 'no') {
+                            return $query->whereHas('activeCampaign', function ($q) {
+                                $q->whereIn('meta_campaign_id', function ($subQuery) {
+                                    $subQuery->select('meta_campaign_id')
+                                        ->from('active_campaigns')
+                                        ->whereNotNull('meta_campaign_id')
+                                        ->groupBy('meta_campaign_id')
+                                        ->havingRaw('COUNT(*) = 1');
+                                });
+                            });
+                        }
+                        return $query;
+                    }),
 
                 Tables\Filters\Filter::make('campaign_date_range')
                     ->form([

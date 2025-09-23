@@ -300,14 +300,58 @@ class ListActiveCampaigns extends ListRecords
                             return;
                         }
                         
-                        // Guardar en base de datos
+                        // Guardar en base de datos con detección de múltiples planes
+                        $multiplePlansDetected = 0;
+                        $totalCampaigns = 0;
+                        
                         foreach ($campaigns as $campaign) {
-                            $campaign->save();
+                            // LÓGICA CONDICIONAL: Evaluar si no tiene stop_time
+                            $hasStopTime = $campaign->campaign_stop_time || $campaign->adset_stop_time;
+                            $dailyBudget = $campaign->campaign_daily_budget ?? $campaign->adset_daily_budget ?? 0;
+                            
+                            // Si no tiene stop_time, calcular presupuesto total desde el nombre
+                            $totalBudget = 0;
+                            if (!$hasStopTime && $dailyBudget > 0) {
+                                // Calcular duración desde el nombre de la campaña
+                                $duration = self::calculateDurationFromName($campaign->meta_campaign_name);
+                                if ($duration > 0) {
+                                    $totalBudget = $dailyBudget * $duration;
+                                }
+                            }
+                            
+                            // Preparar datos para detección de múltiples planes
+                            $campaignData = [
+                                'id' => $campaign->meta_campaign_id,
+                                'name' => $campaign->meta_campaign_name,
+                                'status' => $campaign->campaign_status,
+                                'start_time' => $campaign->campaign_start_time?->toISOString(),
+                                'stop_time' => $campaign->campaign_stop_time?->toISOString(),
+                                'daily_budget' => $dailyBudget, // Presupuesto diario de la API
+                                'total_budget' => $totalBudget, // Presupuesto total calculado desde nombre
+                                'amount_spent' => $campaign->amount_spent
+                            ];
+                            
+                            // Usar detección de múltiples planes
+                            $result = ActiveCampaign::detectAndCreateMultiplePlans($campaignData, $data['facebook_account_id'], $data['selected_ad_account_id']);
+                            
+                            if ($result) {
+                                $totalCampaigns++;
+                                
+                                // Verificar si se detectaron múltiples planes
+                                if ($result->campaign_data['multiple_plan'] ?? false) {
+                                    $multiplePlansDetected++;
+                                }
+                            }
+                        }
+                        
+                        $message = "Se cargaron {$totalCampaigns} campañas activas";
+                        if ($multiplePlansDetected > 0) {
+                            $message .= " con {$multiplePlansDetected} campañas que tienen múltiples planes detectados";
                         }
                         
                         Notification::make()
                             ->title('Campañas cargadas exitosamente')
-                            ->body("Se cargaron {$campaigns->count()} campañas activas con su jerarquía completa.")
+                            ->body($message)
                             ->success()
                             ->send();
                             
