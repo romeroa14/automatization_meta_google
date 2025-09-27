@@ -48,4 +48,11 @@ return [
         'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
     ],
 
+    'instagram' => [
+        'access_token' => env('INSTAGRAM_ACCESS_TOKEN'),
+        'verify_token' => env('INSTAGRAM_VERIFY_TOKEN', 'adsbot'),
+        'app_secret' => env('INSTAGRAM_APP_SECRET'),
+        'app_id' => env('INSTAGRAM_APP_ID'),
+    ],
+
 ];

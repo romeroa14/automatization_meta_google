@@ -1,110 +1,112 @@
-# 🔧 Variables de Entorno para Laravel Cloud
+# 🌐 Variables de Entorno para Laravel Cloud
 
-## 📋 Variables Requeridas
+## 📋 **CONFIGURACIÓN EN LARAVEL CLOUD:**
 
-Copia y pega estas variables en el dashboard de Laravel Cloud → Environment Variables:
+### **Variables de Instagram Chatbot:**
 
-### **Configuración Base de Laravel**
 ```env
-APP_NAME=ADMETRICAS.COM
-APP_ENV=production
-APP_DEBUG=false
-APP_URL=https://tu-dominio.laravelcloud.com
+INSTAGRAM_ACCESS_TOKEN=IGAASTMZAj71HVBZAFFpUmpmZAGRiLTFPdFcxaEEyanBkVVlranQ4VXg4UEFfRmdWdy1rNURzdlVYcVNPY0Fld1dqMF9RZAWhJQ1pTaXhWZA2d3cEJnM1BoZAkVEQVFCSTdyMG5pLTdYd2lZAQmNKQTJlcEdxaW4xOVJvSWNOaGFCOVFoMAZDZD
+INSTAGRAM_VERIFY_TOKEN=adsbot
+INSTAGRAM_APP_SECRET=e532fabf36032fe89fed6769f1b82999
+INSTAGRAM_APP_ID=1287741136163957
 ```
 
-### **Base de Datos (Laravel Cloud MySQL)**
-```env
-DB_CONNECTION=mysql
-DB_HOST=tu_host_mysql_de_laravel_cloud
-DB_PORT=3306
-DB_DATABASE=tu_database_name
-DB_USERNAME=tu_usuario_mysql
-DB_PASSWORD=tu_password_mysql
-```
+### **🔧 Cómo Configurar en Laravel Cloud:**
 
-### **Configuración de Telegram Bot**
-```env
-TELEGRAM_BOT_TOKEN=tu_bot_token_de_telegram
-TELEGRAM_WEBHOOK_URL=https://tu-dominio.laravelcloud.com/api/telegram/webhook
-```
+1. **Ve a tu proyecto** en Laravel Cloud
+2. **Settings > Environment Variables**
+3. **Agrega cada variable** una por una:
 
-### **Configuración de Meta/Facebook**
-```env
-DEFAULT_FACEBOOK_ACCOUNT_ID=tu_cuenta_facebook_id
-DEFAULT_AD_ACCOUNT_ID=tu_cuenta_publicitaria_id
-```
+#### **Variable 1:**
+- **Key:** `INSTAGRAM_ACCESS_TOKEN`
+- **Value:** `IGAASTMZAj71HVBZAFFpUmpmZAGRiLTFPdFcxaEEyanBkVVlranQ4VXg4UEFfRmdWdy1rNURzdlVYcVNPY0Fld1dqMF9RZAWhJQ1pTaXhWZA2d3cEJnM1BoZAkVEQVFCSTdyMG5pLTdYd2lZAQmNKQTJlcEdxaW4xOVJvSWNOaGFCOVFoMAZDZD`
 
-### **Configuración de Archivos**
-```env
-FILESYSTEM_DISK=public
-```
+#### **Variable 2:**
+- **Key:** `INSTAGRAM_VERIFY_TOKEN`
+- **Value:** `adsbot`
 
-## 🚀 Pasos de Configuración
+#### **Variable 3:**
+- **Key:** `INSTAGRAM_APP_SECRET`
+- **Value:** `e532fabf36032fe89fed6769f1b82999`
 
-### 1. Obtener Token de Telegram Bot
-1. Busca `@BotFather` en Telegram
-2. Envía `/newbot`
-3. Sigue las instrucciones
-4. Copia el token que te proporciona
+#### **Variable 4:**
+- **Key:** `INSTAGRAM_APP_ID`
+- **Value:** `1287741136163957`
 
-### 2. Configurar Variables en Laravel Cloud
-1. Ve a tu proyecto en Laravel Cloud
-2. Navega a **Environment Variables**
-3. Agrega cada variable de la lista anterior
-4. Guarda los cambios
+### **🔗 URLs para Meta:**
 
-### 3. Ejecutar Comandos Post-Despliegue
+- **Webhook URL:** `https://admetricas.com/webhook/instagram`
+- **Verification Token:** `adsbot`
+
+### **🧪 Comandos de Testing:**
+
+#### **Verificar Webhook:**
 ```bash
-# En el terminal de Laravel Cloud
-php artisan migrate --force
-php artisan storage:link
-php artisan cache:clear
-php artisan config:clear
-php artisan telegram:setup --token=TU_BOT_TOKEN --webhook=https://tu-dominio.laravelcloud.com/api/telegram/webhook
+curl -X GET "https://admetricas.com/webhook/instagram?hub_mode=subscribe&hub_verify_token=adsbot&hub_challenge=test123"
 ```
 
-## 🔍 Verificación
-
-### Probar Bot de Telegram
-1. Busca tu bot en Telegram
-2. Envía `/start`
-3. Verifica que responda correctamente
-
-### Probar Panel de Administración
-1. Ve a `https://tu-dominio.laravelcloud.com/admin`
-2. Verifica que aparezcan todos los recursos
-3. Navega entre las secciones
-
-### Probar API Endpoints
+#### **Probar Mensaje:**
 ```bash
-# Probar información del bot
-curl https://tu-dominio.laravelcloud.com/api/telegram/bot-info
-
-# Probar tasas de cambio
-curl https://tu-dominio.laravelcloud.com/api/exchange-rates
+curl -X POST "https://admetricas.com/webhook/instagram" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entry": [{
+      "messaging": [{
+        "sender": {"id": "123456789"},
+        "message": {"text": "Hola, quiero información sobre planes"}
+      }]
+    }]
+  }'
 ```
 
-## 📱 URLs Importantes
+### **📱 Configuración en Meta for Developers:**
 
-- **Panel Admin:** `https://tu-dominio.laravelcloud.com/admin`
-- **Webhook Telegram:** `https://tu-dominio.laravelcloud.com/api/telegram/webhook`
-- **API Tasas:** `https://tu-dominio.laravelcloud.com/api/exchange-rates`
+1. **Ve a:** https://developers.facebook.com/
+2. **Selecciona tu app:** ID `1287741136163957`
+3. **Webhooks > Instagram**
+4. **Configurar:**
+   - **Callback URL:** `https://admetricas.com/webhook/instagram`
+   - **Verify Token:** `adsbot`
+   - **Suscribirse a:** `messages`
 
-## 🚨 Solución de Problemas
+### **⏰ Token de 60 Días:**
 
-### Bot no responde
-- Verificar `TELEGRAM_BOT_TOKEN`
-- Verificar `TELEGRAM_WEBHOOK_URL`
-- Revisar logs en Laravel Cloud
+- **Token actual:** Válido por 60 días
+- **Renovación:** Necesaria antes del vencimiento
+- **Monitoreo:** Revisar logs para errores de token
 
-### Error de base de datos
-- Verificar variables de DB
-- Ejecutar `php artisan migrate --force`
+### **🚨 Troubleshooting:**
 
-### Archivos no se suben
-- Ejecutar `php artisan storage:link`
-- Verificar permisos de storage
+#### **Error 403:**
+- ✅ Verificar `INSTAGRAM_VERIFY_TOKEN=adsbot`
+- ✅ Comprobar URL del webhook
+- ✅ Verificar que la app esté activa
 
----
+#### **Error 500:**
+- ✅ Revisar logs en Laravel Cloud
+- ✅ Verificar tokens de acceso
+- ✅ Comprobar conexión a BD
 
-**¡Configuración lista para producción! 🚀**
+#### **No responde:**
+- ✅ Verificar `INSTAGRAM_ACCESS_TOKEN`
+- ✅ Comprobar permisos de la app
+- ✅ Revisar configuración de webhook
+
+### **📊 Monitoreo:**
+
+#### **Logs importantes:**
+- Mensajes recibidos
+- Respuestas enviadas
+- Errores de API
+- Conversaciones registradas
+
+#### **Métricas:**
+- Mensajes procesados
+- Respuestas exitosas
+- Conversiones a WhatsApp
+- Ventas cerradas
+
+### **📞 Soporte:**
+- **Email:** info@admetricas.com
+- **WhatsApp:** https://wa.me/584241234567
+- **Sitio web:** https://admetricas.com

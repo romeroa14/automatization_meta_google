@@ -91,3 +91,19 @@ Route::prefix('api/webhook')->group(function () {
         return response()->json(['status' => 'success', 'message' => 'Limpieza completada']);
     });
 });
+
+/*
+|--------------------------------------------------------------------------
+| Instagram Chatbot Routes
+|--------------------------------------------------------------------------
+|
+| Rutas para el chatbot de Instagram usando webhooks
+|
+*/
+
+// Webhook de Instagram para chatbot
+Route::post('/webhook/instagram', [App\Http\Controllers\InstagramWebhookController::class, 'handleWebhook']);
+Route::get('/webhook/instagram', [App\Http\Controllers\InstagramWebhookController::class, 'verifyWebhook']);
+
+// Endpoint para n8n (simulación)
+Route::post('/webhook/n8n', [App\Http\Controllers\InstagramWebhookController::class, 'handleN8nWebhook']);

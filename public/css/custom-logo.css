@@ -1,0 +1,15 @@
+/* CSS personalizado para el logo de Admetricas */
+.filament-sidebar-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.filament-sidebar-brand img {
+    max-width: 8rem !important;
+    width: 8rem !important;
+    height: 4rem !important;
+    object-fit: contain !important;
+    object-position: center !important;
+}

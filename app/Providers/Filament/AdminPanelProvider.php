@@ -27,6 +27,12 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->favicon(asset('logos/admetricas.png'))
+            ->brandName('Admetricas')
+            ->brandLogo(asset('logos/admetricascom.png'))
+            ->brandLogoHeight('4rem')
+            ->renderHook('panels::sidebar.brand.after', function (): string {
+                return '<link rel="stylesheet" href="' . asset('css/custom-logo.css') . '">';
+            })
             ->login()
             ->colors([
                 'primary' => Color::Amber,
