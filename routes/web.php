@@ -101,9 +101,10 @@ Route::prefix('api/webhook')->group(function () {
 |
 */
 
-// Webhook de Instagram para chatbot
-Route::post('/webhook/instagram', [App\Http\Controllers\InstagramWebhookController::class, 'handleWebhook']);
-Route::get('/webhook/instagram', [App\Http\Controllers\InstagramWebhookController::class, 'verifyWebhook']);
+// Webhook de Instagram para chatbot (sin CSRF)
+Route::post('/webhook/instagram', [App\Http\Controllers\InstagramWebhookController::class, 'handleWebhook'])->withoutMiddleware(['web']);
+Route::get('/webhook/instagram', [App\Http\Controllers\InstagramWebhookController::class, 'verifyWebhook'])->withoutMiddleware(['web']);
 
-// Endpoint para n8n (simulación)
+// Endpoint para n8n (conexión real)
 Route::post('/webhook/n8n', [App\Http\Controllers\InstagramWebhookController::class, 'handleN8nWebhook']);
+Route::get('/webhook/n8n', [App\Http\Controllers\InstagramWebhookController::class, 'verifyN8nWebhook']);

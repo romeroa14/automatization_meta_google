@@ -55,4 +55,8 @@ return [
         'app_id' => env('INSTAGRAM_APP_ID'),
     ],
 
+    'n8n' => [
+        'webhook_url' => env('N8N_WEBHOOK_URL'),
+    ],
+
 ];

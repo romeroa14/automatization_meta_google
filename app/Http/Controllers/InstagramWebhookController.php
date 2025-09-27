@@ -50,7 +50,7 @@ class InstagramWebhookController extends Controller
                 'headers' => $request->headers->all()
             ]);
 
-            // Verificar si es un mensaje de Instagram
+            // Verificar si es un mensaje de Instagram (formato estándar)
             if (isset($data['entry'])) {
                 foreach ($data['entry'] as $entry) {
                     if (isset($entry['messaging'])) {
@@ -59,6 +59,10 @@ class InstagramWebhookController extends Controller
                         }
                     }
                 }
+            }
+            // Verificar si es un mensaje de prueba de Facebook (formato de prueba)
+            elseif (isset($data['field']) && $data['field'] === 'messages') {
+                $this->processTestMessage($data['value']);
             }
 
             return response('OK', 200);
@@ -71,6 +75,37 @@ class InstagramWebhookController extends Controller
 
             return response('Error', 500);
         }
+    }
+
+    /**
+     * Procesar mensaje de prueba de Facebook
+     */
+    private function processTestMessage($testData)
+    {
+        $senderId = $testData['sender']['id'] ?? null;
+        $message = $testData['message'] ?? null;
+
+        if (!$senderId || !$message) {
+            Log::warning('Datos de prueba incompletos', ['data' => $testData]);
+            return;
+        }
+
+        $messageText = $message['text'] ?? '';
+        $messageId = $message['mid'] ?? '';
+
+        Log::info('Mensaje de prueba de Facebook procesado', [
+            'sender_id' => $senderId,
+            'message_text' => $messageText,
+            'message_id' => $messageId,
+            'test_data' => $testData
+        ]);
+
+        // Procesar como mensaje normal
+        $this->processInstagramMessage([
+            'sender' => ['id' => $senderId],
+            'message' => $message,
+            'timestamp' => $testData['timestamp'] ?? time()
+        ]);
     }
 
     /**
@@ -103,8 +138,58 @@ class InstagramWebhookController extends Controller
         // 2️⃣ Delay humano (2-5 segundos)
         sleep(rand(2, 5));
 
-        // 3️⃣ Procesamiento con IA
-        $this->processWithAI($senderId, $messageText, $messageId);
+        // 3️⃣ Enviar a n8n para procesamiento
+        $this->sendToN8n($senderId, $messageText, $messageId);
+    }
+
+    /**
+     * Enviar mensaje a n8n para procesamiento
+     */
+    private function sendToN8n($senderId, $messageText, $messageId)
+    {
+        try {
+            $n8nUrl = config('services.n8n.webhook_url');
+            
+            if (!$n8nUrl) {
+                Log::warning('URL de n8n no configurada, usando respuesta automática');
+                $this->sendResponse($senderId, $this->generateAutoReply($messageText));
+                return;
+            }
+
+            $data = [
+                'sender_id' => $senderId,
+                'message' => $messageText,
+                'message_id' => $messageId,
+                'timestamp' => now()->toISOString(),
+                'platform' => 'instagram'
+            ];
+
+            $response = Http::post($n8nUrl, $data);
+
+            if ($response->successful()) {
+                Log::info('Mensaje enviado a n8n exitosamente', [
+                    'sender_id' => $senderId,
+                    'response' => $response->json()
+                ]);
+            } else {
+                Log::error('Error enviando a n8n', [
+                    'status' => $response->status(),
+                    'response' => $response->body()
+                ]);
+                
+                // Fallback a respuesta automática
+                $this->sendResponse($senderId, $this->generateAutoReply($messageText));
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error enviando a n8n', [
+                'error' => $e->getMessage(),
+                'sender_id' => $senderId
+            ]);
+            
+            // Fallback a respuesta automática
+            $this->sendResponse($senderId, $this->generateAutoReply($messageText));
+        }
     }
 
     /**
@@ -305,7 +390,22 @@ class InstagramWebhookController extends Controller
     }
 
     /**
-     * Manejar webhook de n8n (simulación)
+     * Verificar webhook de n8n (GET)
+     */
+    public function verifyN8nWebhook(Request $request)
+    {
+        $challenge = $request->query('challenge');
+        
+        if ($challenge) {
+            Log::info('Webhook de n8n verificado', ['challenge' => $challenge]);
+            return response($challenge, 200);
+        }
+
+        return response('OK', 200);
+    }
+
+    /**
+     * Manejar webhook de n8n (conexión real)
      */
     public function handleN8nWebhook(Request $request)
     {
@@ -313,15 +413,19 @@ class InstagramWebhookController extends Controller
             $data = $request->all();
             
             Log::info('Webhook de n8n recibido', [
-                'data' => $data
+                'data' => $data,
+                'headers' => $request->headers->all()
             ]);
 
-            // Aquí procesarías la respuesta de n8n
-            // y enviarías la respuesta a Instagram
+            // Procesar datos de n8n
+            if (isset($data['sender_id']) && isset($data['message'])) {
+                $this->sendResponse($data['sender_id'], $data['message']);
+            }
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Webhook de n8n procesado'
+                'message' => 'Webhook de n8n procesado',
+                'timestamp' => now()->toISOString()
             ]);
 
         } catch (\Exception $e) {
