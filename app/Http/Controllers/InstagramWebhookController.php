@@ -27,6 +27,12 @@ class InstagramWebhookController extends Controller
             return response($challenge, 200);
         }
 
+        // Si no es verificación, es un webhook normal
+        if ($mode === null && $token === null) {
+            Log::info('Webhook de Instagram recibido (no es verificación)');
+            return response('OK', 200);
+        }
+
         Log::warning('Instagram webhook verificación fallida', [
             'mode' => $mode,
             'token' => $token,
@@ -45,24 +51,63 @@ class InstagramWebhookController extends Controller
         try {
             $data = $request->all();
             
-            Log::info('Instagram webhook recibido', [
+            Log::info('Instagram webhook recibido (log funciona)', [
                 'data' => $data,
                 'headers' => $request->headers->all()
             ]);
 
-            // Verificar si es un mensaje de Instagram (formato estándar)
+            // Log exhaustivo para debug
+            Log::info('🔍 DEBUG: Analizando estructura de datos', [
+                'has_entry' => isset($data['entry']),
+                'has_field' => isset($data['field']),
+                'has_messaging' => isset($data['entry'][0]['messaging']),
+                'has_changes' => isset($data['entry'][0]['changes']),
+                'data_structure' => array_keys($data)
+            ]);
+
+            // Procesar mensaje de Instagram (formato estándar)
             if (isset($data['entry'])) {
-                foreach ($data['entry'] as $entry) {
+                Log::info('🔍 DEBUG: Procesando formato entry');
+                foreach ($data['entry'] as $entryIndex => $entry) {
+                    Log::info("🔍 DEBUG: Procesando entry $entryIndex", [
+                        'entry_keys' => array_keys($entry),
+                        'has_messaging' => isset($entry['messaging']),
+                        'has_changes' => isset($entry['changes'])
+                    ]);
+
                     if (isset($entry['messaging'])) {
+                        Log::info('🔍 DEBUG: Procesando messaging');
                         foreach ($entry['messaging'] as $messaging) {
                             $this->processInstagramMessage($messaging);
                         }
                     }
+                    
+                    if (isset($entry['changes'])) {
+                        Log::info('🔍 DEBUG: Procesando changes');
+                        foreach ($entry['changes'] as $changeIndex => $change) {
+                            Log::info("🔍 DEBUG: Procesando change $changeIndex", [
+                                'change_keys' => array_keys($change),
+                                'field' => $change['field'] ?? 'no_field'
+                            ]);
+                            
+                            if (isset($change['field']) && $change['field'] === 'messages') {
+                                Log::info('🔍 DEBUG: Encontrado field messages, procesando');
+                                $this->processTestMessage($change['value']);
+                            }
+                        }
+                    }
                 }
             }
-            // Verificar si es un mensaje de prueba de Facebook (formato de prueba)
+            // Procesar mensaje de prueba directo
             elseif (isset($data['field']) && $data['field'] === 'messages') {
+                Log::info('🔍 DEBUG: Procesando formato directo');
                 $this->processTestMessage($data['value']);
+            }
+            else {
+                Log::warning('🔍 DEBUG: No se pudo procesar el mensaje', [
+                    'data_keys' => array_keys($data),
+                    'data_sample' => $data
+                ]);
             }
 
             return response('OK', 200);
