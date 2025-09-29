@@ -205,6 +205,7 @@ class InstagramWebhookController extends Controller
                 'sender_id' => $senderId,
                 'message' => $messageText,
                 'message_id' => $messageId,
+                'access_token' => config('services.instagram.access_token'),
                 'timestamp' => now()->toISOString(),
                 'platform' => 'instagram'
             ];
