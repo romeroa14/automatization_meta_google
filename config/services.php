@@ -57,6 +57,7 @@ return [
 
     'n8n' => [
         'webhook_url' => env('N8N_WEBHOOK_URL'),
+        'comments_webhook_url' => env('N8N_COMMENTS_WEBHOOK_URL'),
     ],
 
 ];

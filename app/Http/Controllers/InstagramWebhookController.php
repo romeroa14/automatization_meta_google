@@ -43,6 +43,40 @@ class InstagramWebhookController extends Controller
     }
 
     /**
+     * Manejar webhook de comentarios de Instagram
+     */
+    public function handleCommentsWebhook(Request $request)
+    {
+        try {
+            $data = $request->all();
+
+            Log::info('Instagram comments webhook recibido', [
+                'data' => $data
+            ]);
+
+            // Procesar comentarios de Instagram
+            if (isset($data['entry'])) {
+                foreach ($data['entry'] as $entry) {
+                    if (isset($entry['changes'])) {
+                        foreach ($entry['changes'] as $change) {
+                            if ($change['field'] === 'comments') {
+                                $this->processInstagramComment($change['value']);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return response('OK', 200);
+        } catch (\Exception $e) {
+            Log::error('Error procesando webhook de comentarios', [
+                'error' => $e->getMessage()
+            ]);
+            return response('Error', 500);
+        }
+    }
+
+    /**
      * Manejar webhook de Instagram (POST)
      * Recibe mensajes y eventos de Instagram
      */
@@ -50,7 +84,7 @@ class InstagramWebhookController extends Controller
     {
         try {
             $data = $request->all();
-            
+
             Log::info('Instagram webhook recibido (log funciona)', [
                 'data' => $data,
                 'headers' => $request->headers->all()
@@ -81,7 +115,7 @@ class InstagramWebhookController extends Controller
                             $this->processInstagramMessage($messaging);
                         }
                     }
-                    
+
                     if (isset($entry['changes'])) {
                         Log::info('🔍 DEBUG: Procesando changes');
                         foreach ($entry['changes'] as $changeIndex => $change) {
@@ -89,10 +123,15 @@ class InstagramWebhookController extends Controller
                                 'change_keys' => array_keys($change),
                                 'field' => $change['field'] ?? 'no_field'
                             ]);
-                            
+
                             if (isset($change['field']) && $change['field'] === 'messages') {
                                 Log::info('🔍 DEBUG: Encontrado field messages, procesando');
                                 $this->processTestMessage($change['value']);
+                            }
+                            
+                            if (isset($change['field']) && $change['field'] === 'comments') {
+                                Log::info('🔍 DEBUG: Encontrado field comments, procesando');
+                                $this->processInstagramComment($change['value']);
                             }
                         }
                     }
@@ -102,8 +141,7 @@ class InstagramWebhookController extends Controller
             elseif (isset($data['field']) && $data['field'] === 'messages') {
                 Log::info('🔍 DEBUG: Procesando formato directo');
                 $this->processTestMessage($data['value']);
-            }
-            else {
+            } else {
                 Log::warning('🔍 DEBUG: No se pudo procesar el mensaje', [
                     'data_keys' => array_keys($data),
                     'data_sample' => $data
@@ -111,7 +149,6 @@ class InstagramWebhookController extends Controller
             }
 
             return response('OK', 200);
-
         } catch (\Exception $e) {
             Log::error('Error procesando webhook de Instagram', [
                 'error' => $e->getMessage(),
@@ -194,7 +231,7 @@ class InstagramWebhookController extends Controller
     {
         try {
             $n8nUrl = config('services.n8n.webhook_url');
-            
+
             if (!$n8nUrl) {
                 Log::warning('URL de n8n no configurada, usando respuesta automática');
                 $this->sendResponse($senderId, $this->generateAutoReply($messageText));
@@ -222,54 +259,113 @@ class InstagramWebhookController extends Controller
                     'status' => $response->status(),
                     'response' => $response->body()
                 ]);
-                
+
                 // Fallback a respuesta automática
                 $this->sendResponse($senderId, $this->generateAutoReply($messageText));
             }
-
         } catch (\Exception $e) {
             Log::error('Error enviando a n8n', [
                 'error' => $e->getMessage(),
                 'sender_id' => $senderId
             ]);
-            
+
             // Fallback a respuesta automática
             $this->sendResponse($senderId, $this->generateAutoReply($messageText));
+        }
+    }
+
+    private function processInstagramComment($commentData)
+    {
+        try {
+            $commentId = $commentData['id'] ?? '';
+            $commentText = $commentData['text'] ?? '';
+            $commenterId = $commentData['from']['id'] ?? '';
+            $commenterUsername = $commentData['from']['username'] ?? '';
+            $mediaId = $commentData['media']['id'] ?? '';
+
+            // Enviar a n8n
+            $this->sendCommentToN8n($commentId, $commentText, $commenterId, $commenterUsername, $mediaId);
+        } catch (\Exception $e) {
+            Log::error('Error procesando comentario', [
+                'error' => $e->getMessage(),
+                'data' => $commentData
+            ]);
+        }
+    }
+
+    private function sendCommentToN8n($commentId, $commentText, $commenterId, $commenterUsername, $mediaId)
+    {
+        try {
+            $n8nUrl = config('services.n8n.comments_webhook_url');
+
+            if (!$n8nUrl) {
+                Log::warning('URL de n8n para comentarios no configurada');
+                return;
+            }
+
+            $data = [
+                'comment_id' => $commentId,
+                'comment_text' => $commentText,
+                'commenter_id' => $commenterId,
+                'commenter_username' => $commenterUsername,
+                'media_id' => $mediaId,
+                'access_token' => config('services.instagram.access_token'),
+                'timestamp' => now()->toISOString(),
+                'platform' => 'instagram_comments'
+            ];
+
+            $response = Http::post($n8nUrl, $data);
+
+            if ($response->successful()) {
+                Log::info('Comentario enviado a n8n exitosamente', [
+                    'comment_id' => $commentId,
+                    'response' => $response->json()
+                ]);
+            } else {
+                Log::error('Error enviando comentario a n8n', [
+                    'status' => $response->status(),
+                    'response' => $response->body()
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error enviando comentario a n8n', [
+                'error' => $e->getMessage(),
+                'comment_id' => $commentId
+            ]);
         }
     }
 
     /**
      * Procesar mensaje con IA
      */
-    private function processWithAI($senderId, $messageText, $messageId)
-    {
-        try {
-            // 4️⃣ Consulta a Base de Datos / Google Sheets
-            $planData = $this->getPlanData($messageText);
-            
-            // 5️⃣ Procesamiento con IA
-            $aiResponse = $this->getAIResponse($messageText, $planData);
-            
-            // 6️⃣ Construcción de Respuesta
-            $finalResponse = $this->buildFinalResponse($aiResponse, $planData);
-            
-            // 7️⃣ Respuesta en Instagram
-            $this->sendResponse($senderId, $finalResponse);
-            
-            // 8️⃣ Registro en CRM / Google Sheets
-            $this->logToCRM($senderId, $messageText, $finalResponse);
-            
-        } catch (\Exception $e) {
-            Log::error('Error procesando con IA', [
-                'error' => $e->getMessage(),
-                'sender_id' => $senderId,
-                'message' => $messageText
-            ]);
-            
-            // Fallback a respuesta simple
-            $this->sendResponse($senderId, '🤖 Gracias por tu mensaje. Un agente humano te responderá pronto.');
-        }
-    }
+    // private function processWithAI($senderId, $messageText, $messageId)
+    // {
+    //     try {
+    //         // 4️⃣ Consulta a Base de Datos / Google Sheets
+    //         $planData = $this->getPlanData($messageText);
+
+    //         // 5️⃣ Procesamiento con IA
+    //         $aiResponse = $this->getAIResponse($messageText, $planData);
+
+    //         // 6️⃣ Construcción de Respuesta
+    //         $finalResponse = $this->buildFinalResponse($aiResponse, $planData);
+
+    //         // 7️⃣ Respuesta en Instagram
+    //         $this->sendResponse($senderId, $finalResponse);
+
+    //         // 8️⃣ Registro en CRM / Google Sheets
+    //         $this->logToCRM($senderId, $messageText, $finalResponse);
+    //     } catch (\Exception $e) {
+    //         Log::error('Error procesando con IA', [
+    //             'error' => $e->getMessage(),
+    //             'sender_id' => $senderId,
+    //             'message' => $messageText
+    //         ]);
+
+    //         // Fallback a respuesta simple
+    //         $this->sendResponse($senderId, '🤖 Gracias por tu mensaje. Un agente humano te responderá pronto.');
+    //     }
+    // }
 
     /**
      * 4️⃣ Consulta a Base de Datos / Google Sheets
@@ -277,19 +373,21 @@ class InstagramWebhookController extends Controller
     private function getPlanData($messageText)
     {
         $message = strtolower($messageText);
-        
+
         // Buscar planes en la base de datos
         $plans = \App\Models\AdvertisingPlan::where('status', 'active')->get();
-        
+
         $matchedPlan = null;
         foreach ($plans as $plan) {
-            if (strpos($message, strtolower($plan->name)) !== false || 
-                strpos($message, strtolower($plan->description)) !== false) {
+            if (
+                strpos($message, strtolower($plan->name)) !== false ||
+                strpos($message, strtolower($plan->description)) !== false
+            ) {
                 $matchedPlan = $plan;
                 break;
             }
         }
-        
+
         return $matchedPlan;
     }
 
@@ -299,7 +397,7 @@ class InstagramWebhookController extends Controller
     private function getAIResponse($messageText, $planData)
     {
         $geminiApiKey = config('services.gemini.api_key');
-        
+
         if (!$geminiApiKey) {
             return $this->generateAutoReply($messageText);
         }
@@ -338,14 +436,14 @@ class InstagramWebhookController extends Controller
     private function buildFinalResponse($aiResponse, $planData)
     {
         $response = $aiResponse;
-        
+
         if ($planData) {
             $response .= "\n\n💰 **{$planData->name}** - \${$planData->total_budget}";
             $response .= "\n📝 {$planData->description}";
         }
-        
+
         $response .= "\n\n👉 Escríbenos a WhatsApp para reservar: https://wa.me/584241234567";
-        
+
         return $response;
     }
 
@@ -355,7 +453,7 @@ class InstagramWebhookController extends Controller
     private function sendResponse($senderId, $messageText)
     {
         $accessToken = config('services.instagram.access_token');
-        
+
         if (!$accessToken) {
             Log::warning('Token de acceso de Instagram no configurado');
             return;
@@ -441,7 +539,7 @@ class InstagramWebhookController extends Controller
     public function verifyN8nWebhook(Request $request)
     {
         $challenge = $request->query('challenge');
-        
+
         if ($challenge) {
             Log::info('Webhook de n8n verificado', ['challenge' => $challenge]);
             return response($challenge, 200);
@@ -457,7 +555,7 @@ class InstagramWebhookController extends Controller
     {
         try {
             $data = $request->all();
-            
+
             Log::info('Webhook de n8n recibido', [
                 'data' => $data,
                 'headers' => $request->headers->all()
@@ -473,7 +571,6 @@ class InstagramWebhookController extends Controller
                 'message' => 'Webhook de n8n procesado',
                 'timestamp' => now()->toISOString()
             ]);
-
         } catch (\Exception $e) {
             Log::error('Error procesando webhook de n8n', [
                 'error' => $e->getMessage(),
