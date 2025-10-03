@@ -108,3 +108,16 @@ Route::get('/webhook/instagram', [App\Http\Controllers\InstagramWebhookControlle
 // Endpoint para n8n (conexión real)
 Route::post('/webhook/n8n', [App\Http\Controllers\InstagramWebhookController::class, 'handleN8nWebhook']);
 Route::get('/webhook/n8n', [App\Http\Controllers\InstagramWebhookController::class, 'verifyN8nWebhook']);
+
+/*
+||--------------------------------------------------------------------------
+|| WhatsApp Business API Routes
+||--------------------------------------------------------------------------
+||
+|| Rutas para el chatbot de WhatsApp Business
+||
+*/
+
+// Webhook de WhatsApp Business (sin CSRF)
+Route::post('/webhook/whatsapp', [App\Http\Controllers\WhatsAppWebhookController::class, 'handleWebhook'])->withoutMiddleware(['web']);
+Route::get('/webhook/whatsapp', [App\Http\Controllers\WhatsAppWebhookController::class, 'verifyWebhook'])->withoutMiddleware(['web']);

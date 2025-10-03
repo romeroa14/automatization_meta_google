@@ -55,9 +55,16 @@ return [
         'app_id' => env('INSTAGRAM_APP_ID'),
     ],
 
+    'whatsapp' => [
+        'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
+    ],
+
     'n8n' => [
         'webhook_url' => env('N8N_WEBHOOK_URL'),
         'comments_webhook_url' => env('N8N_COMMENTS_WEBHOOK_URL'),
+        'whatsapp_webhook_url' => env('N8N_WHATSAPP_WEBHOOK_URL'),
     ],
 
 ];
