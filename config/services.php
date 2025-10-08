@@ -67,4 +67,9 @@ return [
         'whatsapp_webhook_url' => env('N8N_WHATSAPP_WEBHOOK_URL'),
     ],
 
+    'airtable' => [
+        'api_key' => env('AIRTABLE_API_KEY'),
+        'base_id' => env('AIRTABLE_BASE_ID'),
+    ],
+
 ];
