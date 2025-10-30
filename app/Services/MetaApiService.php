@@ -9,6 +9,74 @@ use App\Models\FacebookAccount;
 class MetaApiService
 {
     protected string $baseUrl = 'https://graph.facebook.com/v18.0';
+    protected int $rateLimitDelay = 2; // Segundos entre llamadas
+    protected int $maxRetries = 3; // Máximo de reintentos
+
+    /**
+     * Realizar llamada HTTP con rate limiting y retry logic
+     */
+    protected function makeApiCall(string $url, array $params = [], string $method = 'GET'): ?array
+    {
+        $retryCount = 0;
+        
+        while ($retryCount < $this->maxRetries) {
+            try {
+                // Rate limiting: esperar antes de cada llamada
+                if ($retryCount > 0) {
+                    $delay = $this->rateLimitDelay * ($retryCount + 1);
+                    Log::info("⏳ Esperando {$delay}s antes del reintento #{$retryCount}");
+                    sleep($delay);
+                } else {
+                    sleep($this->rateLimitDelay);
+                }
+
+                $response = Http::timeout(60)->$method($url, $params);
+
+                if ($response->successful()) {
+                    return $response->json();
+                }
+
+                // Verificar si es error de rate limit
+                if ($response->status() === 400) {
+                    $errorData = $response->json();
+                    if (isset($errorData['error']['code']) && $errorData['error']['code'] === 17) {
+                        Log::warning("⚠️ Rate limit alcanzado, esperando más tiempo...", [
+                            'retry_count' => $retryCount,
+                            'error' => $errorData['error']['message'] ?? 'Rate limit exceeded'
+                        ]);
+                        
+                        $retryCount++;
+                        continue;
+                    }
+                }
+
+                // Si no es rate limit, logear y retornar null
+                Log::error("❌ Error en llamada API", [
+                    'url' => $url,
+                    'status' => $response->status(),
+                    'response' => $response->body()
+                ]);
+
+                return null;
+
+            } catch (\Exception $e) {
+                Log::error("❌ Excepción en llamada API", [
+                    'url' => $url,
+                    'retry_count' => $retryCount,
+                    'error' => $e->getMessage()
+                ]);
+
+                $retryCount++;
+            }
+        }
+
+        Log::error("❌ Máximo de reintentos alcanzado", [
+            'url' => $url,
+            'max_retries' => $this->maxRetries
+        ]);
+
+        return null;
+    }
 
     /**
      * Obtener cuentas publicitarias de Meta
@@ -16,29 +84,23 @@ class MetaApiService
     public function getAdAccounts(FacebookAccount $facebookAccount): array
     {
         try {
-            $response = Http::get("{$this->baseUrl}/me/adaccounts", [
+            $response = $this->makeApiCall("{$this->baseUrl}/me/adaccounts", [
                 'access_token' => $facebookAccount->access_token,
                 'fields' => 'id,name,account_status,currency,timezone_name,amount_spent,balance',
                 'limit' => 100
             ]);
 
-            if ($response->successful()) {
-                $data = $response->json();
+            if ($response && isset($response['data'])) {
+                Log::info('✅ Cuentas publicitarias obtenidas', [
+                    'facebook_account_id' => $facebookAccount->id,
+                    'count' => count($response['data'])
+                ]);
                 
-                if (isset($data['data'])) {
-                    Log::info('✅ Cuentas publicitarias obtenidas', [
-                        'facebook_account_id' => $facebookAccount->id,
-                        'count' => count($data['data'])
-                    ]);
-                    
-                    return $this->formatAdAccounts($data['data']);
-                }
+                return $this->formatAdAccounts($response['data']);
             }
 
             Log::error('❌ Error obteniendo cuentas publicitarias', [
-                'facebook_account_id' => $facebookAccount->id,
-                'status' => $response->status(),
-                'response' => $response->body()
+                'facebook_account_id' => $facebookAccount->id
             ]);
 
             return [];
@@ -59,29 +121,23 @@ class MetaApiService
     public function getPages(FacebookAccount $facebookAccount): array
     {
         try {
-            $response = Http::get("{$this->baseUrl}/me/accounts", [
+            $response = $this->makeApiCall("{$this->baseUrl}/me/accounts", [
                 'access_token' => $facebookAccount->access_token,
                 'fields' => 'id,name,category,access_token,tasks,instagram_business_account',
-                'limit' => 1000  // Aumentar límite para obtener todas las fanpages
+                'limit' => 1000
             ]);
 
-            if ($response->successful()) {
-                $data = $response->json();
+            if ($response && isset($response['data'])) {
+                Log::info('✅ Fanpages obtenidas', [
+                    'facebook_account_id' => $facebookAccount->id,
+                    'count' => count($response['data'])
+                ]);
                 
-                if (isset($data['data'])) {
-                    Log::info('✅ Fanpages obtenidas', [
-                        'facebook_account_id' => $facebookAccount->id,
-                        'count' => count($data['data'])
-                    ]);
-                    
-                    return $this->formatPages($data['data']);
-                }
+                return $this->formatPages($response['data']);
             }
 
             Log::error('❌ Error obteniendo fanpages', [
-                'facebook_account_id' => $facebookAccount->id,
-                'status' => $response->status(),
-                'response' => $response->body()
+                'facebook_account_id' => $facebookAccount->id
             ]);
 
             return [];
@@ -127,29 +183,23 @@ class MetaApiService
     public function validateAccessToken(FacebookAccount $facebookAccount): bool
     {
         try {
-            $response = Http::get("{$this->baseUrl}/me", [
+            $response = $this->makeApiCall("{$this->baseUrl}/me", [
                 'access_token' => $facebookAccount->access_token,
                 'fields' => 'id,name'
             ]);
 
-            if ($response->successful()) {
-                $data = $response->json();
+            if ($response && isset($response['id'])) {
+                Log::info('✅ Token de acceso válido', [
+                    'facebook_account_id' => $facebookAccount->id,
+                    'user_id' => $response['id'],
+                    'user_name' => $response['name'] ?? 'N/A'
+                ]);
                 
-                if (isset($data['id'])) {
-                    Log::info('✅ Token de acceso válido', [
-                        'facebook_account_id' => $facebookAccount->id,
-                        'user_id' => $data['id'],
-                        'user_name' => $data['name'] ?? 'N/A'
-                    ]);
-                    
-                    return true;
-                }
+                return true;
             }
 
             Log::error('❌ Token de acceso inválido', [
-                'facebook_account_id' => $facebookAccount->id,
-                'status' => $response->status(),
-                'response' => $response->body()
+                'facebook_account_id' => $facebookAccount->id
             ]);
 
             return false;
@@ -216,22 +266,21 @@ class MetaApiService
     public function getInstagramAccountInfo(string $instagramId, string $pageAccessToken): ?array
     {
         try {
-            $response = Http::get("{$this->baseUrl}/{$instagramId}", [
+            $response = $this->makeApiCall("{$this->baseUrl}/{$instagramId}", [
                 'access_token' => $pageAccessToken,
                 'fields' => 'id,username,name,biography,followers_count,follows_count,media_count,profile_picture_url'
             ]);
 
-            if ($response->successful()) {
-                $data = $response->json();
+            if ($response) {
                 return [
-                    'id' => $data['id'] ?? $instagramId,
-                    'username' => $data['username'] ?? 'N/A',
-                    'name' => $data['name'] ?? $data['username'] ?? 'Instagram Account',
-                    'biography' => $data['biography'] ?? '',
-                    'followers_count' => $data['followers_count'] ?? 0,
-                    'follows_count' => $data['follows_count'] ?? 0,
-                    'media_count' => $data['media_count'] ?? 0,
-                    'profile_picture_url' => $data['profile_picture_url'] ?? null
+                    'id' => $response['id'] ?? $instagramId,
+                    'username' => $response['username'] ?? 'N/A',
+                    'name' => $response['name'] ?? $response['username'] ?? 'Instagram Account',
+                    'biography' => $response['biography'] ?? '',
+                    'followers_count' => $response['followers_count'] ?? 0,
+                    'follows_count' => $response['follows_count'] ?? 0,
+                    'media_count' => $response['media_count'] ?? 0,
+                    'profile_picture_url' => $response['profile_picture_url'] ?? null
                 ];
             }
         } catch (\Exception $e) {
@@ -250,26 +299,23 @@ class MetaApiService
     public function getAdAccountDetails(string $adAccountId, FacebookAccount $facebookAccount): ?array
     {
         try {
-            $response = Http::get("{$this->baseUrl}/{$adAccountId}", [
+            $response = $this->makeApiCall("{$this->baseUrl}/{$adAccountId}", [
                 'access_token' => $facebookAccount->access_token,
                 'fields' => 'id,name,account_status,currency,timezone_name,amount_spent,balance,spend_cap,created_time'
             ]);
 
-            if ($response->successful()) {
-                $data = $response->json();
-                
+            if ($response) {
                 Log::info('✅ Detalles de cuenta publicitaria obtenidos', [
                     'ad_account_id' => $adAccountId,
                     'facebook_account_id' => $facebookAccount->id
                 ]);
                 
-                return $data;
+                return $response;
             }
 
             Log::error('❌ Error obteniendo detalles de cuenta publicitaria', [
                 'ad_account_id' => $adAccountId,
-                'facebook_account_id' => $facebookAccount->id,
-                'status' => $response->status()
+                'facebook_account_id' => $facebookAccount->id
             ]);
 
             return null;
@@ -291,26 +337,23 @@ class MetaApiService
     public function getPageDetails(string $pageId, FacebookAccount $facebookAccount): ?array
     {
         try {
-            $response = Http::get("{$this->baseUrl}/{$pageId}", [
+            $response = $this->makeApiCall("{$this->baseUrl}/{$pageId}", [
                 'access_token' => $facebookAccount->access_token,
                 'fields' => 'id,name,category,about,phone,website,emails,location,link,fan_count,verification_status'
             ]);
 
-            if ($response->successful()) {
-                $data = $response->json();
-                
+            if ($response) {
                 Log::info('✅ Detalles de fanpage obtenidos', [
                     'page_id' => $pageId,
                     'facebook_account_id' => $facebookAccount->id
                 ]);
                 
-                return $data;
+                return $response;
             }
 
             Log::error('❌ Error obteniendo detalles de fanpage', [
                 'page_id' => $pageId,
-                'facebook_account_id' => $facebookAccount->id,
-                'status' => $response->status()
+                'facebook_account_id' => $facebookAccount->id
             ]);
 
             return null;
@@ -340,24 +383,13 @@ class MetaApiService
                 throw new \Exception('No se encontró cuenta de Facebook activa');
             }
 
-            $accessToken = $facebookAccount->access_token;
-            
-            // Endpoint para obtener el saldo de la cuenta publicitaria
-            $url = "https://graph.facebook.com/v18.0/{$adAccountId}";
-            
-            $response = Http::get($url, [
-                'access_token' => $accessToken,
+            $response = $this->makeApiCall("{$this->baseUrl}/{$adAccountId}", [
+                'access_token' => $facebookAccount->access_token,
                 'fields' => 'balance,currency,account_status,name,amount_spent'
             ]);
             
-            if (!$response->successful()) {
-                throw new \Exception('Error en la llamada a la API: ' . $response->body());
-            }
-            
-            $response = $response->json();
-            
-            if (isset($response['error'])) {
-                throw new \Exception($response['error']['message']);
+            if (!$response) {
+                throw new \Exception('Error en la llamada a la API');
             }
 
             return [
@@ -396,37 +428,27 @@ class MetaApiService
                 throw new \Exception('No se encontró cuenta de Facebook activa');
             }
 
-            $accessToken = $facebookAccount->access_token;
-            
-            // Obtener información completa de la cuenta incluyendo saldo
-            $accountUrl = "https://graph.facebook.com/v18.0/{$adAccountId}";
-            $accountResponse = Http::get($accountUrl, [
-                'access_token' => $accessToken,
+            $response = $this->makeApiCall("{$this->baseUrl}/{$adAccountId}", [
+                'access_token' => $facebookAccount->access_token,
                 'fields' => 'balance,currency,account_status,name,amount_spent'
             ]);
             
-            if (!$accountResponse->successful()) {
-                throw new \Exception('Error obteniendo información de cuenta: ' . $accountResponse->body());
-            }
-            
-            $accountResponse = $accountResponse->json();
-            
-            if (isset($accountResponse['error'])) {
-                throw new \Exception($accountResponse['error']['message']);
+            if (!$response) {
+                throw new \Exception('Error obteniendo información de cuenta');
             }
 
             // Extraer información de saldo de la respuesta
             $balanceData = [
-                'amount' => $accountResponse['balance'] ?? null,
-                'currency' => $accountResponse['currency'] ?? null,
-                'account_status' => $accountResponse['account_status'] ?? null,
-                'amount_spent' => $accountResponse['amount_spent'] ?? null
+                'amount' => $response['balance'] ?? null,
+                'currency' => $response['currency'] ?? null,
+                'account_status' => $response['account_status'] ?? null,
+                'amount_spent' => $response['amount_spent'] ?? null
             ];
 
             return [
                 'success' => true,
                 'data' => [
-                    'account_info' => $accountResponse,
+                    'account_info' => $response,
                     'balance' => $balanceData
                 ],
                 'ad_account_id' => $adAccountId,
