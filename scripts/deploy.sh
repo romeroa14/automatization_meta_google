@@ -15,6 +15,10 @@ ssh -t $USER@$HOST "
     # Poner en modo mantenimiento
     sudo docker exec -w /var/www/html laravel-php php artisan down || true
 
+    # Corregir permisos (root a veces se adueña de archivos)
+    echo '🔒 Corrigiendo permisos...'
+    sudo chown -R adminvps:adminvps .
+
     # Actualizar código
     echo '⬇️  Haciendo git pull...'
     # Corregir error de propiedad de git
