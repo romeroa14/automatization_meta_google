@@ -30,7 +30,7 @@ class ActiveCampaignsResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
-    protected static ?string $navigationLabel = 'Campañas Activas';
+    protected static ?string $navigationLabel = 'Campañas Activass';
 
     protected static ?string $navigationGroup = 'ADMETRICAS.COM';
 
