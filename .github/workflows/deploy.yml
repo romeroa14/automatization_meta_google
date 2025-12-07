@@ -2,7 +2,7 @@ name: Deploy Production
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 jobs:
   deploy:
@@ -26,7 +26,7 @@ jobs:
               sudo docker exec -w /var/www/html laravel-php php artisan down || true
               
               # Pull del código (en el host)
-              git pull origin main
+              git pull origin master
               
               # Instalar dependencias (en el container)
               sudo docker exec -w /var/www/html laravel-php composer install --no-dev --optimize-autoloader

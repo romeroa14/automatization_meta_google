@@ -20,7 +20,7 @@ ssh -t $USER@$HOST "
     # Corregir error de propiedad de git
     git config --global --add safe.directory /opt/docker/laravel/app
     # Git se ejecuta en el HOST, no en el container, porque el .git está en el host (en app/)
-    git pull origin main
+    git pull origin master
 
     # Instalar dependencias dentro del container
     echo '📦 Instalando dependencias...'
