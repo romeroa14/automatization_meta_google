@@ -21,6 +21,9 @@ jobs:
               
               # Configuración de seguridad de Git (fix para error dubious ownership)
               git config --global --add safe.directory /opt/docker/laravel/app
+
+              # Corregir permisos (vital para evitar Permission denied)
+              sudo chown -R adminvps:adminvps .
               
               # Poner en mantenimiento
               sudo docker exec -w /var/www/html laravel-php php artisan down || true
@@ -29,16 +32,16 @@ jobs:
               git pull origin master
               
               # Instalar dependencias (en el container)
-              sudo docker exec -w /var/www/html laravel-php composer install --no-dev --optimize-autoloader
+              sudo docker exec -u application -w /var/www/html laravel-php composer install --no-dev --optimize-autoloader
               
               # Migraciones y limpieza (en el container)
-              sudo docker exec -w /var/www/html laravel-php php artisan migrate --force
-              sudo docker exec -w /var/www/html laravel-php php artisan config:clear
-              sudo docker exec -w /var/www/html laravel-php php artisan cache:clear
-              sudo docker exec -w /var/www/html laravel-php php artisan route:clear
-              sudo docker exec -w /var/www/html laravel-php php artisan view:clear
+              sudo docker exec -u application -w /var/www/html laravel-php php artisan migrate --force
+              sudo docker exec -u application -w /var/www/html laravel-php php artisan config:clear
+              sudo docker exec -u application -w /var/www/html laravel-php php artisan cache:clear
+              sudo docker exec -u application -w /var/www/html laravel-php php artisan route:clear
+              sudo docker exec -u application -w /var/www/html laravel-php php artisan view:clear
               
               # Levantar sitio
-              sudo docker exec -w /var/www/html laravel-php php artisan up
+              sudo docker exec -u application -w /var/www/html laravel-php php artisan up
               
               echo "✅ Despliegue automático completado."

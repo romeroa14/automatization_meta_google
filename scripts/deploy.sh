@@ -26,21 +26,21 @@ ssh -t $USER@$HOST "
     # Git se ejecuta en el HOST, no en el container, porque el .git está en el host (en app/)
     git pull origin master
 
-    # Instalar dependencias dentro del container
+    # Instalar dependencias dentro del container (como application para evitar problemas de permisos)
     echo '📦 Instalando dependencias...'
-    sudo docker exec -w /var/www/html laravel-php composer install --no-dev --optimize-autoloader
+    sudo docker exec -u application -w /var/www/html laravel-php composer install --no-dev --optimize-autoloader
 
-    # Migraciones
+    # Migraciones (idealmente como application, pero si falla por permisos de DB, dejar sin -u. Probemos application)
     echo '🗄️  Ejecutando migraciones...'
-    sudo docker exec -w /var/www/html laravel-php php artisan migrate --force
+    sudo docker exec -u application -w /var/www/html laravel-php php artisan migrate --force
 
-    # Limpiar caché
+    # Limpiar caché (ESTO ES CRÍTICO: Debe ser application)
     echo '🧹 Limpiando caché...'
-    sudo docker exec -w /var/www/html laravel-php php artisan config:clear
-    sudo docker exec -w /var/www/html laravel-php php artisan route:clear
-    sudo docker exec -w /var/www/html laravel-php php artisan view:clear
+    sudo docker exec -u application -w /var/www/html laravel-php php artisan config:clear
+    sudo docker exec -u application -w /var/www/html laravel-php php artisan route:clear
+    sudo docker exec -u application -w /var/www/html laravel-php php artisan view:clear
 
     # Salir de mantenimiento
-    sudo docker exec -w /var/www/html laravel-php php artisan up
+    sudo docker exec -u application -w /var/www/html laravel-php php artisan up
     echo '✅ Despliegue Docker completado con éxito.'
 "
