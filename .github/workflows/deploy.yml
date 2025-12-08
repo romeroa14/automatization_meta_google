@@ -28,7 +28,13 @@ jobs:
               # Poner en mantenimiento
               sudo docker exec -w /var/www/html laravel-php php artisan down || true
               
-              # Pull del código (en el host)
+              # LIMPIEZA Y PREPARACIÓN (Fix para conflictos de git)
+              # Resetear cambios locales en archivos trackeados (como package-lock.json)
+              git reset --hard HEAD
+              # Eliminar archivos untracked que causan colisión (git clean respeta .gitignore, así que .env está seguro)
+              git clean -fd
+              
+              # Pull del código
               git pull origin master
               
               # Instalar dependencias (en el container)
