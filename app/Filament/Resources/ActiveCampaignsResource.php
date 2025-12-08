@@ -30,7 +30,7 @@ class ActiveCampaignsResource extends Resource
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
 
-    protected static ?string $navigationLabel = 'Campañas Activateee menor';
+    protected static ?string $navigationLabel = 'Campañas Activateee menor apurele';
 
     protected static ?string $navigationGroup = 'ADMETRICAS.COM';
 

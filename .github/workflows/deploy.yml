@@ -44,4 +44,7 @@ jobs:
               # Levantar sitio
               sudo docker exec -u application -w /var/www/html laravel-php php artisan up
               
+              # Reiniciar contenedor de PHP para limpiar OPcache
+              sudo docker restart laravel-php
+              
               echo "✅ Despliegue automático completado."
