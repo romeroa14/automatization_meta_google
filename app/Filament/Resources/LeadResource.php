@@ -23,20 +23,20 @@ class LeadResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('name')
+                Forms\Components\TextInput::make('client_name')
                     ->label('Nombre Completo')
                     ->readOnly(),
-                Forms\Components\TextInput::make('phone')
+                Forms\Components\TextInput::make('phone_number')
                     ->label('Teléfono')
                     ->tel()
                     ->readOnly(),
-                Forms\Components\TextInput::make('intention')
+                Forms\Components\TextInput::make('intent')
                     ->label('Intención')
                     ->readOnly(),
                 Forms\Components\TextInput::make('stage')
                     ->label('Etapa')
                     ->readOnly(),
-                Forms\Components\TextInput::make('confidence')
+                Forms\Components\TextInput::make('confidence_score')
                     ->label('Confianza')
                     ->numeric()
                     ->readOnly(),
@@ -47,21 +47,23 @@ class LeadResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('name')
-                    ->label('Nombre')
+                Tables\Columns\TextColumn::make('client_name')
+                    ->label('Nombre Completo')
                     ->searchable()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('phone')
+                Tables\Columns\TextColumn::make('phone_number')
                     ->label('Teléfono')
                     ->searchable()
                     ->copyable(),
-                Tables\Columns\TextColumn::make('intention')
+                Tables\Columns\TextColumn::make('intent')
                     ->label('Intención')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'compra' => 'success',
                         'consulta' => 'info',
                         'reclamo' => 'danger',
+                        'pricing' => 'success', // Added from screenshot
+                        'info' => 'info', // Added from screenshot
                         default => 'gray',
                     })
                     ->searchable(),
@@ -73,17 +75,19 @@ class LeadResource extends Resource
                         'contactado' => 'warning',
                         'interesado' => 'info',
                         'cliente' => 'success',
+                        'pricing_discussion' => 'warning', // Added
+                        'ready_to_buy' => 'success', // Added
                         default => 'gray',
                     })
                     ->searchable(),
-                Tables\Columns\TextColumn::make('confidence')
+                Tables\Columns\TextColumn::make('confidence_score')
                     ->label('Confianza')
-                    ->numeric()
+                    ->numeric(2)
                     ->sortable()
-                    ->description(fn (Lead $record): string => $record->confidence . '%')
+                    ->description(fn (Lead $record): string => ($record->confidence_score * 100) . '%')
                     ->color(fn (string $state): string => match (true) {
-                        $state >= 80 => 'success',
-                        $state >= 50 => 'warning',
+                        $state >= 0.8 => 'success',
+                        $state >= 0.5 => 'warning',
                         default => 'danger',
                     }),
             ])
@@ -95,13 +99,17 @@ class LeadResource extends Resource
                         'contactado' => 'Contactado',
                         'interesado' => 'Interesado',
                         'cliente' => 'Cliente',
+                        'pricing_discussion' => 'Discusión de Precio',
+                        'ready_to_buy' => 'Listo para Comprar',
                     ]),
-                Tables\Filters\SelectFilter::make('intention')
+                Tables\Filters\SelectFilter::make('intent')
                     ->label('Filtrar por Intención')
                     ->options([
                         'compra' => 'Compra',
                         'consulta' => 'Consulta',
                         'reclamo' => 'Reclamo',
+                        'pricing' => 'Precios',
+                        'info' => 'Información',
                     ]),
             ])
             ->actions([

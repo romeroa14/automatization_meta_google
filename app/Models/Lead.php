@@ -8,12 +8,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Lead extends Model
 {
     protected $fillable = [
-        'name',
-        'phone',
-        'intention',
+        'user_id',
+        'phone_number', // Renamed from phone
+        'client_name', // Renamed from name
+        'intent', // Renamed from intention
+        'lead_level', // New
         'stage',
-        'confidence',
-        'telegram_conversation_id', // Keeping this just in case, but focused on 'conversations' relation
+        'confidence_score', // Renamed from confidence
     ];
 
     public function conversations(): HasMany
