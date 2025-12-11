@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('leads', function (Blueprint $table) {
             $table->id();
-            $table->id();
+
             $table->string('user_id')->nullable();
             $table->string('phone_number')->nullable();
             $table->string('client_name')->nullable();

@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('conversations', function (Blueprint $table) {
             $table->id();
-            $table->id();
+
             $table->foreignId('lead_id')->constrained('leads')->onDelete('cascade');
             $table->string('user_id')->nullable();
             $table->string('number_phone_id')->nullable();

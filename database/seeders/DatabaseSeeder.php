@@ -17,11 +17,17 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        User::factory()->create([
+            'name' => 'Alfredo Romero',
+            'email' => 'alfredoromerox15@gmail.com',
+            'password' => Hash::make('password'),
+        ]);
+
         $this->call([
             AdvertisingPlansSeeder::class,
             FacebookAccountSeeder::class,
             UserSeeder::class,
+            LeadSeeder::class,
         ]);
     }
 }

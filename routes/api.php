@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TelegramWebhookController;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
 
 /*
 |--------------------------------------------------------------------------
@@ -16,8 +17,28 @@ use Illuminate\Support\Facades\Artisan;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+
+    // CRM Routes
+    Route::apiResource('leads', \App\Http\Controllers\Api\LeadController::class);
+    Route::get('leads/{id}/conversations', [\App\Http\Controllers\Api\LeadController::class, 'conversations']);
+    
+    // Marketing Routes
+    Route::apiResource('campaigns', \App\Http\Controllers\Api\ActiveCampaignController::class);
+});
+
+// Auth Routes (Temporary for dev using Sanctum SPA or Token)
+Route::post('/login', function (Request $request) {
+    $credentials = $request->only('email', 'password');
+    if (Auth::attempt($credentials)) {
+        $user = Auth::user();
+        $token = $user->createToken('mobile-app')->plainTextToken;
+        return response()->json(['token' => $token, 'user' => $user]);
+    }
+    return response()->json(['message' => 'Unauthorized'], 401);
 });
 
 /*

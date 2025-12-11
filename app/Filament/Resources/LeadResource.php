@@ -24,22 +24,17 @@ class LeadResource extends Resource
         return $form
             ->schema([
                 Forms\Components\TextInput::make('client_name')
-                    ->label('Nombre Completo')
-                    ->readOnly(),
+                    ->label('Nombre Completo'),
                 Forms\Components\TextInput::make('phone_number')
                     ->label('Teléfono')
-                    ->tel()
-                    ->readOnly(),
+                    ->tel(),
                 Forms\Components\TextInput::make('intent')
-                    ->label('Intención')
-                    ->readOnly(),
+                    ->label('Intención'),
                 Forms\Components\TextInput::make('stage')
-                    ->label('Etapa')
-                    ->readOnly(),
+                    ->label('Etapa'),
                 Forms\Components\TextInput::make('confidence_score')
                     ->label('Confianza')
-                    ->numeric()
-                    ->readOnly(),
+                    ->numeric(),
             ]);
     }
 
