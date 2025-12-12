@@ -96,6 +96,14 @@ const onDragChange = async (evt: any, newStage: string) => {
   if (evt.added) {
     const lead = evt.added.element;
     console.log(`[Kanban] Moving lead ${lead.id} to stage: ${newStage}`);
+    
+    // Update the lead's stage in the store immediately (optimistic update)
+    const leadInStore = leadStore.leads.find((l: any) => l.id === lead.id);
+    if (leadInStore) {
+      leadInStore.stage = newStage;
+    }
+    
+    // Call API in background
     await leadStore.updateLeadStage(lead.id, newStage);
   }
 };
