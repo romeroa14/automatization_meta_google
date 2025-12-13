@@ -12,19 +12,25 @@
         <div class="column-header" :style="{ backgroundColor: stage.color }">
           <span class="text-white text-weight-bold">{{ stage.label }}</span>
           <q-badge color="white" :text-color="stage.color" class="q-ml-sm">
-            {{ getLeadsByStage(stage.value).length }}
+            {{ getLeadsForStage(stage.value).length }}
           </q-badge>
         </div>
 
         <draggable
-          v-model="leadsByStage[stage.value]"
+          :list="getLeadsForStage(stage.value)"
           group="leads"
           item-key="id"
           class="kanban-list"
-          @change="(evt) => onDragChange(evt, stage.value)"
+          :clone="cloneLead"
+          @start="onDragStart"
+          @end="onDragEnd"
         >
           <template #item="{ element }">
-            <q-card class="lead-card q-mb-sm" @click="viewLead(element.id)">
+            <q-card 
+              class="lead-card q-mb-sm" 
+              :class="{ 'dragging': draggedLeadId === element.id }"
+              @click="viewLead(element.id)"
+            >
               <q-card-section class="q-pa-sm">
                 <div class="text-subtitle2 text-weight-bold">{{ element.client_name }}</div>
                 <div class="text-caption text-grey-7">
@@ -38,8 +44,8 @@
                 <q-linear-progress
                   class="q-mt-sm"
                   size="8px"
-                  :value="Number(element.confidence_score)"
-                  :color="getConfidenceColor(Number(element.confidence_score))"
+                  :value="Number(element.confidence_score) || 0"
+                  :color="getConfidenceColor(Number(element.confidence_score) || 0)"
                 />
               </q-card-section>
             </q-card>
@@ -51,13 +57,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useLeadStore } from 'stores/lead-store';
 import { useRouter } from 'vue-router';
 import draggable from 'vuedraggable';
 
 const leadStore = useLeadStore();
 const router = useRouter();
+
+const draggedLeadId = ref<number | null>(null);
+const draggedFromStage = ref<string | null>(null);
 
 const stages = [
   { value: 'nuevo', label: 'Nuevo', color: '#9e9e9e' },
@@ -66,50 +75,55 @@ const stages = [
   { value: 'cliente', label: 'Cliente', color: '#4caf50' },
 ];
 
-// Reactive object to hold leads grouped by stage
-const leadsByStage = ref<Record<string, any[]>>({});
-
-// Initialize leads grouped by stage
-const initializeLeadsByStage = () => {
-  const grouped: Record<string, any[]> = {};
-  stages.forEach((stage) => {
-    grouped[stage.value] = leadStore.leads.filter(
-      (lead: any) => lead.stage === stage.value
-    );
-  });
-  leadsByStage.value = grouped;
-};
-
-const getLeadsByStage = (stageValue: string) => {
-  return leadsByStage.value[stageValue] || [];
-};
-
-// Watch for changes in the store
-watch(() => leadStore.leads, initializeLeadsByStage, { deep: true });
-
 onMounted(async () => {
   await leadStore.fetchLeads();
-  initializeLeadsByStage();
 });
 
-const onDragChange = async (evt: any, newStage: string) => {
-  if (evt.added) {
-    const lead = evt.added.element;
-    console.log(`[Kanban] Moving lead ${lead.id} to stage: ${newStage}`);
-    
-    // Update the lead's stage in the store immediately (optimistic update)
+// Get leads filtered by stage - returns a new array each time
+const getLeadsForStage = (stageValue: string) => {
+  return leadStore.leads.filter((lead: any) => lead.stage === stageValue);
+};
+
+// Clone function for vuedraggable
+const cloneLead = (lead: any) => {
+  return { ...lead };
+};
+
+const onDragStart = (evt: any) => {
+  const lead = evt.item._underlying_vm_;
+  draggedLeadId.value = lead.id;
+  draggedFromStage.value = lead.stage;
+  console.log(`[Kanban] Started dragging lead ${lead.id} from ${lead.stage}`);
+};
+
+const onDragEnd = async (evt: any) => {
+  const lead = evt.item._underlying_vm_;
+  const toColumn = evt.to.closest('.kanban-column');
+  const toStageIndex = Array.from(toColumn.parentNode.children).indexOf(toColumn);
+  const newStage = stages[toStageIndex]?.value;
+
+  console.log(`[Kanban] Dropped lead ${lead.id}. New stage: ${newStage}, Old stage: ${draggedFromStage.value}`);
+
+  if (newStage && newStage !== draggedFromStage.value) {
+    // Update the lead's stage directly in the store
     const leadInStore = leadStore.leads.find((l: any) => l.id === lead.id);
     if (leadInStore) {
       leadInStore.stage = newStage;
+      console.log(`[Kanban] Updated lead ${lead.id} stage to ${newStage}`);
+      
+      // Call API to persist
+      await leadStore.updateLeadStage(lead.id, newStage);
     }
-    
-    // Call API in background
-    await leadStore.updateLeadStage(lead.id, newStage);
   }
+
+  draggedLeadId.value = null;
+  draggedFromStage.value = null;
 };
 
 const viewLead = (id: number) => {
-  router.push(`/leads/${id}/conversations`);
+  if (!draggedLeadId.value) {
+    router.push(`/leads/${id}/conversations`);
+  }
 };
 
 const getIntentColor = (intent: string) => {
@@ -166,7 +180,7 @@ const getConfidenceColor = (score: number) => {
 
 .lead-card {
   cursor: grab;
-  transition: box-shadow 0.2s;
+  transition: box-shadow 0.2s, opacity 0.2s;
 }
 
 .lead-card:hover {
@@ -175,5 +189,9 @@ const getConfidenceColor = (score: number) => {
 
 .lead-card:active {
   cursor: grabbing;
+}
+
+.lead-card.dragging {
+  opacity: 0.5;
 }
 </style>
