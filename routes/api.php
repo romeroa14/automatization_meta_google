@@ -64,8 +64,15 @@ Route::prefix('auth/facebook')->group(function () {
         Route::get('/status', [FacebookAuthController::class, 'getConnectionStatus']);
         Route::post('/disconnect', [FacebookAuthController::class, 'disconnect']);
         
-        // Data Endpoints
-        Route::post('/select-assets', [\App\Http\Controllers\Api\FacebookDataController::class, 'selectAssets']);
+        // Perfil de Usuario
+        Route::get('/profile', [App\Http\Controllers\Api\ProfileController::class, 'show']);
+        Route::post('/profile', [App\Http\Controllers\Api\ProfileController::class, 'update']);
+        Route::post('/profile/token', [App\Http\Controllers\Api\ProfileController::class, 'generateToken']);
+
+        // Webhook para n8n (Recibir Leads)
+        Route::post('/leads/webhook', [App\Http\Controllers\Api\LeadWebhookController::class, 'handle']);
+        
+        // Rutas de Datos de Facebookute::post('/select-assets', [\App\Http\Controllers\Api\FacebookDataController::class, 'selectAssets']);
         Route::get('/campaigns', [\App\Http\Controllers\Api\FacebookDataController::class, 'getCampaigns']);
     });
 });

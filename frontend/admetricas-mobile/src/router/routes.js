@@ -8,6 +8,7 @@ const routes = [
       { path: 'leads', component: () => import('pages/LeadsPage.vue') },
       { path: 'leads/:id/conversations', component: () => import('pages/LeadConversationsPage.vue') },
       { path: 'kanban', component: () => import('pages/KanbanPage.vue') },
+      { path: 'profile', component: () => import('pages/ProfilePage.vue') },
     ],
   },
   {
