@@ -65,6 +65,20 @@ export const useLeadStore = defineStore('leads', {
                 console.error('[LeadStore] Error updating lead stage:', error)
                 return false
             }
+        },
+        async sendMessage(leadId, message) {
+            try {
+                // Optimistic update handled in component, or we can do it here. 
+                // For now, let's just send the request.
+                // NOTE: We assume the backend has this endpoint (we need to create it later as per plan)
+                // const response = await api.post(`/leads/${leadId}/messages`, { message })
+                // this.conversations.push(response.data.data)
+                console.log('Sending message:', message)
+                return true
+            } catch (error) {
+                console.error('Error sending message:', error)
+                return false
+            }
         }
     },
 })

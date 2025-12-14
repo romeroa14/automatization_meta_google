@@ -317,4 +317,72 @@ PROMPT;
             ]
         ];
     }
+    /**
+     * Analyse a conversation to determine intent, sentiment and suggested reply.
+     */
+    public function analyzeConversation(array $messages): array
+    {
+        try {
+            if (!$this->apiKey) {
+                return $this->getDefaultConversationAnalysis();
+            }
+
+            $prompt = $this->generateConversationPrompt($messages);
+            $response = $this->callGeminiAPI($prompt);
+            $analysis = $this->structureAnalysis($response);
+            
+            Log::info("✅ Conversation analysis completed with Gemini");
+            return $analysis;
+
+        } catch (\Exception $e) {
+            Log::error("❌ Error in conversation analysis: " . $e->getMessage());
+            return $this->getDefaultConversationAnalysis();
+        }
+    }
+
+    protected function generateConversationPrompt(array $messages): string
+    {
+        $jsonMessages = json_encode($messages, JSON_PRETTY_PRINT);
+        
+        return <<<PROMPT
+Act as an expert Sales CRM AI Assistant. Analyze the following conversation history between an Agent and a Client.
+
+**CONVERSATION HISTORY:**
+```json
+{$jsonMessages}
+```
+
+**INSTRUCTIONS:**
+1. Determine the Client's **Intent** (e.g., 'compra', 'consulta', 'reclamo', 'interesado', 'spam').
+2. Analyze the **Sentiment** of the client's last messages (positive, neutral, negative).
+3. Suggest a **Professional Reply** for the Agent (in Spanish, friendly but professional).
+4. Recommend the **Next Action** (e.g., 'send_catalog', 'schedule_call', 'close_deal', 'wait').
+5. Assign a **Lead Score** (0-100) based on buying intent.
+
+**RESPONSE FORMAT (JSON):**
+```json
+{
+  "intent": "compra",
+  "sentiment": "positive",
+  "lead_score": 85,
+  "summary": "Client is asking about pricing and seems ready to buy.",
+  "suggested_reply": "Hola, claro que sí. El precio es de $50...",
+  "next_action": "send_payment_link"
+}
+```
+Only return the JSON.
+PROMPT;
+    }
+
+    protected function getDefaultConversationAnalysis(): array
+    {
+        return [
+            "intent" => "consulta",
+            "sentiment" => "neutral",
+            "lead_score" => 50,
+            "summary" => "Analysis unavailable.",
+            "suggested_reply" => "",
+            "next_action" => "follow_up"
+        ];
+    }
 }

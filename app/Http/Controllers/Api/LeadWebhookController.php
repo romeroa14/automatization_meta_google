@@ -43,9 +43,19 @@ class LeadWebhookController extends Controller
                 ]
             );
 
-            // 4. Log interaction (Optional: Create Conversation/Message record)
-            // For now, simple standard logging
-            Log::info("Lead Received for User {$user->id}: {$lead->client_name}");
+            // 4. Create Conversation Record for the message
+            $lead->conversations()->create([
+                'message_text' => $request->message,
+                'is_client_message' => true,
+                'platform' => 'whatsapp',
+                'timestamp' => now(),
+            ]);
+
+            // 5. Trigger AI Analysis
+            \App\Jobs\AnalyzeLeadJob::dispatch($lead->id);
+
+            // 6. Log interaction
+            Log::info("Lead Received & AI Job Dispatched for User {$user->id}: {$lead->client_name}");
 
             return response()->json([
                 'success' => true,
@@ -57,7 +67,6 @@ class LeadWebhookController extends Controller
             Log::error("Error processing lead webhook: " . $e->getMessage());
             return response()->json([
                 'success' => false,
-                // 'error' => $e->getMessage() // Don't expose internal errors in full prod
                 'error' => 'Error inteno al procesar el lead'
             ], 500);
         }

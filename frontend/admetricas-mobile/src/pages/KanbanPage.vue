@@ -26,7 +26,17 @@
           <template #item="{ element }">
             <q-card class="lead-card q-mb-sm" @click="viewLead(element.id)">
               <q-card-section class="q-pa-sm">
-                <div class="text-subtitle2 text-weight-bold">{{ element.client_name }}</div>
+                <div class="row items-center justify-between">
+                     <div class="text-subtitle2 text-weight-bold">{{ element.client_name }}</div>
+                     <div>
+                         <q-icon v-if="Number(element.confidence_score) >= 0.8" name="local_fire_department" color="orange" size="xs">
+                             <q-tooltip>Hot Lead!</q-tooltip>
+                         </q-icon>
+                         <q-icon v-if="element.intent === 'reclamo'" name="warning" color="red" size="xs">
+                             <q-tooltip>Requiere Atención</q-tooltip>
+                         </q-icon>
+                     </div>
+                </div>
                 <div class="text-caption text-grey-7">
                   <q-icon name="phone" size="xs" /> {{ element.phone_number }}
                 </div>
@@ -69,13 +79,13 @@ const stages = [
 // Reactive object to hold leads grouped by stage
 const leadsByStage = ref<Record<string, any[]>>({});
 
-// Initialize leads grouped by stage
+// Initialize leads grouped by stage, sorted by confidence score (Smart Sort)
 const initializeLeadsByStage = () => {
   const grouped: Record<string, any[]> = {};
   stages.forEach((stage) => {
-    grouped[stage.value] = leadStore.leads.filter(
-      (lead: any) => lead.stage === stage.value
-    );
+    grouped[stage.value] = leadStore.leads
+      .filter((lead: any) => lead.stage === stage.value)
+      .sort((a: any, b: any) => parseFloat(b.confidence_score || 0) - parseFloat(a.confidence_score || 0));
   });
   leadsByStage.value = grouped;
 };
