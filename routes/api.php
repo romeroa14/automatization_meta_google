@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TelegramWebhookController;
+use App\Http\Controllers\Api\FacebookAuthController;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 
@@ -39,6 +40,29 @@ Route::post('/login', function (Request $request) {
         return response()->json(['token' => $token, 'user' => $user]);
     }
     return response()->json(['message' => 'Unauthorized'], 401);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Facebook OAuth Routes
+|--------------------------------------------------------------------------
+|
+| Rutas para autenticación OAuth de Facebook para clientes
+|
+*/
+
+Route::prefix('auth/facebook')->group(function () {
+    // Obtener URL de login (público, para iniciar el flujo)
+    Route::get('/login-url', [FacebookAuthController::class, 'getLoginUrl']);
+    
+    // Callback de Facebook (público, recibe el code)
+    Route::post('/callback', [FacebookAuthController::class, 'handleCallback']);
+    
+    // Rutas protegidas (requieren autenticación)
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/status', [FacebookAuthController::class, 'getConnectionStatus']);
+        Route::post('/disconnect', [FacebookAuthController::class, 'disconnect']);
+    });
 });
 
 /*

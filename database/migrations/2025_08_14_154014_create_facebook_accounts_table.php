@@ -19,6 +19,7 @@ return new class extends Migration
             $table->text('access_token');
             $table->timestamp('token_expires_at')->nullable();
             $table->boolean('is_active')->default(true);
+            $table->boolean('is_oauth_primary')->default(false); // Cuenta principal para OAuth de clientes
             $table->json('settings')->nullable();
             $table->string('selected_ad_account_id')->nullable();
             $table->string('selected_page_id')->nullable();
