@@ -55,13 +55,18 @@ Route::prefix('auth/facebook')->group(function () {
     // Obtener URL de login (público, para iniciar el flujo)
     Route::get('/login-url', [FacebookAuthController::class, 'getLoginUrl']);
     
-    // Callback de Facebook (público, recibe el code)
-    Route::post('/callback', [FacebookAuthController::class, 'handleCallback']);
+    // Callback de Facebook (ahora protegido para tener acceso al usuario)
+    // Route::post('/callback', [FacebookAuthController::class, 'handleCallback']);
     
     // Rutas protegidas (requieren autenticación)
     Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/callback', [FacebookAuthController::class, 'handleCallback']);
         Route::get('/status', [FacebookAuthController::class, 'getConnectionStatus']);
         Route::post('/disconnect', [FacebookAuthController::class, 'disconnect']);
+        
+        // Data Endpoints
+        Route::post('/select-assets', [\App\Http\Controllers\Api\FacebookDataController::class, 'selectAssets']);
+        Route::get('/campaigns', [\App\Http\Controllers\Api\FacebookDataController::class, 'getCampaigns']);
     });
 });
 

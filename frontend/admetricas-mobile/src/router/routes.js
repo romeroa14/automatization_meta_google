@@ -18,9 +18,11 @@ const routes = [
     ]
   },
   {
-    path: '/auth/facebook/callback',
-    component: () => import('pages/FacebookCallbackPage.vue'),
-    meta: { public: true }
+    path: '/auth/facebook',
+    component: () => import('layouts/MainLayout.vue'),
+    children: [
+      { path: 'callback', component: () => import('pages/FacebookCallbackPage.vue') }
+    ]
   },
 
   // Always leave this as last one,

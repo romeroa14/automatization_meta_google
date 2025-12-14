@@ -8,6 +8,7 @@ export const useFacebookStore = defineStore('facebook', {
         connectionData: null,
         adAccounts: [],
         pages: [],
+        campaigns: [],
         selectedAdAccountId: null,
         selectedPageId: null,
         error: null,
@@ -120,6 +121,7 @@ export const useFacebookStore = defineStore('facebook', {
                 this.pages = []
                 this.selectedAdAccountId = null
                 this.selectedPageId = null
+                this.campaigns = [] // Reset campaigns
 
                 localStorage.removeItem('fb_connected')
 
@@ -134,6 +136,57 @@ export const useFacebookStore = defineStore('facebook', {
         },
 
         /**
+         * Seleccionar y guardar activos (Ad Account / Page)
+         */
+        async saveAssetsSelection(adAccountId, pageId = null) {
+            this.isLoading = true;
+            try {
+                await api.post('/auth/facebook/select-assets', {
+                    ad_account_id: adAccountId,
+                    page_id: pageId
+                });
+
+                this.selectedAdAccountId = adAccountId;
+                this.selectedPageId = pageId;
+
+                // Refresh local cache if needed
+                if (this.connectionData) {
+                    this.connectionData.selected_ad_account_id = adAccountId;
+                    this.connectionData.selected_page_id = pageId;
+                }
+
+                return true;
+            } catch (error) {
+                console.error('[FacebookStore] Error saving selection:', error);
+                this.error = error.response?.data?.error || 'Error guardando selección';
+                throw error;
+            } finally {
+                this.isLoading = false;
+            }
+        },
+
+        /**
+         * Obtener Campañas
+         */
+        async fetchCampaigns() {
+            this.isLoading = true;
+            this.error = null;
+            try {
+                const response = await api.get('/auth/facebook/campaigns');
+                if (response.data.success) {
+                    this.campaigns = response.data.data;
+                    return this.campaigns;
+                }
+            } catch (error) {
+                console.error('[FacebookStore] Error fetching campaigns:', error);
+                this.error = error.response?.data?.error || 'Error obteniendo campañas';
+                // Don't throw always, just set error state
+            } finally {
+                this.isLoading = false;
+            }
+        },
+
+        /**
          * Iniciar flujo OAuth (abre popup/redirect)
          */
         async startOAuthFlow() {
@@ -141,26 +194,17 @@ export const useFacebookStore = defineStore('facebook', {
 
             // Opción 1: Redirect (más simple para mobile)
             window.location.href = loginUrl
-
-            // Opción 2: Popup (mejor UX en desktop)
-            // const popup = window.open(loginUrl, 'facebook-oauth', 'width=600,height=700')
-            // return popup
         },
 
         /**
-         * Seleccionar Ad Account
+         * Helper local setters (si no queremos guardar en server inmediatamente)
          */
         setSelectedAdAccount(accountId) {
             this.selectedAdAccountId = accountId
-            localStorage.setItem('fb_selected_ad_account', accountId)
         },
 
-        /**
-         * Seleccionar Page
-         */
         setSelectedPage(pageId) {
             this.selectedPageId = pageId
-            localStorage.setItem('fb_selected_page', pageId)
         },
 
         /**
