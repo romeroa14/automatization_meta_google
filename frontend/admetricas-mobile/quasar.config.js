@@ -44,7 +44,9 @@ module.exports = function (/* ctx */) {
 
       // publicPath: '/',
       // analyze: true,
-      // env: {},
+      env: {
+        API_URL: process.env.API_URL || 'https://admetricas.com/api'
+      },
       // rawDefine: {}
       // ignorePublicFolder: true,
       // minify: false,

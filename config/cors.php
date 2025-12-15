@@ -19,7 +19,13 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['*'], // Allowing all for dev, or specify ['http://localhost:9000', 'http://localhost:9300']
+    'allowed_origins' => [
+        'http://localhost:9000',
+        'http://localhost:9001',
+        'https://localhost:9000',
+        'https://app.admetricas.com',
+        'http://app.admetricas.com',
+    ],
 
     'allowed_origins_patterns' => [],
 
