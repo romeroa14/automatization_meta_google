@@ -31,10 +31,16 @@ const getApiBaseUrl = () => {
 
 const api = axios.create({ baseURL: getApiBaseUrl() })
 
+// Agregar Origin header para que el backend detecte el host del frontend
+if (typeof window !== 'undefined') {
+  api.defaults.headers.common['Origin'] = window.location.origin
+}
+
 // Log para debugging (siempre activo para verificar en producción)
 if (typeof window !== 'undefined') {
   console.log('[Axios] API Base URL:', api.defaults.baseURL)
   console.log('[Axios] Current hostname:', window.location.hostname)
+  console.log('[Axios] Origin:', window.location.origin)
 }
 
 export default boot(({ app }) => {

@@ -370,31 +370,60 @@ class FacebookAuthController extends Controller
      */
     protected function getRedirectUri(Request $request): string
     {
-        // Si hay una variable de entorno específica, usarla
+        // Si hay una variable de entorno específica, usarla (override manual)
         $envRedirectUri = config('services.facebook.redirect_uri');
         if ($envRedirectUri && $envRedirectUri !== 'http://localhost:9000/auth/facebook/callback') {
+            Log::info('[Facebook OAuth] Usando redirect_uri del .env', ['uri' => $envRedirectUri]);
             return $envRedirectUri;
         }
         
-        // Detectar el entorno basándose en el host de la petición
-        $host = $request->getHost();
-        $scheme = $request->getScheme();
+        // Detectar el entorno basándose en el Origin o Referer de la petición (frontend)
+        $origin = $request->header('Origin');
+        $referer = $request->header('Referer');
         
-        // Si es producción (app.admetricas.com o admetricas.com)
-        if (str_contains($host, 'admetricas.com')) {
-            return 'https://app.admetricas.com/auth/facebook/callback';
+        // Intentar obtener el host del frontend desde Origin o Referer
+        $frontendHost = null;
+        if ($origin) {
+            $parsed = parse_url($origin);
+            $frontendHost = $parsed['host'] ?? null;
+        } elseif ($referer) {
+            $parsed = parse_url($referer);
+            $frontendHost = $parsed['host'] ?? null;
+        }
+        
+        // Si no hay Origin/Referer, usar el host de la petición
+        if (!$frontendHost) {
+            $frontendHost = $request->getHost();
+        }
+        
+        Log::info('[Facebook OAuth] Detectando redirect_uri', [
+            'frontend_host' => $frontendHost,
+            'origin' => $origin,
+            'referer' => $referer,
+            'request_host' => $request->getHost(),
+        ]);
+        
+        // Si es producción (app.admetricas.com)
+        if (str_contains($frontendHost, 'app.admetricas.com')) {
+            $uri = 'https://app.admetricas.com/auth/facebook/callback';
+            Log::info('[Facebook OAuth] Usando redirect_uri de producción', ['uri' => $uri]);
+            return $uri;
         }
         
         // Si es desarrollo local
-        if ($host === 'localhost' || $host === '127.0.0.1' || str_starts_with($host, '192.168.')) {
+        if ($frontendHost === 'localhost' || $frontendHost === '127.0.0.1' || str_starts_with($frontendHost, '192.168.')) {
             // Usar HTTPS si está configurado, sino HTTP
-            $port = $request->getPort();
-            $protocol = ($port === 443 || $scheme === 'https') ? 'https' : 'http';
-            return "{$protocol}://{$host}:{$port}/auth/facebook/callback";
+            $port = $request->header('X-Forwarded-Port') ?: ($origin ? parse_url($origin, PHP_URL_PORT) : 9000);
+            $scheme = ($request->header('X-Forwarded-Proto') === 'https' || ($origin && str_starts_with($origin, 'https'))) ? 'https' : 'http';
+            $uri = "{$scheme}://{$frontendHost}:{$port}/auth/facebook/callback";
+            Log::info('[Facebook OAuth] Usando redirect_uri de desarrollo', ['uri' => $uri]);
+            return $uri;
         }
         
         // Fallback: usar la configuración del .env o default
-        return config('services.facebook.redirect_uri', 'http://localhost:9000/auth/facebook/callback');
+        $fallback = config('services.facebook.redirect_uri', 'http://localhost:9000/auth/facebook/callback');
+        Log::warning('[Facebook OAuth] Usando redirect_uri fallback', ['uri' => $fallback]);
+        return $fallback;
     }
 
     /**
