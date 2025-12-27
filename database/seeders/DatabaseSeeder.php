@@ -17,10 +17,12 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        User::factory()->create([
+        // Crear usuario principal sin usar factory (para evitar dependencia de Faker en producción)
+        User::create([
             'name' => 'Alfredo Romero',
             'email' => 'alfredoromerox15@gmail.com',
             'password' => Hash::make('password'),
+            'email_verified_at' => now(),
         ]);
 
         $this->call([
