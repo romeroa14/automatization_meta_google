@@ -43,7 +43,10 @@
                :class="conv.is_client_message ? 'bg-white' : 'bg-green-1'">
              
              <!-- Message Content -->
-             <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;">{{ conv.message_text }}</div>
+             <!-- Mostrar message_text o response (la respuesta del modelo puede estar en response) -->
+             <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;">
+               {{ conv.message_text || conv.response || '' }}
+             </div>
              
              <!-- Metadata (Time & Ticks) -->
              <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
