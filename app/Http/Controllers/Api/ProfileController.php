@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ProfileController extends Controller
 {
@@ -44,17 +45,41 @@ class ProfileController extends Controller
      */
     public function generateToken(Request $request)
     {
-        $user = $request->user();
-        
-        // Revoke existing 'n8n-integration' tokens to keep it clean (optional, but good for single-token usage)
-        $user->tokens()->where('name', 'n8n-integration')->delete();
+        try {
+            $user = $request->user();
+            
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Usuario no autenticado',
+                ], 401);
+            }
+            
+            // Revoke existing 'n8n-integration' tokens to keep it clean (optional, but good for single-token usage)
+            $user->tokens()->where('name', 'n8n-integration')->delete();
 
-        $token = $user->createToken('n8n-integration')->plainTextToken;
+            $token = $user->createToken('n8n-integration')->plainTextToken;
 
-        return response()->json([
-            'success' => true,
-            'token' => $token,
-            'message' => 'Token generado correctamente. Guárdalo, no podrás verlo de nuevo.',
-        ]);
+            Log::info('Token n8n generado', [
+                'user_id' => $user->id,
+                'user_email' => $user->email,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'token' => $token,
+                'message' => 'Token generado correctamente. Guárdalo, no podrás verlo de nuevo.',
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error generando token n8n', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Error al generar token: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }

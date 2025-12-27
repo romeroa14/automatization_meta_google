@@ -87,6 +87,10 @@ Route::prefix('auth/facebook')->group(function () {
         // Webhook para n8n (Recibir Leads)
         Route::post('/leads/webhook', [App\Http\Controllers\Api\LeadWebhookController::class, 'handle']);
         
+        // Enviar mensajes de WhatsApp desde la app
+        Route::post('/whatsapp/send', [App\Http\Controllers\Api\WhatsAppMessageController::class, 'sendMessage']);
+        Route::post('/whatsapp/toggle-bot', [App\Http\Controllers\Api\WhatsAppMessageController::class, 'toggleBot']);
+        
         // Rutas de Datos de Facebookute::post('/select-assets', [\App\Http\Controllers\Api\FacebookDataController::class, 'selectAssets']);
         Route::get('/campaigns', [\App\Http\Controllers\Api\FacebookDataController::class, 'getCampaigns']);
     });

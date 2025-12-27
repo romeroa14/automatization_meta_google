@@ -15,6 +15,12 @@ class Lead extends Model
         'lead_level', // New
         'stage',
         'confidence_score', // Renamed from confidence
+        'bot_disabled', // Si es true, el bot no responderá (intervención humana)
+    ];
+
+    protected $casts = [
+        'bot_disabled' => 'boolean',
+        'confidence_score' => 'decimal:2',
     ];
 
     public function conversations(): HasMany
