@@ -49,8 +49,11 @@ class WhatsAppMessageController extends Controller
                 $responseData = $response->json();
                 $wamid = $responseData['messages'][0]['id'] ?? null;
 
-                // Deshabilitar bot (intervención humana activa)
-                $lead->update(['bot_disabled' => true]);
+                // Deshabilitar bot y registrar intervención humana
+                $lead->update([
+                    'bot_disabled' => true,
+                    'last_human_intervention_at' => now(),
+                ]);
 
                 // Guardar conversación como mensaje del empleado
                 $conversation = $lead->conversations()->create([

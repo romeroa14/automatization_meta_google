@@ -22,6 +22,7 @@ return new class extends Migration
             $table->string('stage')->nullable();
             $table->decimal('confidence_score', 5, 2)->nullable();
             $table->boolean('bot_disabled')->default(false)->comment('Si es true, el bot no responderá (intervención humana activa)');
+            $table->timestamp('last_human_intervention_at')->nullable()->comment('Última vez que un agente humano escribió. Después de 20 min, el bot puede responder de nuevo');
             $table->timestamps();
         });
     }

@@ -11,6 +11,9 @@ class LeadWebhookController extends Controller
 {
     /**
      * Handle incoming webhook from n8n.
+     * 
+     * IMPORTANTE: Este endpoint requiere autenticación con token de Sanctum.
+     * El token se genera desde: https://app.admetricas.com/profile
      */
     public function handle(Request $request)
     {
@@ -34,7 +37,6 @@ class LeadWebhookController extends Controller
             'intent' => 'nullable|string',
             'message_id' => 'nullable|string', // ID del mensaje de WhatsApp
             'response_id' => 'nullable|string', // ID de la respuesta enviada
-            //Optional: If n8n sends business_phone, we can verify it matches user settings
         ]);
 
         try {

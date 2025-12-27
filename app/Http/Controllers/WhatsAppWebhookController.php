@@ -88,14 +88,24 @@ class WhatsAppWebhookController extends Controller
                     'processedData' => $processedData
                 ]);
 
-                // Enviar a n8n solo si el bot NO está deshabilitado para este lead
+                // Enviar a n8n solo si el bot puede responder
                 $lead = Lead::where('phone_number', $fromNumber)->first();
-                if ($lead && $lead->bot_disabled) {
-                    Log::info('🤖 Bot deshabilitado, no se envía mensaje a n8n', [
+                if ($lead && !$lead->canBotRespond()) {
+                    $minutesSinceIntervention = now()->diffInMinutes($lead->last_human_intervention_at ?? now());
+                    Log::info('🤖 Bot deshabilitado (intervención humana reciente), no se envía mensaje a n8n', [
                         'lead_id' => $lead->id,
                         'message_id' => $messageId,
+                        'minutes_since_intervention' => $minutesSinceIntervention,
+                        'bot_will_respond_after' => 20 - $minutesSinceIntervention . ' minutos',
                     ]);
                 } else {
+                    // Si han pasado 20 minutos, re-habilitar bot automáticamente
+                    if ($lead && $lead->bot_disabled && $lead->canBotRespond()) {
+                        $lead->update(['bot_disabled' => false]);
+                        Log::info('✅ Bot re-habilitado automáticamente', [
+                            'lead_id' => $lead->id,
+                        ]);
+                    }
                     $this->sendToN8n($messageId, $processedData, $fromNumber, $profileName, $timestamp, $messageType);
                 }
             }
@@ -296,17 +306,27 @@ class WhatsAppWebhookController extends Controller
                         'from' => $fromNumber,
                     ]);
 
-                    // Enviar a n8n solo si el bot NO está deshabilitado
-                    if (!$lead->bot_disabled) {
-                        // El envío a n8n se hace en processWhatsAppMessage, aquí solo guardamos
+                    // Verificar si el bot puede responder (han pasado 20 min desde intervención humana)
+                    if ($lead->canBotRespond()) {
+                        // Si han pasado 20 minutos, habilitar bot automáticamente
+                        if ($lead->bot_disabled) {
+                            $lead->update(['bot_disabled' => false]);
+                            Log::info('✅ Bot re-habilitado automáticamente (pasaron 20 min)', [
+                                'lead_id' => $lead->id,
+                                'last_intervention' => $lead->last_human_intervention_at,
+                            ]);
+                        }
                         Log::info('📤 Mensaje listo para enviar a n8n', [
                             'lead_id' => $lead->id,
                             'bot_disabled' => false,
                         ]);
                     } else {
-                        Log::info('🤖 Bot deshabilitado para este lead, no se enviará a n8n', [
+                        $minutesSinceIntervention = now()->diffInMinutes($lead->last_human_intervention_at ?? now());
+                        Log::info('🤖 Bot deshabilitado (intervención humana reciente)', [
                             'lead_id' => $lead->id,
                             'phone_number' => $fromNumber,
+                            'minutes_since_intervention' => $minutesSinceIntervention,
+                            'bot_will_respond_after' => 20 - $minutesSinceIntervention . ' minutos',
                         ]);
                     }
                 }
