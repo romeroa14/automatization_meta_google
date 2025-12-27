@@ -17,6 +17,14 @@ class LeadWebhookController extends Controller
         // 1. Authenticated User (via Sanctum Token)
         $user = $request->user();
 
+        // Log completo del payload recibido para debugging
+        Log::info('📥 Webhook recibido desde n8n', [
+            'user_id' => $user->id,
+            'payload' => $request->all(),
+            'has_message' => $request->filled('message'),
+            'has_response' => $request->filled('response'),
+        ]);
+
         // 2. Validate Payload
         $request->validate([
             'client_phone' => 'required|string',
@@ -67,22 +75,37 @@ class LeadWebhookController extends Controller
 
             // 5. Create Conversation Record for the MODEL/BOT response (if exists)
             if ($request->filled('response')) {
-                $lead->conversations()->create([
-                    'user_id' => $user->id,
-                    'message_id' => $request->response_id,
-                    'response' => $request->response, // La respuesta va en el campo 'response'
-                    'message_text' => $request->response, // También en message_text para mostrar en el chat
-                    'is_client_message' => false, // Es respuesta del sistema
-                    'is_employee' => true, // Es del bot/empleado
-                    'platform' => 'whatsapp',
-                    'timestamp' => now()->toDateTimeString(),
-                    'message_length' => strlen($request->response),
-                    'status' => 'sent',
-                ]);
-                
-                Log::info("✅ Respuesta del modelo guardada", [
+                try {
+                    $conversation = $lead->conversations()->create([
+                        'user_id' => $user->id,
+                        'message_id' => $request->response_id,
+                        'response' => $request->response, // La respuesta va en el campo 'response'
+                        'message_text' => $request->response, // También en message_text para mostrar en el chat
+                        'is_client_message' => false, // Es respuesta del sistema
+                        'is_employee' => true, // Es del bot/empleado
+                        'platform' => 'whatsapp',
+                        'timestamp' => now()->toDateTimeString(),
+                        'message_length' => strlen($request->response),
+                        'status' => 'sent',
+                    ]);
+                    
+                    Log::info("✅ Respuesta del modelo guardada exitosamente", [
+                        'lead_id' => $lead->id,
+                        'conversation_id' => $conversation->id,
+                        'response_id' => $request->response_id,
+                        'response_length' => strlen($request->response),
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error("❌ Error guardando respuesta del modelo", [
+                        'lead_id' => $lead->id,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                }
+            } else {
+                Log::warning("⚠️ Webhook recibido sin campo 'response'", [
                     'lead_id' => $lead->id,
-                    'response_id' => $request->response_id,
+                    'payload_keys' => array_keys($request->all()),
                 ]);
             }
 
