@@ -6,6 +6,7 @@ use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\Api\FacebookAuthController;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 /*
 |--------------------------------------------------------------------------
@@ -33,13 +34,27 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Auth Routes (Temporary for dev using Sanctum SPA or Token)
 Route::post('/login', function (Request $request) {
-    $credentials = $request->only('email', 'password');
-    if (Auth::attempt($credentials)) {
-        $user = Auth::user();
-        $token = $user->createToken('mobile-app')->plainTextToken;
-        return response()->json(['token' => $token, 'user' => $user]);
+    try {
+        $credentials = $request->only('email', 'password');
+        
+        if (Auth::attempt($credentials)) {
+            $user = Auth::user();
+            $token = $user->createToken('mobile-app')->plainTextToken;
+            return response()->json(['token' => $token, 'user' => $user]);
+        }
+        
+        return response()->json(['message' => 'Unauthorized'], 401);
+    } catch (\Exception $e) {
+        \Log::error('Login error: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString(),
+            'email' => $request->input('email'),
+        ]);
+        
+        return response()->json([
+            'message' => 'Server Error',
+            'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+        ], 500);
     }
-    return response()->json(['message' => 'Unauthorized'], 401);
 });
 
 /*
