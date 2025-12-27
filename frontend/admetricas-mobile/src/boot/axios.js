@@ -31,10 +31,8 @@ const getApiBaseUrl = () => {
 
 const api = axios.create({ baseURL: getApiBaseUrl() })
 
-// Agregar Origin header para que el backend detecte el host del frontend
-if (typeof window !== 'undefined') {
-  api.defaults.headers.common['Origin'] = window.location.origin
-}
+// Nota: El header Origin se envía automáticamente por el navegador en peticiones CORS
+// No podemos establecerlo manualmente (el navegador lo bloquea por seguridad)
 
 // Log para debugging (siempre activo para verificar en producción)
 if (typeof window !== 'undefined') {
