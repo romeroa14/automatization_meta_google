@@ -51,8 +51,8 @@ class FacebookAuthController extends Controller
         // Guardar state en session para validar después
         session(['facebook_oauth_state' => $state]);
         
-        // Obtener redirect_uri desde config (esto sí debe estar en .env)
-        $redirectUri = config('services.facebook.redirect_uri', 'http://localhost:9000/auth/facebook/callback');
+        // Generar redirect_uri dinámicamente según el entorno
+        $redirectUri = $this->getRedirectUri($request);
         
         $params = http_build_query([
             'client_id' => $oauthAccount->app_id,
@@ -84,7 +84,7 @@ class FacebookAuthController extends Controller
         
         try {
             // 1. Intercambiar code por access_token
-            $tokenResponse = $this->exchangeCodeForToken($code);
+            $tokenResponse = $this->exchangeCodeForToken($code, $request);
             
             if (!$tokenResponse['success']) {
                 return response()->json([
@@ -230,7 +230,7 @@ class FacebookAuthController extends Controller
     /**
      * Intercambiar code por access_token
      */
-    protected function exchangeCodeForToken(string $code): array
+    protected function exchangeCodeForToken(string $code, Request $request): array
     {
         $oauthAccount = FacebookAccount::getOAuthAccount();
         
@@ -241,7 +241,8 @@ class FacebookAuthController extends Controller
             ];
         }
         
-        $redirectUri = config('services.facebook.redirect_uri', 'http://localhost:9000/auth/facebook/callback');
+        // Usar el mismo redirect_uri que se usó en el login
+        $redirectUri = $this->getRedirectUri($request);
         
         $response = Http::get("{$this->graphApiUrl}/{$this->graphApiVersion}/oauth/access_token", [
             'client_id' => $oauthAccount->app_id,
@@ -362,6 +363,38 @@ class FacebookAuthController extends Controller
         }
         
         return [];
+    }
+
+    /**
+     * Obtener redirect_uri según el entorno
+     */
+    protected function getRedirectUri(Request $request): string
+    {
+        // Si hay una variable de entorno específica, usarla
+        $envRedirectUri = config('services.facebook.redirect_uri');
+        if ($envRedirectUri && $envRedirectUri !== 'http://localhost:9000/auth/facebook/callback') {
+            return $envRedirectUri;
+        }
+        
+        // Detectar el entorno basándose en el host de la petición
+        $host = $request->getHost();
+        $scheme = $request->getScheme();
+        
+        // Si es producción (app.admetricas.com o admetricas.com)
+        if (str_contains($host, 'admetricas.com')) {
+            return 'https://app.admetricas.com/auth/facebook/callback';
+        }
+        
+        // Si es desarrollo local
+        if ($host === 'localhost' || $host === '127.0.0.1' || str_starts_with($host, '192.168.')) {
+            // Usar HTTPS si está configurado, sino HTTP
+            $port = $request->getPort();
+            $protocol = ($port === 443 || $scheme === 'https') ? 'https' : 'http';
+            return "{$protocol}://{$host}:{$port}/auth/facebook/callback";
+        }
+        
+        // Fallback: usar la configuración del .env o default
+        return config('services.facebook.redirect_uri', 'http://localhost:9000/auth/facebook/callback');
     }
 
     /**
