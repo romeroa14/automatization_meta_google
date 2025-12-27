@@ -65,7 +65,11 @@ class LeadController extends Controller
     public function conversations(string $id)
     {
         $lead = \App\Models\Lead::findOrFail($id);
-        $conversations = $lead->conversations()->orderBy('created_at', 'desc')->get();
+        // Ordenar por created_at ASC para mostrar las conversaciones en orden cronológico
+        $conversations = $lead->conversations()
+            ->orderBy('created_at', 'asc')
+            ->orderBy('id', 'asc') // Orden secundario por ID para estabilidad
+            ->get();
         return \App\Http\Resources\ConversationResource::collection($conversations);
     }
 }

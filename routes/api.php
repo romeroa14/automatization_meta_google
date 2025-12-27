@@ -24,6 +24,11 @@ Route::middleware('auth:sanctum')->group(function () {
         return $request->user();
     });
 
+    // Perfil de Usuario (rutas directas, sin prefijo auth/facebook)
+    Route::get('/profile', [App\Http\Controllers\Api\ProfileController::class, 'show']);
+    Route::post('/profile', [App\Http\Controllers\Api\ProfileController::class, 'update']);
+    Route::post('/profile/token', [App\Http\Controllers\Api\ProfileController::class, 'generateToken']);
+
     // CRM Routes
     Route::apiResource('leads', \App\Http\Controllers\Api\LeadController::class);
     Route::get('leads/{id}/conversations', [\App\Http\Controllers\Api\LeadController::class, 'conversations']);
@@ -78,11 +83,6 @@ Route::prefix('auth/facebook')->group(function () {
         Route::post('/callback', [FacebookAuthController::class, 'handleCallback']);
         Route::get('/status', [FacebookAuthController::class, 'getConnectionStatus']);
         Route::post('/disconnect', [FacebookAuthController::class, 'disconnect']);
-        
-        // Perfil de Usuario
-        Route::get('/profile', [App\Http\Controllers\Api\ProfileController::class, 'show']);
-        Route::post('/profile', [App\Http\Controllers\Api\ProfileController::class, 'update']);
-        Route::post('/profile/token', [App\Http\Controllers\Api\ProfileController::class, 'generateToken']);
 
         // Webhook para n8n (Recibir Leads)
         Route::post('/leads/webhook', [App\Http\Controllers\Api\LeadWebhookController::class, 'handle']);

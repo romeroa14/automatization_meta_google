@@ -6,16 +6,16 @@
         <q-btn flat round dense icon="arrow_back" color="grey-8" />
         <q-avatar size="40px" class="q-ml-sm">
            <div class="bg-primary text-white row flex-center full-width full-height text-weight-bold" style="border-radius: 50%">
-              {{ leadStore.currentLead?.client_name?.charAt(0).toUpperCase() || '?' }}
+              {{ ((leadStore.currentLead as any)?.client_name?.charAt(0) || '?').toUpperCase() }}
            </div>
         </q-avatar>
         <div class="q-ml-md">
           <div class="text-subtitle1 text-weight-bold text-grey-9 q-mb-none lh-120">
-            {{ leadStore.currentLead?.client_name || 'Cargando...' }}
+            {{ (leadStore.currentLead as any)?.client_name || 'Cargando...' }}
           </div>
           <div class="text-caption text-grey-7 row items-center">
-             <span v-if="leadStore.currentLead?.intent" class="q-mr-xs text-capitalize">
-                {{ leadStore.currentLead.intent }}
+             <span v-if="(leadStore.currentLead as any)?.intent" class="q-mr-xs text-capitalize">
+                {{ (leadStore.currentLead as any)?.intent }}
              </span>
              <span v-else>En línea</span>
           </div>
@@ -35,7 +35,7 @@
           <q-badge color="grey-3" text-color="black" label="Hoy" />
        </div>
 
-       <div v-for="conv in leadStore.conversations" :key="conv.id" 
+       <div v-for="(conv: any) in leadStore.conversations" :key="conv.id" 
             class="row q-mb-sm" 
             :class="conv.is_client_message ? 'justify-start' : 'justify-end'"
        >
@@ -43,9 +43,13 @@
                :class="conv.is_client_message ? 'bg-white' : 'bg-green-1'">
              
              <!-- Message Content -->
-             <!-- Mostrar message_text o response (la respuesta del modelo puede estar en response) -->
+             <!-- 
+               Lógica de visualización:
+               - Si es mensaje del cliente: mostrar message_text
+               - Si es respuesta del bot/empleado: mostrar response si existe, sino message_text
+             -->
              <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;">
-               {{ conv.message_text || conv.response || '' }}
+               {{ getMessageContent(conv) }}
              </div>
              
              <!-- Metadata (Time & Ticks) -->
@@ -61,7 +65,7 @@
 
        <div v-if="!leadStore.conversations.length" class="text-center q-pa-xl text-grey-8">
           <q-icon name="chat_bubble_outline" size="48px" class="q-mb-md" />
-          <div>Inicia la conversación con <strong>{{ leadStore.currentLead?.client_name }}</strong></div>
+          <div>Inicia la conversación con <strong>{{ (leadStore.currentLead as any)?.client_name }}</strong></div>
           <div class="text-caption">Los mensajes se sincronizarán con WhatsApp.</div>
        </div>
     </div>
@@ -127,10 +131,10 @@ const newMessage = ref('');
 
 const aiSuggestion = computed(() => {
     if (!leadStore.conversations.length) return null;
-    const lastMsg = leadStore.conversations[leadStore.conversations.length - 1];
+    const lastMsg = leadStore.conversations[leadStore.conversations.length - 1] as any;
     // Show suggestion only if it's a client message and has a response (suggestion)
     // AND if we haven't replied yet (naive check: last message is from client)
-    if (lastMsg.is_client_message && lastMsg.response) {
+    if (lastMsg?.is_client_message && lastMsg?.response) {
         return lastMsg.response;
     }
     return null;
@@ -153,6 +157,35 @@ const formatDate = (val: string) => {
     return date.formatDate(val, 'HH:mm');
 };
 
+/**
+ * Obtener el contenido del mensaje a mostrar
+ * - Mensajes del cliente: mostrar message_text
+ * - Respuestas del bot/empleado: mostrar response si existe, sino message_text
+ */
+const getMessageContent = (conv: any) => {
+    if (conv.is_client_message) {
+        // Mensaje del cliente: mostrar message_text
+        return conv.message_text || '';
+    } else {
+        // Respuesta del bot/empleado: priorizar response, sino message_text
+        const content = conv.response || conv.message_text || '';
+        
+        // Debug: log si no hay contenido
+        if (!content) {
+            console.warn('[LeadConversations] Empty message content:', {
+                id: conv.id,
+                is_client_message: conv.is_client_message,
+                is_employee: conv.is_employee,
+                has_response: !!conv.response,
+                has_message_text: !!conv.message_text,
+                conv: conv,
+            });
+        }
+        
+        return content;
+    }
+};
+
 const scrollToBottom = () => {
     nextTick(() => {
         const scrollArea = document.querySelector('.chat-area');
@@ -170,7 +203,7 @@ const sendMessage = async () => {
     newMessage.value = '';
 
     // Optimistic UI update
-    leadStore.conversations.push({
+    (leadStore.conversations as any[]).push({
         id: Date.now(),
         message_text: msg,
         is_client_message: false,

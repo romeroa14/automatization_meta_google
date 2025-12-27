@@ -42,16 +42,42 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useFacebookStore } from 'stores/facebook-store'
+import { useAuthStore } from 'stores/auth-store'
+import { api } from 'boot/axios'
 
 const route = useRoute()
 const router = useRouter()
 const facebookStore = useFacebookStore()
+const authStore = useAuthStore()
 
 const isProcessing = ref(true)
 const error = ref(null)
 const success = ref(false)
 
 onMounted(async () => {
+  // Verificar y restaurar autenticación antes de procesar callback
+  if (!authStore.isAuthenticated) {
+    // Intentar restaurar token desde localStorage
+    authStore.init()
+    
+    // Si aún no hay token, redirigir a login
+    if (!authStore.isAuthenticated) {
+      isProcessing.value = false
+      error.value = 'Debes iniciar sesión primero. Redirigiendo...'
+      setTimeout(() => {
+        router.push('/login')
+      }, 2000)
+      return
+    }
+  }
+
+  // Asegurar que el token esté en los headers de axios
+  const token = localStorage.getItem('token')
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+    console.log('[FacebookCallback] Token restaurado en headers')
+  }
+
   // Obtener el code de la URL
   const code = route.query.code
   const errorParam = route.query.error
@@ -79,7 +105,16 @@ onMounted(async () => {
     }, 2000)
 
   } catch (err) {
-    error.value = err.message || 'Error procesando autenticación'
+    console.error('[FacebookCallback] Error:', err)
+    error.value = err.response?.data?.error || err.message || 'Error procesando autenticación'
+    
+    // Si es error 401, puede ser que el token haya expirado
+    if (err.response?.status === 401) {
+      error.value = 'Sesión expirada. Por favor, inicia sesión de nuevo.'
+      setTimeout(() => {
+        router.push('/login')
+      }, 3000)
+    }
   } finally {
     isProcessing.value = false
   }

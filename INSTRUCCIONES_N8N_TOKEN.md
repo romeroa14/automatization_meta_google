@@ -15,52 +15,88 @@
    - Copia el token completo (es una cadena larga que empieza con algo como `1|...`)
    - Guárdalo en un lugar seguro
 
-## Paso 2: Usar el Token en n8n
+## Paso 2: Configurar n8n para Enviar Respuestas del Bot
 
-### En tu flujo de n8n, cuando necesites enviar datos a la app:
+### Flujo Completo en n8n:
 
-**Endpoint:** `https://admetricas.com/api/auth/facebook/leads/webhook`
-
-**Método:** `POST`
-
-**Headers:**
+Tu flujo debería verse así:
 ```
-Authorization: Bearer {TU_TOKEN_AQUI}
-Content-Type: application/json
-```
-
-**Body (JSON):**
-```json
-{
-  "client_phone": "584242536795",
-  "client_name": "Alfredo Romero",
-  "message": "Hola, quiero información",
-  "response": "¡Hola! Claro, con gusto te ayudo...",
-  "message_id": "wamid.xxx",
-  "response_id": "wamid.yyy",
-  "intent": "consulta"
-}
+1. Webhook Trigger (recibe mensaje de WhatsApp)
+   ↓
+2. Procesa mensaje con AI Agent (Gemini)
+   ↓
+3. Envía respuesta a WhatsApp (Graph API)
+   ↓
+4. [NUEVO] Envía respuesta al webhook de Laravel
 ```
 
-### Ejemplo en n8n (HTTP Request Node):
+### Configuración del Nodo HTTP Request para Enviar Respuesta a Laravel:
+
+**Después de que el AI Agent genere la respuesta y la envíes a WhatsApp, agrega un nodo HTTP Request:**
 
 1. **URL:** `https://admetricas.com/api/auth/facebook/leads/webhook`
 2. **Method:** `POST`
-3. **Authentication:** `Generic Credential Type`
+3. **Headers:**
    - **Name:** `Authorization`
-   - **Value:** `Bearer {TU_TOKEN}`
+   - **Value:** `Bearer {TU_TOKEN_AQUI}` (el token que generaste en la app)
+   - **Name:** `Content-Type`
+   - **Value:** `application/json`
 4. **Body Type:** `JSON`
-5. **Body:**
+5. **Body (JSON):**
    ```json
    {
      "client_phone": "{{ $json.fromNumber }}",
      "client_name": "{{ $json.profileName }}",
-     "message": "{{ $json.messageText }}",
-     "response": "{{ $json.responseText }}",
-     "message_id": "{{ $json.messageId }}",
-     "response_id": "{{ $json.wamid }}"
+     "response": "{{ $json.aiResponse }}",
+     "response_id": "{{ $json.wamid }}",
+     "intent": "{{ $json.intent }}"
    }
    ```
+
+### Ejemplo Completo del Flujo:
+
+**Nodo 1: Webhook Trigger**
+- Recibe: `messageText`, `fromNumber`, `profileName`, `messageId`
+
+**Nodo 2: AI Agent (Gemini)**
+- Input: `messageText`
+- Output: `aiResponse` (la respuesta del modelo)
+
+**Nodo 3: Send WhatsApp Message (Graph API)**
+- Envía `aiResponse` a WhatsApp
+- Recibe: `wamid` (ID del mensaje enviado)
+
+**Nodo 4: HTTP Request → Laravel Webhook** ⭐ **ESTE ES EL NUEVO**
+- **URL:** `https://admetricas.com/api/auth/facebook/leads/webhook`
+- **Method:** `POST`
+- **Headers:**
+  ```
+  Authorization: Bearer {TU_TOKEN}
+  Content-Type: application/json
+  ```
+- **Body:**
+  ```json
+  {
+    "client_phone": "{{ $('Webhook Trigger').item.json.fromNumber }}",
+    "client_name": "{{ $('Webhook Trigger').item.json.profileName }}",
+    "message": "{{ $('Webhook Trigger').item.json.messageText }}",
+    "response": "{{ $('AI Agent').item.json.aiResponse }}",
+    "message_id": "{{ $('Webhook Trigger').item.json.messageId }}",
+    "response_id": "{{ $('Send WhatsApp Message').item.json.wamid }}"
+  }
+  ```
+
+### Nota Importante:
+
+Si ya guardaste el mensaje del cliente en otro nodo, puedes enviar solo la respuesta:
+```json
+{
+  "client_phone": "{{ $json.fromNumber }}",
+  "client_name": "{{ $json.profileName }}",
+  "response": "{{ $json.aiResponse }}",
+  "response_id": "{{ $json.wamid }}"
+}
+```
 
 ## Paso 3: Verificar que Funciona
 

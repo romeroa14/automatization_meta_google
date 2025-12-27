@@ -46,9 +46,26 @@ export const useLeadStore = defineStore('leads', {
         async fetchConversations(leadId) {
             try {
                 const response = await api.get(`/leads/${leadId}/conversations`)
-                this.conversations = response.data.data
+                console.log('[LeadStore] Conversations fetched:', {
+                    count: response.data.data?.length,
+                    conversations: response.data.data,
+                })
+                this.conversations = response.data.data || []
+                
+                // Log para debug: verificar respuestas del bot
+                const botResponses = this.conversations.filter(c => !c.is_client_message)
+                console.log('[LeadStore] Bot responses found:', {
+                    count: botResponses.length,
+                    responses: botResponses.map(r => ({
+                        id: r.id,
+                        has_response: !!r.response,
+                        has_message_text: !!r.message_text,
+                        response_preview: r.response?.substring(0, 50),
+                        message_text_preview: r.message_text?.substring(0, 50),
+                    })),
+                })
             } catch (error) {
-                console.error('Error fetching conversations:', error)
+                console.error('[LeadStore] Error fetching conversations:', error)
             }
         },
         async updateLeadStage(leadId, newStage) {
