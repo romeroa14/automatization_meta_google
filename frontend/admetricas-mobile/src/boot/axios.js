@@ -31,9 +31,10 @@ const getApiBaseUrl = () => {
 
 const api = axios.create({ baseURL: getApiBaseUrl() })
 
-// Log para debugging (solo en desarrollo)
-if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+// Log para debugging (siempre activo para verificar en producción)
+if (typeof window !== 'undefined') {
   console.log('[Axios] API Base URL:', api.defaults.baseURL)
+  console.log('[Axios] Current hostname:', window.location.hostname)
 }
 
 export default boot(({ app }) => {
