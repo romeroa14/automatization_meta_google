@@ -56,59 +56,28 @@ class LeadWebhookController extends Controller
                 ]
             );
 
-            // 4. Create Conversation Record for the CLIENT message (if exists)
-            // IMPORTANTE: Solo guardar si no existe ya (evitar duplicados desde WhatsApp webhook)
-            if ($request->filled('message') && $request->filled('message_id')) {
-                // Verificar si el mensaje ya existe (evitar duplicados)
-                $existingMessage = $lead->conversations()
-                    ->where('message_id', $request->message_id)
-                    ->where('is_client_message', true)
-                    ->first();
-                
-                if (!$existingMessage) {
-                    $lead->conversations()->create([
-                        'user_id' => $user->id,
-                        'message_id' => $request->message_id,
-                        'message_text' => $request->message,
-                        'response' => null, // Los mensajes del cliente NO tienen response
-                        'is_client_message' => true,
-                        'is_employee' => false,
-                        'platform' => 'whatsapp',
-                        'timestamp' => now()->toDateTimeString(),
-                        'message_length' => strlen($request->message),
-                    ]);
-                    
-                    Log::info("✅ Mensaje del cliente guardado", [
-                        'lead_id' => $lead->id,
-                        'message_id' => $request->message_id,
-                    ]);
-                } else {
-                    Log::info("⚠️ Mensaje del cliente ya existe, omitiendo duplicado", [
-                        'lead_id' => $lead->id,
-                        'message_id' => $request->message_id,
-                        'existing_id' => $existingMessage->id,
-                    ]);
-                }
-            }
-
+            // 4. IMPORTANTE: NO guardamos el mensaje del cliente aquí
+            // El mensaje del cliente YA fue guardado por WhatsAppWebhookController cuando llegó desde WhatsApp
+            // Este webhook de n8n solo debe guardar la RESPUESTA del bot que n8n ya envió a WhatsApp
+            
             // 5. Create Conversation Record for the MODEL/BOT response (if exists)
-            // IMPORTANTE: Solo guardar si no existe ya (evitar duplicados)
+            // IMPORTANTE: La respuesta del bot es un registro SEPARADO del mensaje del cliente
             if ($request->filled('response') && $request->filled('response_id')) {
                 try {
                     // Verificar si la respuesta ya existe (evitar duplicados)
                     $existingResponse = $lead->conversations()
                         ->where('message_id', $request->response_id)
-                        ->where('is_client_message', false)
                         ->first();
                     
                     if (!$existingResponse) {
+                        // Crear nueva conversación para la respuesta del bot
                         $conversation = $lead->conversations()->create([
                             'user_id' => $user->id,
                             'message_id' => $request->response_id,
-                            'message_text' => null, // Las respuestas del bot NO tienen message_text del cliente
-                            'response' => $request->response, // La respuesta del bot va aquí
+                            'response' => $request->response, // La respuesta va en el campo 'response'
+                            'message_text' => $request->response, // También en message_text para mostrar en el chat
                             'is_client_message' => false, // Es respuesta del sistema/bot
-                            'is_employee' => false, // NO es empleado, es el bot/IA
+                            'is_employee' => true, // Es del bot/empleado
                             'platform' => 'whatsapp',
                             'timestamp' => now()->toDateTimeString(),
                             'message_length' => strlen($request->response),
@@ -122,11 +91,18 @@ class LeadWebhookController extends Controller
                             'response_length' => strlen($request->response),
                         ]);
                     } else {
-                        Log::info("⚠️ Respuesta del modelo ya existe, omitiendo duplicado", [
-                            'lead_id' => $lead->id,
-                            'response_id' => $request->response_id,
-                            'existing_id' => $existingResponse->id,
-                        ]);
+                        // La respuesta ya existe, actualizar si es necesario
+                        if ($existingResponse->response !== $request->response) {
+                            $existingResponse->update([
+                                'response' => $request->response,
+                                'message_text' => $request->response,
+                            ]);
+                            Log::info("✅ Respuesta del modelo actualizada", [
+                                'lead_id' => $lead->id,
+                                'conversation_id' => $existingResponse->id,
+                                'response_id' => $request->response_id,
+                            ]);
+                        }
                     }
                 } catch (\Exception $e) {
                     Log::error("❌ Error guardando respuesta del modelo", [
@@ -144,7 +120,9 @@ class LeadWebhookController extends Controller
                 ]);
             }
 
-            // 6. Trigger AI Analysis (solo si hay mensaje del cliente, no si solo es respuesta)
+            // 6. Trigger AI Analysis (solo si hay mensaje del cliente nuevo)
+            // NOTA: El mensaje del cliente ya fue procesado en WhatsAppWebhookController
+            // Este webhook solo guarda la respuesta del bot que n8n ya envió a WhatsApp
             if ($request->filled('message')) {
                 \App\Jobs\AnalyzeLeadJob::dispatch($lead->id);
             }

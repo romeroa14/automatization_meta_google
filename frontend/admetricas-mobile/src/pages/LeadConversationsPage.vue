@@ -170,34 +170,34 @@ const formatDate = (val: string) => {
 
 /**
  * Determinar si es mensaje del cliente
- * Lógica:
- * - Si is_client_message === true → es mensaje del cliente
- * - Si tiene response pero NO tiene message_text → es respuesta del bot
- * - Si tiene message_text pero NOuesta del bot a ese mensaje) tiene response → es mensaje del cliente
- * - Si tiene ambos pero message_text !== response → es mensaje del cliente (el response es la resp
+ * Lógica mejorada para manejar casos donde un registro tiene tanto message_text como response
  */
 const isClientMessage = (conv: any): boolean => {
     // Si explícitamente está marcado como mensaje del cliente
     if (conv.is_client_message === true) return true;
     
-    // Si explícitamente está marcado como NO mensaje del cliente
-    if (conv.is_client_message === false) return false;
+    // Si explícitamente está marcado como NO mensaje del cliente Y es empleado
+    if (conv.is_client_message === false && conv.is_employee === true) return false;
     
     // Si tiene response pero NO tiene message_text, es respuesta del bot
     if (conv.response && !conv.message_text) return false;
     
-    // Si tiene message_text pero NO tiene response, es mensaje del cliente
-    if (conv.message_text && !conv.response) return true;
-    
-    // Si tiene ambos pero son diferentes, message_text es del cliente y response es del bot
+    // Si tiene message_text Y response, y son diferentes:
+    // - Si message_text parece ser del cliente (no es una respuesta formal del bot)
+    //   y response es una respuesta del bot, entonces message_text es del cliente
     if (conv.message_text && conv.response && conv.message_text !== conv.response) {
-        return true; // El message_text es del cliente
+        // El message_text es del cliente, el response es del bot
+        // Este registro debería mostrarse como mensaje del cliente
+        return true;
     }
     
-    // Si tiene ambos y son iguales, es una respuesta del bot (message_text fue copiado a response)
+    // Si message_text y response son iguales, es una respuesta del bot
     if (conv.message_text && conv.response && conv.message_text === conv.response) {
         return false; // Es respuesta del bot
     }
+    
+    // Si tiene message_text pero NO tiene response, es mensaje del cliente
+    if (conv.message_text && !conv.response) return true;
     
     // Por defecto, usar el valor de is_client_message
     return conv.is_client_message === true;
@@ -232,14 +232,15 @@ const decodeEscapedText = (text: string): string => {
 
 /**
  * Obtener el contenido del mensaje a mostrar
- * - Mensajes del cliente: mostrar message_text
+ * - Mensajes del cliente: mostrar message_text (aunque tenga response)
  * - Respuestas del bot/empleado: mostrar response si existe, sino message_text
  */
 const getMessageContent = (conv: any) => {
     const isClient = isClientMessage(conv);
     
     if (isClient) {
-        // Mensaje del cliente: mostrar message_text (decodificado)
+        // Mensaje del cliente: SIEMPRE mostrar message_text (aunque tenga response)
+        // El response es la respuesta del bot a ese mensaje, pero este registro es del cliente
         return decodeEscapedText(conv.message_text || '');
     } else {
         // Respuesta del bot/empleado: priorizar response, sino message_text
@@ -265,23 +266,77 @@ const sendMessage = async () => {
     if (!newMessage.value.trim()) return;
     
     const leadId = route.params.id as string;
-    const msg = newMessage.value; // Store value before clearing
+    const msg = newMessage.value.trim();
     newMessage.value = '';
 
-    // Optimistic UI update
-    (leadStore.conversations as any[]).push({
-        id: Date.now(),
-        message_text: msg,
-        is_client_message: false,
-        created_at: new Date().toISOString(),
-        user_id: 'me',
-        status: 'sending' 
-    });
-    
-    scrollToBottom();
+    try {
+        // Optimistic UI update
+        const tempId = Date.now();
+        (leadStore.conversations as any[]).push({
+            id: tempId,
+            message_text: msg,
+            is_client_message: false,
+            is_employee: true,
+            created_at: new Date().toISOString(),
+            timestamp: new Date().toISOString(),
+            status: 'sending'
+        });
+        
+        scrollToBottom();
 
-    // Call Store Action
-    // await leadStore.sendMessage(leadId, msg); 
+        // Enviar mensaje a WhatsApp usando la API
+        const { api } = await import('boot/axios');
+        const token = localStorage.getItem('token');
+        
+        const response = await api.post('/whatsapp/send', {
+            lead_id: parseInt(leadId),
+            message: msg,
+        }, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        if (response.data.success) {
+            // Actualizar el mensaje temporal con los datos reales
+            const tempIndex = (leadStore.conversations as any[]).findIndex((c: any) => c.id === tempId);
+            if (tempIndex !== -1) {
+                (leadStore.conversations as any[])[tempIndex] = {
+                    id: response.data.conversation_id,
+                    message_text: msg,
+                    is_client_message: false,
+                    is_employee: true,
+                    created_at: new Date().toISOString(),
+                    timestamp: new Date().toISOString(),
+                    status: 'sent',
+                };
+            }
+            
+            // Recargar conversaciones para obtener el mensaje real con el message_id
+            await leadStore.fetchConversations(leadId);
+            scrollToBottom();
+            
+            $q.notify({
+                type: 'positive',
+                message: 'Mensaje enviado correctamente',
+                position: 'top',
+            });
+        }
+    } catch (error: any) {
+        console.error('Error enviando mensaje:', error);
+        
+        // Remover el mensaje temporal en caso de error
+        const tempIndex = (leadStore.conversations as any[]).findIndex((c: any) => c.status === 'sending');
+        if (tempIndex !== -1) {
+            (leadStore.conversations as any[]).splice(tempIndex, 1);
+        }
+        
+        $q.notify({
+            type: 'negative',
+            message: error.response?.data?.error || 'Error al enviar mensaje',
+            position: 'top',
+        });
+    }
 };
 </script>
 
