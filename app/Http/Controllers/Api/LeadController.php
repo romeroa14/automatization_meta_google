@@ -70,6 +70,48 @@ class LeadController extends Controller
             ->orderBy('created_at', 'asc')
             ->orderBy('id', 'asc') // Orden secundario por ID para estabilidad
             ->get();
-        return \App\Http\Resources\ConversationResource::collection($conversations);
+        
+        // Log para debug - ANTES de serializar
+        \Log::info('📤 Conversations API - ANTES de Resource', [
+            'lead_id' => $id,
+            'total_conversations' => $conversations->count(),
+            'conversations_with_response' => $conversations->filter(fn($c) => !empty($c->response))->count(),
+            'conversations_detail' => $conversations->map(fn($c) => [
+                'id' => $c->id,
+                'is_client_message' => $c->is_client_message,
+                'has_response' => !empty($c->response),
+                'has_message_text' => !empty($c->message_text),
+                'response_length' => strlen($c->response ?? ''),
+                'message_text_length' => strlen($c->message_text ?? ''),
+                'response_preview' => substr($c->response ?? '', 0, 100),
+            ])->toArray(),
+        ]);
+        
+        $resource = \App\Http\Resources\ConversationResource::collection($conversations);
+        
+        // Log DESPUÉS de serializar para ver qué se está enviando
+        try {
+            $serialized = $resource->response()->getData(true);
+            \Log::info('📤 Conversations API - DESPUÉS de Resource (lo que se envía al frontend)', [
+                'lead_id' => $id,
+                'data_count' => count($serialized['data'] ?? []),
+                'data_detail' => array_map(function($item) {
+                    return [
+                        'id' => $item['id'] ?? null,
+                        'is_client_message' => $item['is_client_message'] ?? null,
+                        'has_response' => !empty($item['response']),
+                        'has_message_text' => !empty($item['message_text']),
+                        'response_length' => strlen($item['response'] ?? ''),
+                        'message_text_length' => strlen($item['message_text'] ?? ''),
+                        'response_preview' => substr($item['response'] ?? '', 0, 100),
+                        'response_value' => $item['response'] ?? null, // Incluir el valor completo para debug
+                    ];
+                }, $serialized['data'] ?? []),
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error serializando resource', ['error' => $e->getMessage()]);
+        }
+        
+        return $resource;
     }
 }

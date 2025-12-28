@@ -25,66 +25,84 @@ Tu flujo debería verse así:
    ↓
 2. Procesa mensaje con AI Agent (Gemini)
    ↓
-3. Envía respuesta a WhatsApp (Graph API)
+3. Envía respuesta a WhatsApp (Graph API) ← PRIMERO
    ↓
-4. [NUEVO] Envía respuesta al webhook de Laravel
+4. Envía respuesta al webhook de Laravel ← DESPUÉS (para guardar en BD)
 ```
 
-### Configuración del Nodo HTTP Request para Enviar Respuesta a Laravel:
+**⚠️ IMPORTANTE:** Debes enviar a WhatsApp PRIMERO, y luego a Laravel. Esto asegura que:
+- El cliente reciba el mensaje inmediatamente
+- La respuesta se guarde en la base de datos para mostrarla en la app
 
-**Después de que el AI Agent genere la respuesta y la envíes a WhatsApp, agrega un nodo HTTP Request:**
+### Configuración del Nodo HTTP Request "Send Message to laravel":
+
+**Este nodo debe estar DESPUÉS de "Send IG Message (Graph API)" para recibir el `wamid` del mensaje enviado:**
 
 1. **URL:** `https://admetricas.com/api/auth/facebook/leads/webhook`
 2. **Method:** `POST`
 3. **Headers:**
    - **Name:** `Authorization`
-   - **Value:** `Bearer {TU_TOKEN_AQUI}` (el token que generaste en la app)
+   - **Value:** `Bearer 2d33t5VTGTh4zfF7uSc8EDWYpM1NbJoYfyudhg2z` (tu token generado)
    - **Name:** `Content-Type`
    - **Value:** `application/json`
 4. **Body Type:** `JSON`
 5. **Body (JSON):**
    ```json
    {
-     "client_phone": "{{ $json.fromNumber }}",
-     "client_name": "{{ $json.profileName }}",
-     "response": "{{ $json.aiResponse }}",
-     "response_id": "{{ $json.wamid }}",
-     "intent": "{{ $json.intent }}"
+     "client_phone": "{{ $('Parse Incoming').item.json.fromNumber }}",
+     "client_name": "{{ $('Parse Incoming').item.json.profileName }}",
+     "message": "{{ $('Parse Incoming').item.json.messageText }}",
+     "response": "{{ $('Parse AI Response').item.json.response }}",
+     "message_id": "{{ $('Parse Incoming').item.json.messageId }}",
+     "response_id": "{{ $('Send IG Message (Graph API)').item.json.messages[0].id }}"
    }
    ```
 
-### Ejemplo Completo del Flujo:
+**Nota:** Si el nodo "Send IG Message (Graph API)" devuelve el `wamid` en otra estructura, ajusta la ruta. Por ejemplo:
+- `{{ $('Send IG Message (Graph API)').item.json.wamid }}`
+- `{{ $('Send IG Message (Graph API)').item.json.id }}`
+- `{{ $('Send IG Message (Graph API)').item.json.messages[0].id }}`
 
-**Nodo 1: Webhook Trigger**
-- Recibe: `messageText`, `fromNumber`, `profileName`, `messageId`
+### Ejemplo Completo del Flujo (Basado en tu flujo actual):
+
+**Nodo 1: Parse Incoming**
+- Recibe del webhook: `messageText`, `fromNumber`, `profileName`, `messageId`
 
 **Nodo 2: AI Agent (Gemini)**
-- Input: `messageText`
-- Output: `aiResponse` (la respuesta del modelo)
+- Input: `messageText` del cliente
+- Output: `response` (la respuesta del modelo)
 
-**Nodo 3: Send WhatsApp Message (Graph API)**
-- Envía `aiResponse` a WhatsApp
-- Recibe: `wamid` (ID del mensaje enviado)
+**Nodo 3: Parse AI Response**
+- Parsea la respuesta del AI Agent
+- Extrae: `response`, `intent`, etc.
 
-**Nodo 4: HTTP Request → Laravel Webhook** ⭐ **ESTE ES EL NUEVO**
+**Nodo 4: Send IG Message (Graph API)** ⚡ **PRIMERO**
+- Envía la respuesta a WhatsApp
+- Recibe: `wamid` o `messages[0].id` (ID del mensaje enviado)
+
+**Nodo 5: Send Message to laravel** ⭐ **DESPUÉS (conectado desde Send IG Message)**
 - **URL:** `https://admetricas.com/api/auth/facebook/leads/webhook`
 - **Method:** `POST`
 - **Headers:**
   ```
-  Authorization: Bearer {TU_TOKEN}
+  Authorization: Bearer 2d33t5VTGTh4zfF7uSc8EDWYpM1NbJoYfyudhg2z
   Content-Type: application/json
   ```
 - **Body:**
   ```json
   {
-    "client_phone": "{{ $('Webhook Trigger').item.json.fromNumber }}",
-    "client_name": "{{ $('Webhook Trigger').item.json.profileName }}",
-    "message": "{{ $('Webhook Trigger').item.json.messageText }}",
-    "response": "{{ $('AI Agent').item.json.aiResponse }}",
-    "message_id": "{{ $('Webhook Trigger').item.json.messageId }}",
-    "response_id": "{{ $('Send WhatsApp Message').item.json.wamid }}"
+    "client_phone": "{{ $('Parse Incoming').item.json.fromNumber }}",
+    "client_name": "{{ $('Parse Incoming').item.json.profileName }}",
+    "message": "{{ $('Parse Incoming').item.json.messageText }}",
+    "response": "{{ $('Parse AI Response').item.json.response }}",
+    "message_id": "{{ $('Parse Incoming').item.json.messageId }}",
+    "response_id": "{{ $('Send IG Message (Graph API)').item.json.messages[0].id }}"
   }
   ```
+
+**Nodos Paralelos (también desde Parse AI Response):**
+- **Inserts Records leads1**: Guarda/actualiza el lead
+- **Update Records Conversations**: Actualiza la conversación
 
 ### Nota Importante:
 

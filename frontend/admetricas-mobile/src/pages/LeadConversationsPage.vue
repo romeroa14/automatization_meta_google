@@ -35,12 +35,12 @@
           <q-badge color="grey-3" text-color="black" label="Hoy" />
        </div>
 
-       <div v-for="(conv: any) in leadStore.conversations" :key="conv.id" 
+       <div v-for="conv in leadStore.conversations" :key="(conv as any).id" 
             class="row q-mb-sm" 
-            :class="conv.is_client_message ? 'justify-start' : 'justify-end'"
+            :class="isClientMessage(conv) ? 'justify-start' : 'justify-end'"
        >
           <div class="chat-bubble shadow-1 relative-position" 
-               :class="conv.is_client_message ? 'bg-white' : 'bg-green-1'">
+               :class="isClientMessage(conv) ? 'bg-white' : 'bg-green-1'">
              
              <!-- Message Content -->
              <!-- 
@@ -54,8 +54,8 @@
              
              <!-- Metadata (Time & Ticks) -->
              <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
-                <span class="q-mr-xs">{{ formatDate(conv.timestamp || conv.created_at) }}</span>
-                <q-icon v-if="!conv.is_client_message" name="done_all" color="blue" size="14px" />
+                <span class="q-mr-xs">{{ formatDate((conv as any).timestamp || (conv as any).created_at) }}</span>
+                <q-icon v-if="!isClientMessage(conv)" name="done_all" color="blue" size="14px" />
              </div>
 
              <!-- Tail SVG (Optional polish) -->
@@ -118,7 +118,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, nextTick, computed } from 'vue';
+import { onMounted, onUnmounted, ref, nextTick, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useLeadStore } from 'stores/lead-store';
 import { date, useQuasar } from 'quasar';
@@ -151,10 +151,83 @@ onMounted(async () => {
     await leadStore.fetchLead(leadId);
     await leadStore.fetchConversations(leadId);
     scrollToBottom();
+    
+    // Refrescar conversaciones cada 3 segundos para ver nuevas respuestas del bot
+    const refreshInterval = setInterval(async () => {
+        await leadStore.fetchConversations(leadId);
+        scrollToBottom();
+    }, 3000);
+    
+    // Limpiar intervalo al desmontar
+    onUnmounted(() => {
+        clearInterval(refreshInterval);
+    });
 });
 
 const formatDate = (val: string) => {
     return date.formatDate(val, 'HH:mm');
+};
+
+/**
+ * Determinar si es mensaje del cliente
+ * Lógica:
+ * - Si is_client_message === true → es mensaje del cliente
+ * - Si tiene response pero NO tiene message_text → es respuesta del bot
+ * - Si tiene message_text pero NOuesta del bot a ese mensaje) tiene response → es mensaje del cliente
+ * - Si tiene ambos pero message_text !== response → es mensaje del cliente (el response es la resp
+ */
+const isClientMessage = (conv: any): boolean => {
+    // Si explícitamente está marcado como mensaje del cliente
+    if (conv.is_client_message === true) return true;
+    
+    // Si explícitamente está marcado como NO mensaje del cliente
+    if (conv.is_client_message === false) return false;
+    
+    // Si tiene response pero NO tiene message_text, es respuesta del bot
+    if (conv.response && !conv.message_text) return false;
+    
+    // Si tiene message_text pero NO tiene response, es mensaje del cliente
+    if (conv.message_text && !conv.response) return true;
+    
+    // Si tiene ambos pero son diferentes, message_text es del cliente y response es del bot
+    if (conv.message_text && conv.response && conv.message_text !== conv.response) {
+        return true; // El message_text es del cliente
+    }
+    
+    // Si tiene ambos y son iguales, es una respuesta del bot (message_text fue copiado a response)
+    if (conv.message_text && conv.response && conv.message_text === conv.response) {
+        return false; // Es respuesta del bot
+    }
+    
+    // Por defecto, usar el valor de is_client_message
+    return conv.is_client_message === true;
+};
+
+/**
+ * Decodificar caracteres escapados en el texto
+ * Convierte \n a saltos de línea reales, \u00a1 a caracteres Unicode, etc.
+ */
+const decodeEscapedText = (text: string): string => {
+    if (!text) return '';
+    
+    // Decodificar caracteres Unicode escapados (\u00a1 -> ¡, etc.)
+    try {
+        // Primero decodificar JSON escapes
+        text = text.replace(/\\n/g, '\n')
+                   .replace(/\\t/g, '\t')
+                   .replace(/\\r/g, '\r')
+                   .replace(/\\"/g, '"')
+                   .replace(/\\\\/g, '\\');
+        
+        // Decodificar caracteres Unicode (\u00a1 -> ¡)
+        text = text.replace(/\\u([0-9a-fA-F]{4})/g, (match, hex) => {
+            return String.fromCharCode(parseInt(hex, 16));
+        });
+    } catch (e) {
+        console.warn('[LeadConversations] Error decoding text:', e);
+    }
+    
+    return text;
 };
 
 /**
@@ -163,26 +236,19 @@ const formatDate = (val: string) => {
  * - Respuestas del bot/empleado: mostrar response si existe, sino message_text
  */
 const getMessageContent = (conv: any) => {
-    if (conv.is_client_message) {
-        // Mensaje del cliente: mostrar message_text
-        return conv.message_text || '';
+    const isClient = isClientMessage(conv);
+    
+    if (isClient) {
+        // Mensaje del cliente: mostrar message_text (decodificado)
+        return decodeEscapedText(conv.message_text || '');
     } else {
         // Respuesta del bot/empleado: priorizar response, sino message_text
         const content = conv.response || conv.message_text || '';
         
-        // Debug: log si no hay contenido
-        if (!content) {
-            console.warn('[LeadConversations] Empty message content:', {
-                id: conv.id,
-                is_client_message: conv.is_client_message,
-                is_employee: conv.is_employee,
-                has_response: !!conv.response,
-                has_message_text: !!conv.message_text,
-                conv: conv,
-            });
-        }
+        // Decodificar caracteres escapados
+        const decodedContent = decodeEscapedText(content);
         
-        return content;
+        return decodedContent;
     }
 };
 

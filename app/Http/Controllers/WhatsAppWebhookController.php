@@ -252,14 +252,20 @@ class WhatsAppWebhookController extends Controller
                 
                 if ($lead && $lead->user_id) {
                     $user = \App\Models\User::find($lead->user_id);
-                } else {
-                    // Si no hay lead, buscar usuario por número de WhatsApp configurado
-                    $user = \App\Models\User::where('whatsapp_number', config('services.whatsapp.phone_number_id'))->first();
-                    
-                    // Si aún no hay usuario, usar el primero (para desarrollo)
-                    if (!$user) {
-                        $user = \App\Models\User::first();
-                    }
+                }
+                
+                // Si no hay usuario aún, buscar cualquier usuario activo (el sistema es multi-usuario pero para desarrollo usamos el primero)
+                if (!$user) {
+                    $user = \App\Models\User::first();
+                }
+                
+                // Si aún no hay usuario, crear uno temporal o usar el usuario por defecto
+                if (!$user) {
+                    Log::warning('No hay usuarios en el sistema. Creando usuario temporal o usando el por defecto.', [
+                        'fromNumber' => $fromNumber
+                    ]);
+                    // Intentar obtener el usuario por email por defecto
+                    $user = \App\Models\User::where('email', 'alfredoromerox15@gmail.com')->first();
                 }
 
                 if (!$user) {

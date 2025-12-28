@@ -57,46 +57,77 @@ class LeadWebhookController extends Controller
             );
 
             // 4. Create Conversation Record for the CLIENT message (if exists)
-            if ($request->filled('message')) {
-                $lead->conversations()->create([
-                    'user_id' => $user->id,
-                    'message_id' => $request->message_id,
-                    'message_text' => $request->message,
-                    'is_client_message' => true,
-                    'is_employee' => false,
-                    'platform' => 'whatsapp',
-                    'timestamp' => now()->toDateTimeString(),
-                    'message_length' => strlen($request->message),
-                ]);
+            // IMPORTANTE: Solo guardar si no existe ya (evitar duplicados desde WhatsApp webhook)
+            if ($request->filled('message') && $request->filled('message_id')) {
+                // Verificar si el mensaje ya existe (evitar duplicados)
+                $existingMessage = $lead->conversations()
+                    ->where('message_id', $request->message_id)
+                    ->where('is_client_message', true)
+                    ->first();
                 
-                Log::info("✅ Mensaje del cliente guardado", [
-                    'lead_id' => $lead->id,
-                    'message_id' => $request->message_id,
-                ]);
+                if (!$existingMessage) {
+                    $lead->conversations()->create([
+                        'user_id' => $user->id,
+                        'message_id' => $request->message_id,
+                        'message_text' => $request->message,
+                        'response' => null, // Los mensajes del cliente NO tienen response
+                        'is_client_message' => true,
+                        'is_employee' => false,
+                        'platform' => 'whatsapp',
+                        'timestamp' => now()->toDateTimeString(),
+                        'message_length' => strlen($request->message),
+                    ]);
+                    
+                    Log::info("✅ Mensaje del cliente guardado", [
+                        'lead_id' => $lead->id,
+                        'message_id' => $request->message_id,
+                    ]);
+                } else {
+                    Log::info("⚠️ Mensaje del cliente ya existe, omitiendo duplicado", [
+                        'lead_id' => $lead->id,
+                        'message_id' => $request->message_id,
+                        'existing_id' => $existingMessage->id,
+                    ]);
+                }
             }
 
             // 5. Create Conversation Record for the MODEL/BOT response (if exists)
-            if ($request->filled('response')) {
+            // IMPORTANTE: Solo guardar si no existe ya (evitar duplicados)
+            if ($request->filled('response') && $request->filled('response_id')) {
                 try {
-                    $conversation = $lead->conversations()->create([
-                        'user_id' => $user->id,
-                        'message_id' => $request->response_id,
-                        'response' => $request->response, // La respuesta va en el campo 'response'
-                        'message_text' => $request->response, // También en message_text para mostrar en el chat
-                        'is_client_message' => false, // Es respuesta del sistema
-                        'is_employee' => true, // Es del bot/empleado
-                        'platform' => 'whatsapp',
-                        'timestamp' => now()->toDateTimeString(),
-                        'message_length' => strlen($request->response),
-                        'status' => 'sent',
-                    ]);
+                    // Verificar si la respuesta ya existe (evitar duplicados)
+                    $existingResponse = $lead->conversations()
+                        ->where('message_id', $request->response_id)
+                        ->where('is_client_message', false)
+                        ->first();
                     
-                    Log::info("✅ Respuesta del modelo guardada exitosamente", [
-                        'lead_id' => $lead->id,
-                        'conversation_id' => $conversation->id,
-                        'response_id' => $request->response_id,
-                        'response_length' => strlen($request->response),
-                    ]);
+                    if (!$existingResponse) {
+                        $conversation = $lead->conversations()->create([
+                            'user_id' => $user->id,
+                            'message_id' => $request->response_id,
+                            'message_text' => null, // Las respuestas del bot NO tienen message_text del cliente
+                            'response' => $request->response, // La respuesta del bot va aquí
+                            'is_client_message' => false, // Es respuesta del sistema/bot
+                            'is_employee' => false, // NO es empleado, es el bot/IA
+                            'platform' => 'whatsapp',
+                            'timestamp' => now()->toDateTimeString(),
+                            'message_length' => strlen($request->response),
+                            'status' => 'sent',
+                        ]);
+                        
+                        Log::info("✅ Respuesta del modelo guardada exitosamente", [
+                            'lead_id' => $lead->id,
+                            'conversation_id' => $conversation->id,
+                            'response_id' => $request->response_id,
+                            'response_length' => strlen($request->response),
+                        ]);
+                    } else {
+                        Log::info("⚠️ Respuesta del modelo ya existe, omitiendo duplicado", [
+                            'lead_id' => $lead->id,
+                            'response_id' => $request->response_id,
+                            'existing_id' => $existingResponse->id,
+                        ]);
+                    }
                 } catch (\Exception $e) {
                     Log::error("❌ Error guardando respuesta del modelo", [
                         'lead_id' => $lead->id,
@@ -105,8 +136,10 @@ class LeadWebhookController extends Controller
                     ]);
                 }
             } else {
-                Log::warning("⚠️ Webhook recibido sin campo 'response'", [
+                Log::warning("⚠️ Webhook recibido sin campo 'response' o 'response_id'", [
                     'lead_id' => $lead->id,
+                    'has_response' => $request->filled('response'),
+                    'has_response_id' => $request->filled('response_id'),
                     'payload_keys' => array_keys($request->all()),
                 ]);
             }
