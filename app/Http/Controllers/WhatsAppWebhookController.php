@@ -88,21 +88,39 @@ class WhatsAppWebhookController extends Controller
                     'processedData' => $processedData
                 ]);
 
-                // Enviar a n8n solo si el bot puede responder
+                // Lógica de envío a n8n:
+                // - Si NO hay intervención humana reciente → Enviar a n8n inmediatamente
+                // - Si hay intervención humana reciente → Programar job para enviar después de 5 minutos
                 $lead = Lead::where('phone_number', $fromNumber)->first();
-                if ($lead && !$lead->canBotRespond()) {
+                
+                if ($lead && !$lead->shouldSendToN8n()) {
+                    // Hay intervención humana reciente, programar job para enviar después de 5 minutos
                     $minutesSinceIntervention = now()->diffInMinutes($lead->last_human_intervention_at ?? now());
-                    Log::info('🤖 Bot deshabilitado (intervención humana reciente), no se envía mensaje a n8n', [
+                    $delayMinutes = 5 - $minutesSinceIntervention;
+                    
+                    \App\Jobs\SendMessageToN8nJob::dispatch(
+                        $lead->id,
+                        $messageId,
+                        $processedData,
+                        $fromNumber,
+                        $profileName,
+                        $timestamp,
+                        $messageType,
+                        now()->toDateTimeString() // Timestamp de cuando se programó
+                    )->delay(now()->addMinutes($delayMinutes));
+                    
+                    Log::info('⏸️ Mensaje programado para enviar a n8n después de 5 minutos', [
                         'lead_id' => $lead->id,
                         'message_id' => $messageId,
                         'minutes_since_intervention' => $minutesSinceIntervention,
-                        'bot_will_respond_after' => 20 - $minutesSinceIntervention . ' minutos',
+                        'will_send_after' => $delayMinutes . ' minutos',
                     ]);
                 } else {
+                    // No hay intervención humana reciente, enviar a n8n inmediatamente
                     // Si han pasado 20 minutos, re-habilitar bot automáticamente
                     if ($lead && $lead->bot_disabled && $lead->canBotRespond()) {
                         $lead->update(['bot_disabled' => false]);
-                        Log::info('✅ Bot re-habilitado automáticamente', [
+                        Log::info('✅ Bot re-habilitado automáticamente (pasaron 20 min)', [
                             'lead_id' => $lead->id,
                         ]);
                     }

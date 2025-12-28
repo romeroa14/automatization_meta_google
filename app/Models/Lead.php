@@ -45,6 +45,27 @@ class Lead extends Model
         return true;
     }
 
+    /**
+     * Verificar si se debe enviar mensaje a n8n (han pasado 5 minutos desde la última intervención humana)
+     * Si un empleado escribió recientemente, NO enviar a n8n para evitar que el bot responda
+     */
+    public function shouldSendToN8n(): bool
+    {
+        // Si bot_disabled es false, siempre enviar a n8n
+        if (!$this->bot_disabled) {
+            return true;
+        }
+
+        // Si bot_disabled es true, verificar si han pasado 5 minutos
+        if ($this->last_human_intervention_at) {
+            $minutesSinceIntervention = now()->diffInMinutes($this->last_human_intervention_at);
+            return $minutesSinceIntervention >= 5; // Esperar 5 minutos antes de enviar a n8n
+        }
+
+        // Si no hay timestamp, permitir envío (caso edge)
+        return true;
+    }
+
     public function conversations(): HasMany
     {
         return $this->hasMany(Conversation::class);

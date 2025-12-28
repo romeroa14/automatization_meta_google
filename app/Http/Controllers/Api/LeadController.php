@@ -65,11 +65,24 @@ class LeadController extends Controller
     public function conversations(string $id)
     {
         $lead = \App\Models\Lead::findOrFail($id);
-        // Ordenar por created_at ASC para mostrar las conversaciones en orden cronológico
+        // Ordenar por timestamp/created_at ASC para mostrar las conversaciones en orden cronológico
         $conversations = $lead->conversations()
-            ->orderBy('created_at', 'asc')
-            ->orderBy('id', 'asc') // Orden secundario por ID para estabilidad
-            ->get();
+            ->get()
+            ->sortBy(function($conv) {
+                // Priorizar created_at, luego timestamp, luego id
+                if ($conv->created_at) {
+                    return $conv->created_at->timestamp;
+                }
+                if ($conv->timestamp) {
+                    try {
+                        return \Carbon\Carbon::parse($conv->timestamp)->timestamp;
+                    } catch (\Exception $e) {
+                        return $conv->id;
+                    }
+                }
+                return $conv->id;
+            })
+            ->values();
         
         // Log para debug - ANTES de serializar
         \Log::info('📤 Conversations API - ANTES de Resource', [

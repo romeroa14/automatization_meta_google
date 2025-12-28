@@ -170,36 +170,13 @@ const formatDate = (val: string) => {
 
 /**
  * Determinar si es mensaje del cliente
- * Lógica mejorada para manejar casos donde un registro tiene tanto message_text como response
+ * SIMPLIFICADO: Confiar en el campo is_client_message de la BD
+ * - true = mensaje del cliente (blanco, izquierda)
+ * - false = mensaje del bot/empleado (verde, derecha)
  */
 const isClientMessage = (conv: any): boolean => {
-    // Si explícitamente está marcado como mensaje del cliente
-    if (conv.is_client_message === true) return true;
-    
-    // Si explícitamente está marcado como NO mensaje del cliente Y es empleado
-    if (conv.is_client_message === false && conv.is_employee === true) return false;
-    
-    // Si tiene response pero NO tiene message_text, es respuesta del bot
-    if (conv.response && !conv.message_text) return false;
-    
-    // Si tiene message_text Y response, y son diferentes:
-    // - Si message_text parece ser del cliente (no es una respuesta formal del bot)
-    //   y response es una respuesta del bot, entonces message_text es del cliente
-    if (conv.message_text && conv.response && conv.message_text !== conv.response) {
-        // El message_text es del cliente, el response es del bot
-        // Este registro debería mostrarse como mensaje del cliente
-        return true;
-    }
-    
-    // Si message_text y response son iguales, es una respuesta del bot
-    if (conv.message_text && conv.response && conv.message_text === conv.response) {
-        return false; // Es respuesta del bot
-    }
-    
-    // Si tiene message_text pero NO tiene response, es mensaje del cliente
-    if (conv.message_text && !conv.response) return true;
-    
-    // Por defecto, usar el valor de is_client_message
+    // SIMPLIFICADO: Usar directamente el valor de is_client_message
+    // Si es null o undefined, asumir que NO es mensaje del cliente (es del bot)
     return conv.is_client_message === true;
 };
 
