@@ -209,18 +209,19 @@ const decodeEscapedText = (text: string): string => {
 
 /**
  * Obtener el contenido del mensaje a mostrar
- * - Mensajes del cliente: mostrar message_text (aunque tenga response)
- * - Respuestas del bot/empleado: mostrar response si existe, sino message_text
+ * - Mensajes del cliente: mostrar message_text (NUNCA response)
+ * - Respuestas del bot/empleado: mostrar response (message_text debe estar vacío)
  */
 const getMessageContent = (conv: any) => {
     const isClient = isClientMessage(conv);
     
     if (isClient) {
-        // Mensaje del cliente: SIEMPRE mostrar message_text (aunque tenga response)
-        // El response es la respuesta del bot a ese mensaje, pero este registro es del cliente
+        // Mensaje del cliente: SIEMPRE mostrar message_text
+        // El response NO debe estar aquí, está en otro registro
         return decodeEscapedText(conv.message_text || '');
     } else {
-        // Respuesta del bot/empleado: priorizar response, sino message_text
+        // Respuesta del bot/empleado: SOLO mostrar response
+        // message_text debe estar vacío/null para respuestas del bot
         const content = conv.response || conv.message_text || '';
         
         // Decodificar caracteres escapados

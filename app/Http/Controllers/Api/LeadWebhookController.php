@@ -64,11 +64,14 @@ class LeadWebhookController extends Controller
             // - Registro 2: Respuesta del bot (is_client_message: false, solo response)
             
             // 4.1. IMPORTANTE: El mensaje del cliente YA fue guardado por WhatsAppWebhookController
-            // Solo lo guardamos aquí si no existe (caso edge donde n8n envía antes que WhatsAppWebhookController)
+            // Buscar el mensaje del cliente más reciente para usarlo como referencia para el timestamp de la respuesta
             $clientMessage = null;
+            
             if ($request->filled('message') && $request->filled('message_id')) {
+                // Buscar el mensaje del cliente por message_id
                 $clientMessage = $lead->conversations()
                     ->where('message_id', $request->message_id)
+                    ->where('is_client_message', true)
                     ->first();
                 
                 if (!$clientMessage) {
@@ -81,6 +84,7 @@ class LeadWebhookController extends Controller
                         'user_id' => $user->id,
                         'message_id' => $request->message_id,
                         'message_text' => $request->message, // SOLO message_text, NO response
+                        'response' => null, // Asegurar que response esté vacío
                         'is_client_message' => true, // BLANCO, IZQUIERDA
                         'is_employee' => false,
                         'platform' => 'whatsapp',
@@ -91,6 +95,25 @@ class LeadWebhookController extends Controller
                     Log::info("✅ Mensaje del cliente guardado desde n8n (caso edge)", [
                         'lead_id' => $lead->id,
                         'message_id' => $request->message_id,
+                        'message_text' => $request->message,
+                    ]);
+                }
+            }
+            
+            // Si no encontramos el mensaje del cliente pero hay response_id, buscar el último mensaje del cliente
+            // Esto asegura que siempre tengamos una referencia para calcular el timestamp de la respuesta
+            if (!$clientMessage && $request->filled('response_id')) {
+                $clientMessage = $lead->conversations()
+                    ->where('is_client_message', true)
+                    ->orderBy('created_at', 'desc')
+                    ->orderBy('id', 'desc')
+                    ->first();
+                
+                if ($clientMessage) {
+                    Log::info("✅ Mensaje del cliente encontrado para referencia de timestamp", [
+                        'lead_id' => $lead->id,
+                        'client_message_id' => $clientMessage->id,
+                        'message_id' => $clientMessage->message_id,
                     ]);
                 }
             }
@@ -150,11 +173,14 @@ class LeadWebhookController extends Controller
                             ]);
                         }
                         
+                        // IMPORTANTE: Para la respuesta del bot:
+                        // - message_text debe estar vacío o null (el mensaje del cliente ya está en otro registro)
+                        // - response contiene la respuesta del bot
                         $conversation = $lead->conversations()->create([
                             'user_id' => $user->id,
                             'message_id' => $request->response_id,
-                            'message_text' => $request->response, // Para mostrar en el chat
-                            'response' => $request->response, // También en response
+                            'message_text' => null, // VACÍO - el mensaje del cliente está en otro registro
+                            'response' => $request->response, // SOLO la respuesta del bot
                             'is_client_message' => false, // VERDE, DERECHA
                             'is_employee' => true, // Es del bot/empleado
                             'platform' => 'whatsapp',
