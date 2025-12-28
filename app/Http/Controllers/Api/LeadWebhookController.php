@@ -63,19 +63,21 @@ class LeadWebhookController extends Controller
             // - Registro 1: Mensaje del cliente (is_client_message: true, solo message_text)
             // - Registro 2: Respuesta del bot (is_client_message: false, solo response)
             
-            // 4.1. Guardar mensaje del cliente (si existe y no está guardado ya)
+            // 4.1. IMPORTANTE: El mensaje del cliente YA fue guardado por WhatsAppWebhookController
+            // Solo lo guardamos aquí si no existe (caso edge donde n8n envía antes que WhatsAppWebhookController)
+            $clientMessage = null;
             if ($request->filled('message') && $request->filled('message_id')) {
-                $existingClientMessage = $lead->conversations()
+                $clientMessage = $lead->conversations()
                     ->where('message_id', $request->message_id)
                     ->first();
                 
-                if (!$existingClientMessage) {
+                if (!$clientMessage) {
                     // El mensaje del cliente no existe, crearlo
                     $messageTimestamp = $request->filled('message_timestamp') 
                         ? $request->message_timestamp 
-                        : now()->toDateTimeString();
+                        : now()->subMinutes(1)->toDateTimeString(); // 1 minuto antes para asegurar orden
                     
-                    $lead->conversations()->create([
+                    $clientMessage = $lead->conversations()->create([
                         'user_id' => $user->id,
                         'message_id' => $request->message_id,
                         'message_text' => $request->message, // SOLO message_text, NO response
@@ -86,7 +88,7 @@ class LeadWebhookController extends Controller
                         'message_length' => strlen($request->message),
                     ]);
                     
-                    Log::info("✅ Mensaje del cliente guardado desde n8n", [
+                    Log::info("✅ Mensaje del cliente guardado desde n8n (caso edge)", [
                         'lead_id' => $lead->id,
                         'message_id' => $request->message_id,
                     ]);
@@ -94,6 +96,7 @@ class LeadWebhookController extends Controller
             }
             
             // 4.2. Guardar respuesta del bot (si existe)
+            // IMPORTANTE: La respuesta del bot debe tener un timestamp DESPUÉS del mensaje del cliente
             if ($request->filled('response') && $request->filled('response_id')) {
                 try {
                     // Verificar si la respuesta ya existe (evitar duplicados)
@@ -102,10 +105,50 @@ class LeadWebhookController extends Controller
                         ->first();
                     
                     if (!$existingResponse) {
-                        // Crear nueva conversación para la respuesta del bot
-                        $responseTimestamp = $request->filled('response_timestamp') 
-                            ? $request->response_timestamp 
-                            : now()->toDateTimeString();
+                        // Calcular timestamp de la respuesta:
+                        // La respuesta del bot debe ir DESPUÉS del mensaje del cliente
+                        // Buscar el mensaje del cliente más reciente para usar su timestamp
+                        $lastClientMessage = null;
+                        
+                        if ($clientMessage) {
+                            $lastClientMessage = $clientMessage;
+                        } else {
+                            // Buscar el último mensaje del cliente (por si no se encontró con message_id)
+                            $lastClientMessage = $lead->conversations()
+                                ->where('is_client_message', true)
+                                ->orderBy('created_at', 'desc')
+                                ->orderBy('id', 'desc')
+                                ->first();
+                        }
+                        
+                        if ($lastClientMessage) {
+                            // Obtener el timestamp del mensaje del cliente
+                            $clientTimestamp = $lastClientMessage->created_at 
+                                ?? \Carbon\Carbon::parse($lastClientMessage->timestamp ?? now());
+                            
+                            // La respuesta debe ir DESPUÉS del mensaje del cliente (al menos 2 segundos después)
+                            $responseTimestamp = $clientTimestamp->copy()->addSeconds(2)->toDateTimeString();
+                            
+                            Log::info("✅ Timestamp de respuesta calculado basado en mensaje del cliente", [
+                                'lead_id' => $lead->id,
+                                'client_message_id' => $lastClientMessage->id,
+                                'client_timestamp' => $clientTimestamp->toDateTimeString(),
+                                'response_timestamp' => $responseTimestamp,
+                            ]);
+                        } elseif ($request->filled('response_timestamp')) {
+                            $responseTimestamp = $request->response_timestamp;
+                            Log::info("✅ Usando response_timestamp de n8n", [
+                                'lead_id' => $lead->id,
+                                'response_timestamp' => $responseTimestamp,
+                            ]);
+                        } else {
+                            // Si no hay mensaje del cliente, usar timestamp actual menos 1 segundo
+                            $responseTimestamp = now()->subSeconds(1)->toDateTimeString();
+                            Log::warning("⚠️ No se encontró mensaje del cliente, usando timestamp actual", [
+                                'lead_id' => $lead->id,
+                                'response_timestamp' => $responseTimestamp,
+                            ]);
+                        }
                         
                         $conversation = $lead->conversations()->create([
                             'user_id' => $user->id,
