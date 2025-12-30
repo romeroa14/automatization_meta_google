@@ -35,6 +35,9 @@ class LeadWebhookController extends Controller
             'message' => 'nullable|string', // Mensaje del cliente
             'response' => 'nullable|string', // Respuesta del modelo/n8n
             'intent' => 'nullable|string',
+            'lead_level' => 'nullable|string', // Nivel del lead desde n8n
+            'stage' => 'nullable|string', // Etapa del lead desde n8n
+            'confidence_score' => 'nullable|numeric', // Confianza desde n8n
             'message_id' => 'nullable|string', // ID del mensaje de WhatsApp
             'response_id' => 'nullable|string', // ID de la respuesta enviada
             'message_timestamp' => 'nullable|string', // Timestamp del mensaje del cliente
@@ -43,20 +46,74 @@ class LeadWebhookController extends Controller
 
         try {
             // 3. Create or Update Lead
-            $lead = Lead::updateOrCreate(
-                [
+            // IMPORTANTE: Buscar primero por phone_number (sin importar user_id) para evitar duplicados
+            // Si existe un lead con ese phone_number, actualizarlo. Si no, crearlo con el user_id actual.
+            $phoneNumber = $request->client_phone;
+            
+            // Buscar lead existente por phone_number (sin importar user_id)
+            $lead = Lead::where('phone_number', $phoneNumber)->first();
+            
+            if ($lead) {
+                // Lead existe, actualizar campos
+                $updateData = [
+                    'updated_at' => now(),
+                ];
+                
+                // Actualizar user_id si es diferente (para asegurar que pertenezca al usuario correcto)
+                if ($lead->user_id != $user->id) {
+                    $updateData['user_id'] = $user->id;
+                    Log::info("⚠️ Lead encontrado con diferente user_id, actualizando", [
+                        'lead_id' => $lead->id,
+                        'old_user_id' => $lead->user_id,
+                        'new_user_id' => $user->id,
+                    ]);
+                }
+                
+                // Actualizar campos solo si n8n los envía
+                if ($request->filled('client_name')) {
+                    $updateData['client_name'] = $request->client_name;
+                }
+                if ($request->filled('intent')) {
+                    $updateData['intent'] = $request->intent;
+                }
+                if ($request->filled('lead_level')) {
+                    $updateData['lead_level'] = $request->lead_level;
+                }
+                if ($request->filled('stage')) {
+                    $updateData['stage'] = $request->stage;
+                }
+                if ($request->filled('confidence_score')) {
+                    $updateData['confidence_score'] = (float) $request->confidence_score;
+                }
+                
+                $lead->update($updateData);
+                
+                Log::info("✅ Lead existente actualizado", [
+                    'lead_id' => $lead->id,
+                    'phone_number' => $phoneNumber,
+                    'updated_fields' => array_keys($updateData),
+                ]);
+            } else {
+                // Lead no existe, crearlo
+                $leadData = [
                     'user_id' => $user->id,
-                    'phone_number' => $request->client_phone,
-                ],
-                [
+                    'phone_number' => $phoneNumber,
                     'client_name' => $request->client_name ?? 'Desconocido',
                     'intent' => $request->intent ?? 'consulta',
-                    'lead_level' => 'cold', // Default
-                    'stage' => 'nuevo',
-                    'confidence_score' => 0.0,
+                    'lead_level' => $request->lead_level ?? 'cold',
+                    'stage' => $request->stage ?? 'nuevo',
+                    'confidence_score' => $request->filled('confidence_score') ? (float) $request->confidence_score : 0.0,
                     'updated_at' => now(),
-                ]
-            );
+                ];
+                
+                $lead = Lead::create($leadData);
+                
+                Log::info("✅ Lead nuevo creado", [
+                    'lead_id' => $lead->id,
+                    'phone_number' => $phoneNumber,
+                    'user_id' => $user->id,
+                ]);
+            }
 
             // 4. IMPORTANTE: n8n puede enviar message_text Y response en el mismo webhook
             // Si ambos están presentes, debemos crear DOS registros separados:
@@ -68,11 +125,22 @@ class LeadWebhookController extends Controller
             $clientMessage = null;
             
             if ($request->filled('message') && $request->filled('message_id')) {
-                // Buscar el mensaje del cliente por message_id
+                // Buscar el mensaje del cliente por message_id + lead_id para evitar duplicados
                 $clientMessage = $lead->conversations()
                     ->where('message_id', $request->message_id)
+                    ->where('lead_id', $lead->id)
                     ->where('is_client_message', true)
                     ->first();
+                
+                // Si no se encuentra por message_id, verificar por message_text + lead_id
+                if (!$clientMessage) {
+                    $clientMessage = $lead->conversations()
+                        ->where('message_text', $request->message)
+                        ->where('lead_id', $lead->id)
+                        ->where('is_client_message', true)
+                        ->whereNull('response') // Asegurar que no sea una respuesta del bot
+                        ->first();
+                }
                 
                 if (!$clientMessage) {
                     // El mensaje del cliente no existe, crearlo
@@ -123,9 +191,22 @@ class LeadWebhookController extends Controller
             if ($request->filled('response') && $request->filled('response_id')) {
                 try {
                     // Verificar si la respuesta ya existe (evitar duplicados)
+                    // IMPORTANTE: Verificar por response_id + lead_id para evitar duplicados exactos
                     $existingResponse = $lead->conversations()
                         ->where('message_id', $request->response_id)
+                        ->where('lead_id', $lead->id)
                         ->first();
+                    
+                    // Si no se encuentra por response_id, verificar por response + lead_id + is_employee
+                    if (!$existingResponse) {
+                        $existingResponse = $lead->conversations()
+                            ->where('response', $request->response)
+                            ->where('lead_id', $lead->id)
+                            ->where('is_client_message', false)
+                            ->where('is_employee', true)
+                            ->where('message_text', null) // Asegurar que es una respuesta del bot
+                            ->first();
+                    }
                     
                     if (!$existingResponse) {
                         // Calcular timestamp de la respuesta:
@@ -196,18 +277,11 @@ class LeadWebhookController extends Controller
                             'response_length' => strlen($request->response),
                         ]);
                     } else {
-                        // La respuesta ya existe, actualizar si es necesario
-                        if ($existingResponse->response !== $request->response) {
-                            $existingResponse->update([
-                                'response' => $request->response,
-                                'message_text' => $request->response,
-                            ]);
-                            Log::info("✅ Respuesta del modelo actualizada", [
-                                'lead_id' => $lead->id,
-                                'conversation_id' => $existingResponse->id,
-                                'response_id' => $request->response_id,
-                            ]);
-                        }
+                        Log::info("⚠️ Respuesta del bot ya existe, evitando duplicado", [
+                            'lead_id' => $lead->id,
+                            'conversation_id' => $existingResponse->id,
+                            'response_id' => $request->response_id,
+                        ]);
                     }
                 } catch (\Exception $e) {
                     Log::error("❌ Error guardando respuesta del modelo", [

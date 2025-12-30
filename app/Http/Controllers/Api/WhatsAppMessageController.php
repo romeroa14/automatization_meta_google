@@ -29,6 +29,45 @@ class WhatsAppMessageController extends Controller
                 ->where('user_id', $user->id)
                 ->firstOrFail();
 
+            // ⚠️ TEMPORALMENTE DESHABILITADO: n8n maneja el envío de mensajes a WhatsApp
+            // TODO: Cuando se reactive, descomentar el código de abajo y eliminar el código temporal
+            
+            // Deshabilitar bot y registrar intervención humana
+            $lead->update([
+                'bot_disabled' => true,
+                'last_human_intervention_at' => now(),
+            ]);
+
+            // Guardar conversación como mensaje del empleado
+            // NOTA: message_id será null temporalmente hasta que n8n envíe el webhook con el wamid
+            $conversation = $lead->conversations()->create([
+                'user_id' => $user->id,
+                'message_id' => null, // Se actualizará cuando n8n envíe el webhook
+                'message_text' => $request->message,
+                'response' => null, // Mensaje del empleado, no tiene response
+                'is_client_message' => false,
+                'is_employee' => true,
+                'platform' => 'whatsapp',
+                'timestamp' => now()->toDateTimeString(),
+                'message_length' => strlen($request->message),
+                'status' => 'pending', // Pendiente de envío por n8n
+            ]);
+
+            Log::info('✅ Mensaje del empleado guardado (pendiente de envío por n8n)', [
+                'lead_id' => $lead->id,
+                'conversation_id' => $conversation->id,
+                'bot_disabled' => true,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Mensaje guardado correctamente (será enviado por n8n)',
+                'conversation_id' => $conversation->id,
+                'bot_disabled' => true,
+            ]);
+
+            /* CÓDIGO COMENTADO - Envío directo a WhatsApp (deshabilitado temporalmente)
+            
             // Enviar mensaje a WhatsApp usando la API
             $phoneNumberId = config('services.whatsapp.phone_number_id');
             $accessToken = config('services.whatsapp.access_token');
@@ -95,6 +134,7 @@ class WhatsAppMessageController extends Controller
                     'details' => $response->json(),
                 ], $response->status());
             }
+            */
         } catch (\Exception $e) {
             Log::error('Error en sendMessage', [
                 'error' => $e->getMessage(),

@@ -84,8 +84,8 @@ Route::prefix('auth/facebook')->group(function () {
         Route::get('/status', [FacebookAuthController::class, 'getConnectionStatus']);
         Route::post('/disconnect', [FacebookAuthController::class, 'disconnect']);
 
-        // Webhook para n8n (Recibir Leads)
-        Route::post('/leads/webhook', [App\Http\Controllers\Api\LeadWebhookController::class, 'handle']);
+        // Webhook para n8n (Recibir Leads) - DESHABILITADO: n8n maneja todo directamente en la BD
+        // Route::post('/leads/webhook', [App\Http\Controllers\Api\LeadWebhookController::class, 'handle']);
         
         // Enviar mensajes de WhatsApp desde la app
         Route::post('/whatsapp/send', [App\Http\Controllers\Api\WhatsAppMessageController::class, 'sendMessage']);
