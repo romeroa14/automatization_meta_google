@@ -65,39 +65,66 @@ class LeadController extends Controller
     public function conversations(string $id)
     {
         $lead = \App\Models\Lead::findOrFail($id);
+        
         // Ordenar por timestamp/created_at ASC para mostrar las conversaciones en orden cronológico
+        // IMPORTANTE: Cada registro tiene SOLO message_text (cliente) O response (bot), no ambos
+        // El orden debe ser cronológico: primero message_text, luego response
         $conversations = $lead->conversations()
             ->get()
             ->sortBy(function($conv) {
-                // Priorizar created_at, luego timestamp, luego id
+                // Priorizar created_at (más confiable y preciso)
                 if ($conv->created_at) {
                     return $conv->created_at->timestamp;
                 }
+                
+                // Si no hay created_at, intentar parsear timestamp
                 if ($conv->timestamp) {
                     try {
-                        return \Carbon\Carbon::parse($conv->timestamp)->timestamp;
+                        // Intentar parsear timestamp (puede ser string o datetime)
+                        $parsed = \Carbon\Carbon::parse($conv->timestamp);
+                        return $parsed->timestamp;
                     } catch (\Exception $e) {
+                        // Si falla, usar id como fallback
                         return $conv->id;
                     }
                 }
+                
+                // Si no hay timestamp ni created_at, usar id
                 return $conv->id;
             })
             ->values();
         
-        // Log para debug - ANTES de serializar
-        \Log::info('📤 Conversations API - ANTES de Resource', [
+        // Log para debug - Verificar orden cronológico
+        \Log::info('📤 Conversations API - Orden de conversaciones', [
             'lead_id' => $id,
             'total_conversations' => $conversations->count(),
-            'conversations_with_response' => $conversations->filter(fn($c) => !empty($c->response))->count(),
-            'conversations_detail' => $conversations->map(fn($c) => [
-                'id' => $c->id,
-                'is_client_message' => $c->is_client_message,
-                'has_response' => !empty($c->response),
-                'has_message_text' => !empty($c->message_text),
-                'response_length' => strlen($c->response ?? ''),
-                'message_text_length' => strlen($c->message_text ?? ''),
-                'response_preview' => substr($c->response ?? '', 0, 100),
-            ])->toArray(),
+            'conversations_order' => $conversations->map(function($c, $index) {
+                $orderKey = null;
+                if ($c->created_at) {
+                    $orderKey = $c->created_at->timestamp;
+                } elseif ($c->timestamp) {
+                    try {
+                        $orderKey = \Carbon\Carbon::parse($c->timestamp)->timestamp;
+                    } catch (\Exception $e) {
+                        $orderKey = $c->id;
+                    }
+                } else {
+                    $orderKey = $c->id;
+                }
+                
+                return [
+                    'position' => $index + 1,
+                    'id' => $c->id,
+                    'type' => $c->message_text ? 'CLIENTE (message_text)' : 'BOT (response)',
+                    'has_message_text' => !empty($c->message_text),
+                    'has_response' => !empty($c->response),
+                    'message_text_preview' => substr($c->message_text ?? '', 0, 50),
+                    'response_preview' => substr($c->response ?? '', 0, 50),
+                    'created_at' => $c->created_at?->toDateTimeString(),
+                    'timestamp' => $c->timestamp,
+                    'order_key' => $orderKey,
+                ];
+            })->toArray(),
         ]);
         
         $resource = \App\Http\Resources\ConversationResource::collection($conversations);

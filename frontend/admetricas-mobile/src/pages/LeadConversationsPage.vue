@@ -37,29 +37,31 @@
 
        <div v-for="conv in leadStore.conversations" :key="(conv as any).id" 
             class="row q-mb-sm" 
-            :class="isClientMessage(conv) ? 'justify-start' : 'justify-end'"
+            :class="(conv as any).message_text ? 'justify-start' : 'justify-end'"
        >
           <div class="chat-bubble shadow-1 relative-position" 
-               :class="isClientMessage(conv) ? 'bg-white' : 'bg-green-1'">
+               :class="(conv as any).message_text ? 'bg-white' : 'bg-green-1'">
              
              <!-- Message Content -->
              <!-- 
-               Lógica de visualización:
-               - Si es mensaje del cliente: mostrar message_text
-               - Si es respuesta del bot/empleado: mostrar response si existe, sino message_text
+               Lógica simple:
+               - Si tiene message_text: mostrar message_text (burbuja blanca, izquierda) = mensaje del cliente
+               - Si tiene response: mostrar response (burbuja verde, derecha) = respuesta del bot
              -->
              <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;">
-               {{ getMessageContent(conv) }}
+               {{ (conv as any).message_text 
+                  ? decodeEscapedText((conv as any).message_text) 
+                  : decodeEscapedText((conv as any).response || '') }}
              </div>
              
              <!-- Metadata (Time & Ticks) -->
              <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
                 <span class="q-mr-xs">{{ formatDate((conv as any).timestamp || (conv as any).created_at) }}</span>
-                <q-icon v-if="!isClientMessage(conv)" name="done_all" color="blue" size="14px" />
+                <q-icon v-if="!(conv as any).message_text" name="done_all" color="blue" size="14px" />
              </div>
 
              <!-- Tail SVG (Optional polish) -->
-             <!-- <div class="bubble-tail" :class="conv.is_client_message ? 'tail-left' : 'tail-right'"></div> -->
+             <!-- <div class="bubble-tail" :class="conv.message_text ? 'tail-left' : 'tail-right'"></div> -->
           </div>
        </div>
 
@@ -132,9 +134,9 @@ const newMessage = ref('');
 const aiSuggestion = computed(() => {
     if (!leadStore.conversations.length) return null;
     const lastMsg = leadStore.conversations[leadStore.conversations.length - 1] as any;
-    // Show suggestion only if it's a client message and has a response (suggestion)
+    // Show suggestion only if it's a client message (has message_text) and has a response (suggestion)
     // AND if we haven't replied yet (naive check: last message is from client)
-    if (lastMsg?.is_client_message && lastMsg?.response) {
+    if (lastMsg?.message_text && lastMsg?.response) {
         return lastMsg.response;
     }
     return null;
@@ -169,18 +171,6 @@ const formatDate = (val: string) => {
 };
 
 /**
- * Determinar si es mensaje del cliente
- * SIMPLIFICADO: Confiar en el campo is_client_message de la BD
- * - true = mensaje del cliente (blanco, izquierda)
- * - false = mensaje del bot/empleado (verde, derecha)
- */
-const isClientMessage = (conv: any): boolean => {
-    // SIMPLIFICADO: Usar directamente el valor de is_client_message
-    // Si es null o undefined, asumir que NO es mensaje del cliente (es del bot)
-    return conv.is_client_message === true;
-};
-
-/**
  * Decodificar caracteres escapados en el texto
  * Convierte \n a saltos de línea reales, \u00a1 a caracteres Unicode, etc.
  */
@@ -205,30 +195,6 @@ const decodeEscapedText = (text: string): string => {
     }
     
     return text;
-};
-
-/**
- * Obtener el contenido del mensaje a mostrar
- * - Mensajes del cliente: mostrar message_text (NUNCA response)
- * - Respuestas del bot/empleado: mostrar response (message_text debe estar vacío)
- */
-const getMessageContent = (conv: any) => {
-    const isClient = isClientMessage(conv);
-    
-    if (isClient) {
-        // Mensaje del cliente: SIEMPRE mostrar message_text
-        // El response NO debe estar aquí, está en otro registro
-        return decodeEscapedText(conv.message_text || '');
-    } else {
-        // Respuesta del bot/empleado: SOLO mostrar response
-        // message_text debe estar vacío/null para respuestas del bot
-        const content = conv.response || conv.message_text || '';
-        
-        // Decodificar caracteres escapados
-        const decodedContent = decodeEscapedText(content);
-        
-        return decodedContent;
-    }
 };
 
 const scrollToBottom = () => {
