@@ -23,10 +23,14 @@ return new class extends Migration
             )
         ');
 
-        // Agregar índice único en phone_number (solo para valores no nulos)
-        // PostgreSQL no permite UNIQUE en columnas nullable directamente, así que usamos un índice único parcial
+        // Eliminar índice si existe (por si acaso hay uno mal configurado)
+        DB::statement('DROP INDEX IF EXISTS leads_phone_number_unique');
+
+        // Agregar índice único en phone_number
+        // IMPORTANTE: Para que funcione con "ON CONFLICT" en n8n, necesitamos un índice único estándar
+        // Si phone_number puede ser NULL, usamos un índice único parcial
         DB::statement('
-            CREATE UNIQUE INDEX IF NOT EXISTS leads_phone_number_unique 
+            CREATE UNIQUE INDEX leads_phone_number_unique 
             ON leads (phone_number) 
             WHERE phone_number IS NOT NULL
         ');

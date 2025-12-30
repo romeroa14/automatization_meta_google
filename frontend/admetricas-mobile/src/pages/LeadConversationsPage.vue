@@ -35,35 +35,34 @@
           <q-badge color="grey-3" text-color="black" label="Hoy" />
        </div>
 
-       <div v-for="conv in leadStore.conversations" :key="(conv as any).id" 
-            class="row q-mb-sm" 
-            :class="(conv as any).message_text ? 'justify-start' : 'justify-end'"
-       >
-          <div class="chat-bubble shadow-1 relative-position" 
-               :class="(conv as any).message_text ? 'bg-white' : 'bg-green-1'">
-             
-             <!-- Message Content -->
-             <!-- 
-               Lógica CORRECTA:
-               - Si tiene message_text: mostrar message_text (burbuja BLANCA, IZQUIERDA) = mensaje del CLIENTE
-               - Si tiene response: mostrar response (burbuja VERDE, DERECHA) = respuesta del BOT
-             -->
-             <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;">
-               {{ (conv as any).message_text 
-                  ? decodeEscapedText((conv as any).message_text) 
-                  : decodeEscapedText((conv as any).response || '') }}
+       <template v-for="conv in leadStore.conversations" :key="(conv as any).id">
+          <!-- Mensaje del cliente (message_text) - Burbuja BLANCA, IZQUIERDA -->
+          <div v-if="(conv as any).message_text" 
+               class="row q-mb-sm justify-start">
+             <div class="chat-bubble shadow-1 relative-position bg-white">
+                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;">
+                  {{ decodeEscapedText((conv as any).message_text) }}
+                </div>
+                <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
+                   <span class="q-mr-xs">{{ formatDate((conv as any).timestamp || (conv as any).created_at) }}</span>
+                </div>
              </div>
-             
-             <!-- Metadata (Time & Ticks) -->
-             <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
-                <span class="q-mr-xs">{{ formatDate((conv as any).timestamp || (conv as any).created_at) }}</span>
-                <q-icon v-if="!(conv as any).message_text" name="done_all" color="blue" size="14px" />
-             </div>
-
-             <!-- Tail SVG (Optional polish) -->
-             <!-- <div class="bubble-tail" :class="conv.message_text ? 'tail-left' : 'tail-right'"></div> -->
           </div>
-       </div>
+
+          <!-- Respuesta del bot (response) - Burbuja VERDE, DERECHA -->
+          <div v-if="(conv as any).response" 
+               class="row q-mb-sm justify-end">
+             <div class="chat-bubble shadow-1 relative-position bg-green-1">
+                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;">
+                  {{ decodeEscapedText((conv as any).response) }}
+                </div>
+                <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
+                   <span class="q-mr-xs">{{ formatDate((conv as any).timestamp || (conv as any).created_at) }}</span>
+                   <q-icon name="done_all" color="blue" size="14px" />
+                </div>
+             </div>
+          </div>
+       </template>
 
        <div v-if="!leadStore.conversations.length" class="text-center q-pa-xl text-grey-8">
           <q-icon name="chat_bubble_outline" size="48px" class="q-mb-md" />
@@ -218,9 +217,8 @@ const sendMessage = async () => {
         const tempId = Date.now();
         (leadStore.conversations as any[]).push({
             id: tempId,
-            message_text: msg,
-            is_client_message: false,
-            is_employee: true,
+            message_text: null, // Mensaje del empleado no tiene message_text
+            response: msg, // El mensaje del empleado va en response
             created_at: new Date().toISOString(),
             timestamp: new Date().toISOString(),
             status: 'sending'
@@ -247,9 +245,8 @@ const sendMessage = async () => {
             if (tempIndex !== -1) {
                 (leadStore.conversations as any[])[tempIndex] = {
                     id: response.data.conversation_id,
-                    message_text: msg,
-                    is_client_message: false,
-                    is_employee: true,
+                    message_text: null, // Mensaje del empleado no tiene message_text
+                    response: msg, // El mensaje del empleado va en response
                     created_at: new Date().toISOString(),
                     timestamp: new Date().toISOString(),
                     status: 'sent',
