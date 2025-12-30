@@ -44,9 +44,9 @@
              
              <!-- Message Content -->
              <!-- 
-               Lógica simple:
-               - Si tiene message_text: mostrar message_text (burbuja blanca, izquierda) = mensaje del cliente
-               - Si tiene response: mostrar response (burbuja verde, derecha) = respuesta del bot
+               Lógica CORRECTA:
+               - Si tiene message_text: mostrar message_text (burbuja BLANCA, IZQUIERDA) = mensaje del CLIENTE
+               - Si tiene response: mostrar response (burbuja VERDE, DERECHA) = respuesta del BOT
              -->
              <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;">
                {{ (conv as any).message_text 
