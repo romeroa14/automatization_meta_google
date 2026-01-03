@@ -35,32 +35,32 @@
           <q-badge color="grey-3" text-color="black" label="Hoy" />
        </div>
 
-       <template v-for="conv in leadStore.conversations" :key="(conv as any).id">
-          <!-- Mensaje del cliente (message_text) - Burbuja BLANCA, IZQUIERDA -->
-          <div v-if="(conv as any).message_text" 
+       <template v-for="msg in flattenedMessages" :key="msg.key">
+          <!-- Mensaje del cliente - Burbuja BLANCA, IZQUIERDA -->
+          <div v-if="msg.isClient" 
                class="row q-mb-sm justify-start">
              <div class="chat-bubble shadow-1 relative-position chat-bubble-client">
-                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText((conv as any).message_text)"></div>
+                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText(msg.text)"></div>
                 <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
-                   <span class="q-mr-xs">{{ formatDate((conv as any).timestamp || (conv as any).created_at) }}</span>
+                   <span class="q-mr-xs">{{ formatDate(msg.timestamp) }}</span>
                 </div>
              </div>
           </div>
 
-          <!-- Respuesta del bot (response) - Burbuja VERDE, DERECHA -->
-          <div v-if="(conv as any).response" 
+          <!-- Mensaje del bot - Burbuja VERDE, DERECHA -->
+          <div v-else 
                class="row q-mb-sm justify-end">
              <div class="chat-bubble shadow-1 relative-position chat-bubble-bot">
-                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText((conv as any).response)"></div>
+                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText(msg.text)"></div>
                 <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
-                   <span class="q-mr-xs">{{ formatDate((conv as any).timestamp || (conv as any).created_at) }}</span>
+                   <span class="q-mr-xs">{{ formatDate(msg.timestamp) }}</span>
                    <q-icon name="done_all" color="blue" size="14px" />
                 </div>
              </div>
           </div>
        </template>
 
-       <div v-if="!leadStore.conversations.length" class="text-center q-pa-xl text-grey-8">
+       <div v-if="!flattenedMessages.length" class="text-center q-pa-xl text-grey-8">
           <q-icon name="chat_bubble_outline" size="48px" class="q-mb-md" />
           <div>Inicia la conversación con <strong>{{ (leadStore.currentLead as any)?.client_name }}</strong></div>
           <div class="text-caption">Los mensajes se sincronizarán con WhatsApp.</div>
@@ -126,11 +126,56 @@ const $q = useQuasar();
 
 const newMessage = ref('');
 
+const flattenedMessages = computed(() => {
+    const messages: Array<{
+        key: string;
+        text: string;
+        timestamp: string;
+        isClient: boolean;
+        conversationId: number;
+    }> = [];
+
+    leadStore.conversations.forEach((conv: any) => {
+        // Agregar mensaje del cliente si existe
+        if (conv.message_text) {
+            messages.push({
+                key: `${conv.id}-client`,
+                text: conv.message_text,
+                timestamp: conv.timestamp || conv.created_at,
+                isClient: true,
+                conversationId: conv.id,
+            });
+        }
+
+        // Agregar respuesta del bot si existe
+        if (conv.response) {
+            messages.push({
+                key: `${conv.id}-bot`,
+                text: conv.response,
+                timestamp: conv.timestamp || conv.created_at,
+                isClient: false,
+                conversationId: conv.id,
+            });
+        }
+    });
+
+    // Ordenar por timestamp (los mensajes del cliente van primero que las respuestas del bot del mismo conversation_id)
+    return messages.sort((a, b) => {
+        const timeA = new Date(a.timestamp).getTime();
+        const timeB = new Date(b.timestamp).getTime();
+        
+        // Si tienen el mismo timestamp y mismo conversationId, cliente va primero
+        if (timeA === timeB && a.conversationId === b.conversationId) {
+            return a.isClient ? -1 : 1;
+        }
+        
+        return timeA - timeB;
+    });
+});
+
 const aiSuggestion = computed(() => {
     if (!leadStore.conversations.length) return null;
     const lastMsg = leadStore.conversations[leadStore.conversations.length - 1] as any;
-    // Show suggestion only if it's a client message (has message_text) and has a response (suggestion)
-    // AND if we haven't replied yet (naive check: last message is from client)
     if (lastMsg?.message_text && lastMsg?.response) {
         return lastMsg.response;
     }
