@@ -39,10 +39,8 @@
           <!-- Mensaje del cliente (message_text) - Burbuja BLANCA, IZQUIERDA -->
           <div v-if="(conv as any).message_text" 
                class="row q-mb-sm justify-start">
-             <div class="chat-bubble shadow-1 relative-position bg-white">
-                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;">
-                  {{ decodeEscapedText((conv as any).message_text) }}
-                </div>
+             <div class="chat-bubble shadow-1 relative-position chat-bubble-client">
+                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText((conv as any).message_text)"></div>
                 <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
                    <span class="q-mr-xs">{{ formatDate((conv as any).timestamp || (conv as any).created_at) }}</span>
                 </div>
@@ -52,10 +50,8 @@
           <!-- Respuesta del bot (response) - Burbuja VERDE, DERECHA -->
           <div v-if="(conv as any).response" 
                class="row q-mb-sm justify-end">
-             <div class="chat-bubble shadow-1 relative-position bg-green-1">
-                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;">
-                  {{ decodeEscapedText((conv as any).response) }}
-                </div>
+             <div class="chat-bubble shadow-1 relative-position chat-bubble-bot">
+                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText((conv as any).response)"></div>
                 <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
                    <span class="q-mr-xs">{{ formatDate((conv as any).timestamp || (conv as any).created_at) }}</span>
                    <q-icon name="done_all" color="blue" size="14px" />
@@ -172,25 +168,36 @@ const formatDate = (val: string) => {
 /**
  * Decodificar caracteres escapados en el texto
  * Convierte \n a saltos de línea reales, \u00a1 a caracteres Unicode, etc.
+ * También convierte Markdown básico a HTML
  */
 const decodeEscapedText = (text: string): string => {
     if (!text) return '';
     
-    // Decodificar caracteres Unicode escapados (\u00a1 -> ¡, etc.)
     try {
-        // Primero decodificar JSON escapes
+        // Si el texto ya está decodificado (no tiene escapes), devolverlo tal cual
+        if (typeof text !== 'string') {
+            text = String(text);
+        }
+        
+        // Decodificar caracteres Unicode primero (\u00a1 -> ¡, \u00bf -> ¿, etc.)
+        text = text.replace(/\\u([0-9a-fA-F]{4})/g, (match, hex) => {
+            return String.fromCharCode(parseInt(hex, 16));
+        });
+        
+        // Decodificar secuencias de escape JSON
         text = text.replace(/\\n/g, '\n')
                    .replace(/\\t/g, '\t')
                    .replace(/\\r/g, '\r')
                    .replace(/\\"/g, '"')
                    .replace(/\\\\/g, '\\');
         
-        // Decodificar caracteres Unicode (\u00a1 -> ¡)
-        text = text.replace(/\\u([0-9a-fA-F]{4})/g, (match, hex) => {
-            return String.fromCharCode(parseInt(hex, 16));
-        });
+        // Convertir Markdown básico a HTML (opcional, para mejor visualización)
+        // **texto** -> <strong>texto</strong>
+        text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        
     } catch (e) {
-        console.warn('[LeadConversations] Error decoding text:', e);
+        console.warn('[LeadConversations] Error decoding text:', e, text);
+        return text; // Devolver texto original si hay error
     }
     
     return text;
@@ -300,6 +307,18 @@ const sendMessage = async () => {
     box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
 }
 
+/* Burbuja del cliente - BLANCA, IZQUIERDA */
+.chat-bubble-client {
+    background-color: #ffffff !important; /* Blanco puro */
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Burbuja del bot - VERDE, DERECHA */
+.chat-bubble-bot {
+    background-color: #dcf8c6 !important; /* WhatsApp green */
+}
+
+/* Mantener compatibilidad con bg-green-1 si se usa en otro lugar */
 .bg-green-1 {
     background-color: #dcf8c6 !important; /* WhatsApp green */
 }
