@@ -139,10 +139,8 @@ const flattenedMessages = computed(() => {
     leadStore.conversations.forEach((conv: any, index: number) => {
         const baseTimestamp = new Date(conv.timestamp || conv.created_at);
         
-        // CASO 1: Registro tiene AMBOS campos (message_text Y response) - Datos viejos
-        // Dividir en dos mensajes separados
-        if (conv.message_text && conv.response) {
-            // Mensaje del cliente (primero)
+        // Si hay message_text, agregar como mensaje del cliente (BLANCO, IZQUIERDA)
+        if (conv.message_text) {
             messages.push({
                 key: `${conv.id}-client`,
                 text: conv.message_text,
@@ -151,8 +149,11 @@ const flattenedMessages = computed(() => {
                 conversationId: conv.id,
                 order: index * 2,
             });
-            
-            // Respuesta del bot (después, +1ms)
+        }
+        
+        // Si hay response, agregar como respuesta del bot (VERDE, DERECHA)
+        if (conv.response) {
+            // Bot responde 1ms después para mantener orden
             const botTimestamp = new Date(baseTimestamp.getTime() + 1);
             messages.push({
                 key: `${conv.id}-bot`,
@@ -163,31 +164,9 @@ const flattenedMessages = computed(() => {
                 order: index * 2 + 1,
             });
         }
-        // CASO 2: Solo mensaje del cliente (is_client_message: true)
-        else if (conv.message_text && !conv.response) {
-            messages.push({
-                key: `${conv.id}-client`,
-                text: conv.message_text,
-                timestamp: baseTimestamp,
-                isClient: true,
-                conversationId: conv.id,
-                order: index * 2,
-            });
-        }
-        // CASO 3: Solo respuesta del bot (is_client_message: false)
-        else if (!conv.message_text && conv.response) {
-            messages.push({
-                key: `${conv.id}-bot`,
-                text: conv.response,
-                timestamp: baseTimestamp,
-                isClient: false,
-                conversationId: conv.id,
-                order: index * 2 + 1,
-            });
-        }
     });
 
-    // Ordenar por timestamp y luego por order para garantizar: cliente -> bot
+    // Ordenar por timestamp y luego por order
     return messages.sort((a, b) => {
         const timeDiff = a.timestamp.getTime() - b.timestamp.getTime();
         if (timeDiff !== 0) return timeDiff;
