@@ -36,6 +36,9 @@
        </div>
 
        <template v-for="msg in flattenedMessages" :key="msg.key">
+          <!-- DEBUG: Log antes de renderizar -->
+          <div style="display: none;">{{ console.log('🎨 [RENDER]', msg.key, 'isClient:', msg.isClient, 'text:', msg.text.substring(0, 30)) }}</div>
+          
           <!-- Mensaje del cliente - Burbuja BLANCA, IZQUIERDA -->
           <div v-if="msg.isClient" 
                class="row q-mb-sm justify-start">
@@ -199,6 +202,18 @@ onMounted(async () => {
     const leadId = route.params.id as string;
     await leadStore.fetchLead(leadId);
     await leadStore.fetchConversations(leadId);
+    
+    // Log para verificar datos recibidos
+    console.log('🔍 [FRONTEND] Conversations recibidas:', leadStore.conversations);
+    leadStore.conversations.forEach((conv: any) => {
+        console.log(`📊 [CONV ${conv.id}]`, {
+            has_message_text: !!conv.message_text,
+            has_response: !!conv.response,
+            message_text: conv.message_text?.substring(0, 50),
+            response: conv.response?.substring(0, 50)
+        });
+    });
+    
     scrollToBottom();
     
     // Refrescar conversaciones cada 3 segundos para ver nuevas respuestas del bot
