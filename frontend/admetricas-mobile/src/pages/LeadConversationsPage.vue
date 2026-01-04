@@ -138,11 +138,12 @@ const flattenedMessages = computed(() => {
 
     const cleanTimestamp = (ts: string | null): Date => {
         if (!ts) return new Date();
-        // Limpiar comillas escapadas del timestamp: "\"2026-01-04T20:48:50.453Z\"" -> 2026-01-04T20:48:50.453Z
         const cleaned = ts.replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '');
         const parsed = new Date(cleaned);
         return isNaN(parsed.getTime()) ? new Date() : parsed;
     };
+
+    console.log('[DEBUG] conversations raw:', leadStore.conversations);
 
     leadStore.conversations.forEach((conv: any, index: number) => {
         const baseTimestamp = cleanTimestamp(conv.timestamp) || new Date(conv.created_at);
@@ -161,7 +162,6 @@ const flattenedMessages = computed(() => {
         
         // Si hay response, agregar como respuesta del bot (VERDE, DERECHA)
         if (conv.response) {
-            // Bot responde 1ms después para mantener orden
             const botTimestamp = new Date(baseTimestamp.getTime() + 1);
             messages.push({
                 key: `${conv.id}-bot`,
@@ -173,6 +173,8 @@ const flattenedMessages = computed(() => {
             });
         }
     });
+
+    console.log('[DEBUG] flattenedMessages:', messages.map(m => ({ key: m.key, isClient: m.isClient, text: m.text.substring(0, 30) })));
 
     // Ordenar por order para mantener secuencia cliente -> bot
     return messages.sort((a, b) => a.order - b.order);
