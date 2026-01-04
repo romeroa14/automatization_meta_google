@@ -130,46 +130,47 @@ const flattenedMessages = computed(() => {
     const messages: Array<{
         key: string;
         text: string;
-        timestamp: string;
+        timestamp: Date;
         isClient: boolean;
         conversationId: number;
+        order: number;
     }> = [];
 
-    leadStore.conversations.forEach((conv: any) => {
-        // Agregar mensaje del cliente si existe
+    leadStore.conversations.forEach((conv: any, index: number) => {
+        const baseTimestamp = new Date(conv.timestamp || conv.created_at);
+        
+        // Agregar mensaje del cliente si existe (primero cronológicamente)
         if (conv.message_text) {
             messages.push({
                 key: `${conv.id}-client`,
                 text: conv.message_text,
-                timestamp: conv.timestamp || conv.created_at,
+                timestamp: baseTimestamp,
                 isClient: true,
                 conversationId: conv.id,
+                order: index * 2, // Par para cliente
             });
         }
 
-        // Agregar respuesta del bot si existe
+        // Agregar respuesta del bot si existe (después cronológicamente)
         if (conv.response) {
+            // Bot responde 1ms después para mantener orden
+            const botTimestamp = new Date(baseTimestamp.getTime() + 1);
             messages.push({
                 key: `${conv.id}-bot`,
                 text: conv.response,
-                timestamp: conv.timestamp || conv.created_at,
+                timestamp: botTimestamp,
                 isClient: false,
                 conversationId: conv.id,
+                order: index * 2 + 1, // Impar para bot
             });
         }
     });
 
-    // Ordenar por timestamp (los mensajes del cliente van primero que las respuestas del bot del mismo conversation_id)
+    // Ordenar por timestamp y luego por order para garantizar: cliente -> bot
     return messages.sort((a, b) => {
-        const timeA = new Date(a.timestamp).getTime();
-        const timeB = new Date(b.timestamp).getTime();
-        
-        // Si tienen el mismo timestamp y mismo conversationId, cliente va primero
-        if (timeA === timeB && a.conversationId === b.conversationId) {
-            return a.isClient ? -1 : 1;
-        }
-        
-        return timeA - timeB;
+        const timeDiff = a.timestamp.getTime() - b.timestamp.getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return a.order - b.order;
     });
 });
 
@@ -206,7 +207,7 @@ onMounted(async () => {
     });
 });
 
-const formatDate = (val: string) => {
+const formatDate = (val: string | Date) => {
     return date.formatDate(val, 'HH:mm');
 };
 
