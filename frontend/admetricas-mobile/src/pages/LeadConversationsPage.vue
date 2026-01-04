@@ -35,32 +35,32 @@
           <q-badge color="grey-3" text-color="black" label="Hoy" />
        </div>
 
-       <template v-for="conv in (leadStore.conversations as any[])" :key="conv.id">
-          <!-- Mensaje del cliente (message_text) - Burbuja BLANCA, IZQUIERDA -->
-          <div v-if="conv.message_text" 
+       <template v-for="msg in flattenedMessages" :key="msg.key">
+          <!-- Mensaje del cliente - Burbuja BLANCA, IZQUIERDA -->
+          <div v-if="msg.isClient" 
                class="row q-mb-sm justify-start">
              <div class="chat-bubble shadow-1 relative-position chat-bubble-client">
-                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText(conv.message_text)"></div>
+                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText(msg.text)"></div>
                 <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
-                   <span class="q-mr-xs">{{ formatDate(conv.timestamp || conv.created_at) }}</span>
+                   <span class="q-mr-xs">{{ formatDate(msg.timestamp) }}</span>
                 </div>
              </div>
           </div>
 
-          <!-- Respuesta del bot (response) - Burbuja VERDE, DERECHA -->
-          <div v-if="conv.response" 
+          <!-- Respuesta del bot - Burbuja VERDE, DERECHA -->
+          <div v-else 
                class="row q-mb-sm justify-end">
              <div class="chat-bubble shadow-1 relative-position chat-bubble-bot">
-                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText(conv.response)"></div>
+                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText(msg.text)"></div>
                 <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
-                   <span class="q-mr-xs">{{ formatDate(conv.timestamp || conv.created_at) }}</span>
+                   <span class="q-mr-xs">{{ formatDate(msg.timestamp) }}</span>
                    <q-icon name="done_all" color="blue" size="14px" />
                 </div>
              </div>
           </div>
        </template>
 
-       <div v-if="!leadStore.conversations.length" class="text-center q-pa-xl text-grey-8">
+       <div v-if="!flattenedMessages.length" class="text-center q-pa-xl text-grey-8">
           <q-icon name="chat_bubble_outline" size="48px" class="q-mb-md" />
           <div>Inicia la conversación con <strong>{{ (leadStore.currentLead as any)?.client_name }}</strong></div>
           <div class="text-caption">Los mensajes se sincronizarán con WhatsApp.</div>
@@ -136,8 +136,16 @@ const flattenedMessages = computed(() => {
         order: number;
     }> = [];
 
+    const cleanTimestamp = (ts: string | null): Date => {
+        if (!ts) return new Date();
+        // Limpiar comillas escapadas del timestamp: "\"2026-01-04T20:48:50.453Z\"" -> 2026-01-04T20:48:50.453Z
+        const cleaned = ts.replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '');
+        const parsed = new Date(cleaned);
+        return isNaN(parsed.getTime()) ? new Date() : parsed;
+    };
+
     leadStore.conversations.forEach((conv: any, index: number) => {
-        const baseTimestamp = new Date(conv.timestamp || conv.created_at);
+        const baseTimestamp = cleanTimestamp(conv.timestamp) || new Date(conv.created_at);
         
         // Si hay message_text, agregar como mensaje del cliente (BLANCO, IZQUIERDA)
         if (conv.message_text) {
@@ -166,12 +174,8 @@ const flattenedMessages = computed(() => {
         }
     });
 
-    // Ordenar por timestamp y luego por order
-    return messages.sort((a, b) => {
-        const timeDiff = a.timestamp.getTime() - b.timestamp.getTime();
-        if (timeDiff !== 0) return timeDiff;
-        return a.order - b.order;
-    });
+    // Ordenar por order para mantener secuencia cliente -> bot
+    return messages.sort((a, b) => a.order - b.order);
 });
 
 const aiSuggestion = computed(() => {
