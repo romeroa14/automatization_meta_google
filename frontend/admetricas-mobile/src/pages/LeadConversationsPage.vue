@@ -35,32 +35,32 @@
           <q-badge color="grey-3" text-color="black" label="Hoy" />
        </div>
 
-       <template v-for="msg in flattenedMessages" :key="msg.key">
-          <!-- Mensaje del cliente - Burbuja BLANCA, IZQUIERDA -->
-          <div v-if="msg.isClient" 
+       <template v-for="conv in (leadStore.conversations as any[])" :key="conv.id">
+          <!-- Mensaje del cliente (message_text) - Burbuja BLANCA, IZQUIERDA -->
+          <div v-if="conv.message_text" 
                class="row q-mb-sm justify-start">
              <div class="chat-bubble shadow-1 relative-position chat-bubble-client">
-                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText(msg.text)"></div>
+                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText(conv.message_text)"></div>
                 <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
-                   <span class="q-mr-xs">{{ formatDate(msg.timestamp) }}</span>
+                   <span class="q-mr-xs">{{ formatDate(conv.timestamp || conv.created_at) }}</span>
                 </div>
              </div>
           </div>
 
-          <!-- Mensaje del bot - Burbuja VERDE, DERECHA -->
-          <div v-else 
+          <!-- Respuesta del bot (response) - Burbuja VERDE, DERECHA -->
+          <div v-if="conv.response" 
                class="row q-mb-sm justify-end">
              <div class="chat-bubble shadow-1 relative-position chat-bubble-bot">
-                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText(msg.text)"></div>
+                <div class="text-body2 text-grey-10 q-pb-xs" style="white-space: pre-wrap;" v-html="decodeEscapedText(conv.response)"></div>
                 <div class="row justify-end items-center" style="opacity: 0.7; font-size: 11px;">
-                   <span class="q-mr-xs">{{ formatDate(msg.timestamp) }}</span>
+                   <span class="q-mr-xs">{{ formatDate(conv.timestamp || conv.created_at) }}</span>
                    <q-icon name="done_all" color="blue" size="14px" />
                 </div>
              </div>
           </div>
        </template>
 
-       <div v-if="!flattenedMessages.length" class="text-center q-pa-xl text-grey-8">
+       <div v-if="!leadStore.conversations.length" class="text-center q-pa-xl text-grey-8">
           <q-icon name="chat_bubble_outline" size="48px" class="q-mb-md" />
           <div>Inicia la conversación con <strong>{{ (leadStore.currentLead as any)?.client_name }}</strong></div>
           <div class="text-caption">Los mensajes se sincronizarán con WhatsApp.</div>
