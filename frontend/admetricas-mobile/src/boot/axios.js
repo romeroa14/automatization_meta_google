@@ -7,7 +7,39 @@ import axios from 'axios'
 // good idea to move this instance creation inside of the
 // "export default () => {}" function below (which runs individually
 // for each client)
-const api = axios.create({ baseURL: 'http://localhost:8000/api' })
+// Configuración de API URL según el entorno
+// En desarrollo: http://localhost:8000/api
+// En producción: https://admetricas.com/api
+const getApiBaseUrl = () => {
+  // Verificar si estamos en el navegador
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname
+    
+    // Si estamos en desarrollo (localhost, 127.0.0.1, o IP local)
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('192.168.')) {
+      return 'http://localhost:8000/api'
+    }
+    
+    // Si estamos en producción (app.admetricas.com)
+    // Usar el dominio del backend
+    return 'https://admetricas.com/api'
+  }
+  
+  // Fallback por defecto (para SSR o casos especiales)
+  return 'https://admetricas.com/api'
+}
+
+const api = axios.create({ baseURL: getApiBaseUrl() })
+
+// Nota: El header Origin se envía automáticamente por el navegador en peticiones CORS
+// No podemos establecerlo manualmente (el navegador lo bloquea por seguridad)
+
+// Log para debugging (siempre activo para verificar en producción)
+if (typeof window !== 'undefined') {
+  console.log('[Axios] API Base URL:', api.defaults.baseURL)
+  console.log('[Axios] Current hostname:', window.location.hostname)
+  console.log('[Axios] Origin:', window.location.origin)
+}
 
 export default boot(({ app }) => {
     // Restore token from localStorage on app boot

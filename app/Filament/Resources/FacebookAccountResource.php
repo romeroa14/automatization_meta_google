@@ -86,7 +86,7 @@ class FacebookAccountResource extends Resource
                             ->helperText('Selecciona la cuenta publicitaria que quieres usar.')
                             ->placeholder('Selecciona una cuenta publicitaria')
                             ->searchable()
-                            ->required()
+                            // ->required()
                             ->live()
                             ->options(function ($get) {
                                 // Mostrar opciones almacenadas temporalmente en el estado
@@ -177,7 +177,7 @@ class FacebookAccountResource extends Resource
                             ->helperText('Selecciona una fan page de la cuenta publicitaria seleccionada.')
                             ->placeholder('Selecciona una fan page')
                             ->searchable()
-                            ->required()
+                            // ->required()
                             ->live()
                             ->visible(fn ($get) => !empty($get('selected_ad_account_id')))
                             ->options(function ($get) {
@@ -524,7 +524,18 @@ class FacebookAccountResource extends Resource
                             ->label('Activa')
                             ->default(true)
                             ->helperText('Activa o desactiva esta cuenta'),
-                    ]),
+                        Forms\Components\Toggle::make('is_oauth_primary')
+                            ->label('Cuenta Principal para OAuth')
+                            ->default(false)
+                            ->helperText('Marcar como cuenta principal para el login de clientes con Facebook. Solo una cuenta debe tener esto activo.')
+                            ->afterStateUpdated(function ($state, $record) {
+                                // Si se activa, desactivar las demás
+                                if ($state && $record) {
+                                    \App\Models\FacebookAccount::where('id', '!=', $record->id)
+                                        ->update(['is_oauth_primary' => false]);
+                                }
+                            }),
+                    ])->columns(2),
             ]);
     }
 
@@ -550,12 +561,20 @@ class FacebookAccountResource extends Resource
                     ->copyMessage('ID copiado al portapapeles'),
                 
                 IconColumn::make('is_active')
-                    ->label('Estado')
+                    ->label('Activa')
                     ->boolean()
                     ->trueIcon('heroicon-o-check-circle')
                     ->falseIcon('heroicon-o-x-circle')
                     ->trueColor('success')
                     ->falseColor('danger'),
+
+                IconColumn::make('is_oauth_primary')
+                    ->label('OAuth Principal')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-star')
+                    ->falseIcon('heroicon-o-minus')
+                    ->trueColor('warning')
+                    ->falseColor('gray'),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Creado')

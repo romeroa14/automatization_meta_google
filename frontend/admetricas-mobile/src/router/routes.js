@@ -8,6 +8,7 @@ const routes = [
       { path: 'leads', component: () => import('pages/LeadsPage.vue') },
       { path: 'leads/:id/conversations', component: () => import('pages/LeadConversationsPage.vue') },
       { path: 'kanban', component: () => import('pages/KanbanPage.vue') },
+      { path: 'profile', component: () => import('pages/ProfilePage.vue') },
     ],
   },
   {
@@ -15,6 +16,13 @@ const routes = [
     component: () => import('layouts/LoginLayout.vue'),
     children: [
       { path: '', component: () => import('pages/LoginPage.vue') }
+    ]
+  },
+  {
+    path: '/auth/facebook',
+    component: () => import('layouts/MainLayout.vue'),
+    children: [
+      { path: 'callback', component: () => import('pages/FacebookCallbackPage.vue') }
     ]
   },
 

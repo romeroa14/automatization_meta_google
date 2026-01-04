@@ -15,6 +15,16 @@
         <q-item-label header> Essential Links </q-item-label>
 
         <EssentialLink v-for="link in linksList" :key="link.title" v-bind="link" />
+        <q-item clickable v-ripple to="/profile" active-class="text-primary">
+          <q-item-section avatar>
+            <q-icon name="settings" />
+          </q-item-section>
+          <q-item-section>
+            <q-item-label>Configuración</q-item-label>
+            <q-item-label caption>Perfil y WhatsApp</q-item-label>
+          </q-item-section>
+        </q-item>
+
       </q-list>
     </q-drawer>
 

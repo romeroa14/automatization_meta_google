@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -33,6 +34,12 @@ return new class extends Migration
             $table->string('message_sentiment')->nullable();
             $table->json('payload')->nullable();
             $table->timestamps();
+            
+            DB::statement('
+            CREATE UNIQUE INDEX IF NOT EXISTS conversations_message_id_unique 
+            ON conversations (message_id) 
+            WHERE message_id IS NOT NULL
+        ');
         });
     }
 

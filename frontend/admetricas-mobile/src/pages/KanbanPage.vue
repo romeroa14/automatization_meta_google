@@ -32,7 +32,17 @@
               @click="viewLead(element.id)"
             >
               <q-card-section class="q-pa-sm">
-                <div class="text-subtitle2 text-weight-bold">{{ element.client_name }}</div>
+                <div class="row items-center justify-between">
+                     <div class="text-subtitle2 text-weight-bold">{{ element.client_name }}</div>
+                     <div>
+                         <q-icon v-if="Number(element.confidence_score) >= 0.8" name="local_fire_department" color="orange" size="xs">
+                             <q-tooltip>Hot Lead!</q-tooltip>
+                         </q-icon>
+                         <q-icon v-if="element.intent === 'reclamo'" name="warning" color="red" size="xs">
+                             <q-tooltip>Requiere Atención</q-tooltip>
+                         </q-icon>
+                     </div>
+                </div>
                 <div class="text-caption text-grey-7">
                   <q-icon name="phone" size="xs" /> {{ element.phone_number }}
                 </div>
@@ -57,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useLeadStore } from 'stores/lead-store';
 import { useRouter } from 'vue-router';
 import draggable from 'vuedraggable';
@@ -74,6 +84,27 @@ const stages = [
   { value: 'interesado', label: 'Interesado', color: '#2196f3' },
   { value: 'cliente', label: 'Cliente', color: '#4caf50' },
 ];
+
+// Reactive object to hold leads grouped by stage
+const leadsByStage = ref<Record<string, any[]>>({});
+
+// Initialize leads grouped by stage, sorted by confidence score (Smart Sort)
+const initializeLeadsByStage = () => {
+  const grouped: Record<string, any[]> = {};
+  stages.forEach((stage) => {
+    grouped[stage.value] = leadStore.leads
+      .filter((lead: any) => lead.stage === stage.value)
+      .sort((a: any, b: any) => parseFloat(b.confidence_score || 0) - parseFloat(a.confidence_score || 0));
+  });
+  leadsByStage.value = grouped;
+};
+
+const getLeadsByStage = (stageValue: string) => {
+  return leadsByStage.value[stageValue] || [];
+};
+
+// Watch for changes in the store
+watch(() => leadStore.leads, initializeLeadsByStage, { deep: true });
 
 onMounted(async () => {
   await leadStore.fetchLeads();
