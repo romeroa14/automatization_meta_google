@@ -6,17 +6,16 @@ WORKDIR /app
 # Copiar package primero para cache de npm
 COPY package*.json ./
 
-# Install dependencies con cache
-RUN --mount=type=cache,target=/app/node_modules \
-    npm install --legacy-peer-deps --ignore-scripts
+# Install dependencies SIN cache primero (para asegurar que se instala quasar)
+RUN npm install --legacy-peer-deps
 
 # Copiar resto del código
 COPY . .
 
-# Preparar Quasar
-RUN npx quasar prepare
+# Preparar Quasar - usar el binario directo
+RUN ./node_modules/.bin/quasar prepare
 
-# Build con cache
+# Build
 RUN npm run build
 
 # Production Stage
