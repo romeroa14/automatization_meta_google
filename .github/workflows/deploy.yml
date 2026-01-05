@@ -37,8 +37,8 @@ jobs:
               git pull origin master
 
               # ========== BACKEND ==========
-              # Instalar dependencias (sin sudo)
-              docker exec -u application -w /var/www/html laravel-php composer install --no-dev --optimize-autoloader
+              # Actualizar dependencias (composer update para resolver conflictos de versiones)
+              docker exec -u application -w /var/www/html laravel-php composer update --no-dev --optimize-autoloader
               
               # Migraciones
               docker exec -u application -w /var/www/html laravel-php php artisan migrate --force
@@ -56,11 +56,11 @@ jobs:
               # Habilitar BuildKit
               export DOCKER_BUILDKIT=1
 
-              # Reconstruir imagen CON cache
-              docker-compose -f docker-compose.frontend.yml build --progress=plain frontend-app
+              # Reconstruir imagen CON cache (usar "docker compose" no "docker-compose")
+              docker compose -f docker-compose.frontend.yml build --progress=plain frontend-app
 
               # Levantar nuevo contenedor
-              docker-compose -f docker-compose.frontend.yml up -d frontend-app
+              docker compose -f docker-compose.frontend.yml up -d frontend-app
               
               echo "✅ Frontend actualizado correctamente"
 
