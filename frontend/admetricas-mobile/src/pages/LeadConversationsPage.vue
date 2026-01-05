@@ -92,7 +92,7 @@
           bg-color="white"
           rounded
           outlined
-          placeholder="Escribe Un Mensaje"
+          placeholder="Escribe Un Mensajee"
           class="col q-mx-sm"
           autogrow
           input-class="q-px-sm"
