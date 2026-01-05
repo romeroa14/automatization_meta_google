@@ -33,10 +33,11 @@ jobs:
               git reset --hard HEAD
               # Eliminar archivos untracked que causan colisión (git clean respeta .gitignore, así que .env está seguro)
               git clean -fd
-              
+
               # Pull del código
               git pull origin master
-              
+
+              # ========== BACKEND ==========
               # Instalar dependencias (en el container)
               sudo docker exec -u application -w /var/www/html laravel-php composer install --no-dev --optimize-autoloader
               
@@ -46,11 +47,25 @@ jobs:
               sudo docker exec -u application -w /var/www/html laravel-php php artisan cache:clear
               sudo docker exec -u application -w /var/www/html laravel-php php artisan route:clear
               sudo docker exec -u application -w /var/www/html laravel-php php artisan view:clear
+
+              # ========== FRONTEND ==========
+              echo "🚀 Actualizando frontend..."
               
+              # Detener contenedor viejo del frontend
+              sudo docker rm -f frontend-app || true
+              
+              # Reconstruir imagen del frontend SIN cache
+              sudo docker-compose -f docker-compose.frontend.yml build --no-cache frontend-app
+              
+              # Levantar nuevo contenedor
+              sudo docker-compose -f docker-compose.frontend.yml up -d frontend-app
+              
+              echo "✅ Frontend actualizado correctamente"
+
               # Levantar sitio
               sudo docker exec -u application -w /var/www/html laravel-php php artisan up
-              
+
               # Reiniciar contenedor de PHP para limpiar OPcache
               sudo docker restart laravel-php
-              
+
               echo "✅ Despliegue automático completado."
