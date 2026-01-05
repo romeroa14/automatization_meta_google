@@ -373,6 +373,8 @@ const sendMessage = async () => {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    margin: 0;
+    padding: 0;
 }
 
 /* Header - Sticky */
@@ -380,13 +382,17 @@ const sendMessage = async () => {
     flex-shrink: 0;
     min-height: 60px;
     z-index: 10;
+    background-color: #f5f5f5;
 }
 
 .sticky-header {
     position: sticky;
-    top: 48px; /* Altura del q-header de Quasar */
+    top: 0;
     z-index: 100;
-    background-color: #f5f5f5;
+    background-color: #f5f5f5 !important;
+    margin: 0;
+    padding: 0;
+    width: 100%;
 }
 
 /* Chat Area - Scrollable */
@@ -444,7 +450,7 @@ const sendMessage = async () => {
 /* Responsive Design */
 @media (max-width: 600px) {
     .sticky-header {
-        top: 48px; /* Mantener debajo del header de la app en móvil también */
+        top: 0;
     }
     
     .chat-header {
