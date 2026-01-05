@@ -48,14 +48,19 @@ jobs:
               sudo docker exec -u application -w /var/www/html laravel-php php artisan route:clear
               sudo docker exec -u application -w /var/www/html laravel-php php artisan view:clear
 
-              # ========== FRONTEND ==========
-              echo "🚀 Actualizando frontend..."
+              # ========== FRONTEND (RÁPIDO CON CACHE) ==========
+              echo "🚀 Actualizando frontend (con cache)..."
               
               # Detener contenedor viejo del frontend
               sudo docker rm -f frontend-app || true
               
-              # Reconstruir imagen del frontend SIN cache
-              sudo docker-compose -f docker-compose.frontend.yml build --no-cache frontend-app
+              # Habilitar BuildKit para cache de layers
+              export DOCKER_BUILDKIT=1
+              export BUILDKIT_PROGRESS=plain
+              
+              # Reconstruir imagen CON cache (más rápido que --no-cache)
+              # Los layers de npm se cachean, solo recompila lo cambiado
+              sudo docker-compose -f docker-compose.frontend.yml build --progress=plain frontend-app
               
               # Levantar nuevo contenedor
               sudo docker-compose -f docker-compose.frontend.yml up -d frontend-app
