@@ -1,7 +1,7 @@
 <template>
   <q-page class="flex column lead-chat-page">
-    <!-- Header: WhatsApp Style -->
-    <div class="chat-header bg-grey-2 shadow-1">
+    <!-- Header: WhatsApp Style - Sticky -->
+    <div class="chat-header bg-grey-2 shadow-1 sticky-header">
       <div class="row items-center justify-between q-px-sm q-py-xs">
         <div class="row items-center no-wrap" @click="$router.back()">
           <q-btn flat round dense icon="arrow_back" color="grey-8" class="q-mr-xs" />
@@ -375,11 +375,18 @@ const sendMessage = async () => {
     flex-direction: column;
 }
 
-/* Header */
+/* Header - Sticky */
 .chat-header {
     flex-shrink: 0;
     min-height: 60px;
     z-index: 10;
+}
+
+.sticky-header {
+    position: sticky;
+    top: 48px; /* Altura del q-header de Quasar */
+    z-index: 100;
+    background-color: #f5f5f5;
 }
 
 /* Chat Area - Scrollable */
@@ -436,6 +443,10 @@ const sendMessage = async () => {
 
 /* Responsive Design */
 @media (max-width: 600px) {
+    .sticky-header {
+        top: 48px; /* Mantener debajo del header de la app en móvil también */
+    }
+    
     .chat-header {
         min-height: 56px;
     }
