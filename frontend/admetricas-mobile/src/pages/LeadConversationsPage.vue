@@ -1,35 +1,38 @@
 <template>
   <q-page class="flex column lead-chat-page">
     <!-- Header: WhatsApp Style -->
-    <div class="chat-header q-pa-sm bg-grey-2 row items-center justify-between shadow-1">
-      <div class="row items-center cursor-pointer" @click="$router.back()">
-        <q-btn flat round dense icon="arrow_back" color="grey-8" />
-        <q-avatar size="40px" class="q-ml-sm">
-           <div class="bg-primary text-white row flex-center full-width full-height text-weight-bold" style="border-radius: 50%">
-              {{ ((leadStore.currentLead as any)?.client_name?.charAt(0) || '?').toUpperCase() }}
-           </div>
-        </q-avatar>
-        <div class="q-ml-md">
-          <div class="text-subtitle1 text-weight-bold text-grey-9 q-mb-none lh-120">
-            {{ (leadStore.currentLead as any)?.client_name || 'Cargando...' }}
-          </div>
-          <div class="text-caption text-grey-7 row items-center">
-             <span v-if="(leadStore.currentLead as any)?.intent" class="q-mr-xs text-capitalize">
-                {{ (leadStore.currentLead as any)?.intent }}
-             </span>
-             <span v-else>En línea</span>
+    <div class="chat-header bg-grey-2 shadow-1">
+      <div class="row items-center justify-between q-px-sm q-py-xs">
+        <div class="row items-center no-wrap" @click="$router.back()">
+          <q-btn flat round dense icon="arrow_back" color="grey-8" class="q-mr-xs" />
+          <q-avatar size="40px" class="q-mr-sm">
+             <div class="bg-primary text-white row flex-center full-width full-height text-weight-bold" style="border-radius: 50%">
+                {{ ((leadStore.currentLead as any)?.client_name?.charAt(0) || '?').toUpperCase() }}
+             </div>
+          </q-avatar>
+          <div class="col-auto">
+            <div class="text-subtitle2 text-weight-bold text-grey-9 q-mb-none lh-120 ellipsis">
+              {{ (leadStore.currentLead as any)?.client_name || 'Cargando...' }}
+            </div>
+            <div class="text-caption text-grey-7">
+               <span v-if="(leadStore.currentLead as any)?.intent" class="text-capitalize">
+                  {{ (leadStore.currentLead as any)?.intent }}
+               </span>
+               <span v-else>En línea</span>
+            </div>
           </div>
         </div>
-      </div>
-      <div>
-         <q-btn flat round dense icon="videocam" color="grey-7" />
-         <q-btn flat round dense icon="call" color="grey-7" />
-         <q-btn flat round dense icon="more_vert" color="grey-7" />
+        <div class="row items-center q-gutter-xs">
+           <q-btn flat round dense icon="videocam" color="grey-7" size="sm" />
+           <q-btn flat round dense icon="call" color="grey-7" size="sm" />
+           <q-btn flat round dense icon="more_vert" color="grey-7" size="sm" />
+        </div>
       </div>
     </div>
 
-    <!-- Chat Area -->
-    <div class="chat-area flex-grow-1 q-pa-md scroll relative-position" style="background-color: #e5ddd5; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); opacity: 0.9;">
+    <!-- Chat Area - Scrollable -->
+    <q-scroll-area ref="scrollAreaRef" class="chat-area flex-grow-1" :thumb-style="{ width: '6px', borderRadius: '3px' }">
+      <div class="q-pa-md chat-content" style="background-color: #e5ddd5; background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png'); background-size: contain; min-height: 100%;">
        <!-- Date Divider Example (Static for now) -->
        <div class="row justify-center q-my-sm">
           <q-badge color="grey-3" text-color="black" label="Hoy" />
@@ -63,27 +66,28 @@
           </div>
        </template>
 
-       <div v-if="!flattenedMessages.length" class="text-center q-pa-xl text-grey-8">
-          <q-icon name="chat_bubble_outline" size="48px" class="q-mb-md" />
-          <div>Inicia la conversación con <strong>{{ (leadStore.currentLead as any)?.client_name }}</strong></div>
-          <div class="text-caption">Los mensajes se sincronizarán con WhatsApp.</div>
-       </div>
-    </div>
+         <div v-if="!flattenedMessages.length" class="text-center q-pa-xl text-grey-8">
+            <q-icon name="chat_bubble_outline" size="48px" class="q-mb-md" />
+            <div>Inicia la conversación con <strong>{{ (leadStore.currentLead as any)?.client_name }}</strong></div>
+            <div class="text-caption">Los mensajes se sincronizarán con WhatsApp.</div>
+         </div>
+      </div>
+    </q-scroll-area>
 
     <!-- AI Suggestion Panel -->
-    <div v-if="aiSuggestion" class="bg-amber-1 q-px-md q-py-sm row items-center justify-between border-top-grey">
+    <div v-if="aiSuggestion" class="ai-suggestion-panel bg-amber-1 q-px-md q-py-xs row items-center justify-between">
         <div class="col">
-            <div class="text-caption text-amber-9 text-weight-bold row items-center">
+            <div class="text-caption text-amber-9 text-weight-bold row items-center q-mb-xs">
                 <q-icon name="lightbulb" size="xs" class="q-mr-xs"/> Sugerencia de IA
             </div>
             <div class="text-body2 text-grey-9 ellipsis-2-lines">{{ aiSuggestion }}</div>
         </div>
-        <q-btn flat round dense icon="content_copy" color="amber-9" @click="useSuggestion" />
+        <q-btn flat round dense icon="content_copy" color="amber-9" size="sm" @click="useSuggestion" />
     </div>
 
     <!-- Input Footer -->
-    <div class="chat-footer bg-grey-2 q-pa-sm row items-end">
-       <q-btn flat round dense icon="add" color="grey-7" class="q-mb-xs" />
+    <div class="chat-footer bg-grey-2 q-pa-xs row items-end no-wrap">
+       <q-btn flat round dense icon="add" color="grey-7" size="md" class="q-mr-xs" />
        
        <q-input
           v-model="newMessage"
@@ -92,15 +96,15 @@
           bg-color="white"
           rounded
           outlined
-          placeholder="Escribe Un Mensajee"
-          class="col q-mx-sm"
+          placeholder="Escribe un mensaje"
+          class="col"
           autogrow
           input-class="q-px-sm"
           @keydown.enter.prevent="sendMessage"
        >
           <template v-slot:append>
-             <q-icon name="attach_file" class="cursor-pointer" />
-             <q-icon v-if="!newMessage" name="camera_alt" class="cursor-pointer q-ml-sm" />
+             <q-icon name="attach_file" class="cursor-pointer q-mr-xs" size="sm" />
+             <q-icon v-if="!newMessage" name="camera_alt" class="cursor-pointer" size="sm" />
           </template>
        </q-input>
 
@@ -110,7 +114,8 @@
           unelevated
           :icon="newMessage ? 'send' : 'mic'" 
           :color="newMessage ? 'primary' : 'teal'" 
-          class="q-mb-xs shadow-1"
+          class="q-ml-xs shadow-1"
+          size="md"
           @click="sendMessage"
        />
     </div>
@@ -270,11 +275,17 @@ const decodeEscapedText = (text: string): string => {
     return text;
 };
 
+const scrollAreaRef = ref<any>(null);
+
 const scrollToBottom = () => {
     nextTick(() => {
-        const scrollArea = document.querySelector('.chat-area');
-        if (scrollArea) {
-            scrollArea.scrollTop = scrollArea.scrollHeight;
+        if (scrollAreaRef.value) {
+            const scrollArea = scrollAreaRef.value;
+            if (scrollArea && typeof scrollArea.setScrollPosition === 'function') {
+                // Obtener la altura del contenido
+                const scrollHeight = scrollArea.$el?.querySelector('.q-scrollarea__content')?.scrollHeight || 999999;
+                scrollArea.setScrollPosition('vertical', scrollHeight, 300);
+            }
         }
     });
 };
@@ -360,23 +371,42 @@ const sendMessage = async () => {
     height: 100vh;
     max-height: 100vh;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
-.lh-120 {
-    line-height: 1.2;
+/* Header */
+.chat-header {
+    flex-shrink: 0;
+    min-height: 60px;
+    z-index: 10;
 }
 
+/* Chat Area - Scrollable */
+.chat-area {
+    flex: 1 1 auto;
+    min-height: 0; /* Important for flexbox scrolling */
+    overflow: hidden;
+}
+
+.chat-content {
+    padding-bottom: 20px;
+}
+
+/* Chat Bubbles */
 .chat-bubble {
     border-radius: 7.5px;
     padding: 6px 9px;
     max-width: 80%;
     position: relative;
     box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
+    word-wrap: break-word;
+    word-break: break-word;
 }
 
 /* Burbuja del cliente - BLANCA, IZQUIERDA */
 .chat-bubble-client {
-    background-color: #ffffff !important; /* Blanco puro */
+    background-color: #ffffff !important;
     border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
@@ -385,19 +415,65 @@ const sendMessage = async () => {
     background-color: #dcf8c6 !important; /* WhatsApp green */
 }
 
-/* Mantener compatibilidad con bg-green-1 si se usa en otro lugar */
-.bg-green-1 {
-    background-color: #dcf8c6 !important; /* WhatsApp green */
+/* AI Suggestion Panel */
+.ai-suggestion-panel {
+    flex-shrink: 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    max-height: 80px;
 }
 
-/* Scrollbar styling */
-.chat-area::-webkit-scrollbar {
-  width: 6px;
+/* Footer */
+.chat-footer {
+    flex-shrink: 0;
+    min-height: 60px;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
 }
-.chat-area::-webkit-scrollbar-track {
-  background: transparent; 
+
+/* Utility Classes */
+.lh-120 {
+    line-height: 1.2;
 }
-.chat-area::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,0.2); 
+
+/* Responsive Design */
+@media (max-width: 600px) {
+    .chat-header {
+        min-height: 56px;
+    }
+    
+    .chat-header .text-subtitle2 {
+        font-size: 14px;
+    }
+    
+    .chat-bubble {
+        max-width: 85%;
+        padding: 5px 8px;
+    }
+    
+    .chat-footer {
+        min-height: 56px;
+        padding: 8px 4px;
+    }
+    
+    .chat-footer .q-btn {
+        min-width: 36px;
+        height: 36px;
+    }
+}
+
+@media (min-width: 601px) and (max-width: 1024px) {
+    .chat-bubble {
+        max-width: 75%;
+    }
+}
+
+@media (min-width: 1025px) {
+    .chat-bubble {
+        max-width: 70%;
+    }
+    
+    .lead-chat-page {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
 }
 </style>
