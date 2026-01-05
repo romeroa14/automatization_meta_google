@@ -3,8 +3,9 @@
     <!-- Header: WhatsApp Style - Sticky -->
     <div class="chat-header bg-grey-2 shadow-1 sticky-header">
       <div class="row items-center justify-between q-px-sm q-py-xs">
-        <div class="row items-center no-wrap" @click="$router.back()">
-          <q-btn flat round dense icon="arrow_back" color="grey-8" class="q-mr-xs" />
+        <div class="row items-center no-wrap">
+          <q-btn flat round dense icon="menu" color="grey-8" class="q-mr-xs" @click="toggleLeftDrawer" />
+          <q-btn flat round dense icon="arrow_back" color="grey-8" class="q-mr-xs" @click="$router.back()" />
           <q-avatar size="40px" class="q-mr-sm">
              <div class="bg-primary text-white row flex-center full-width full-height text-weight-bold" style="border-radius: 50%">
                 {{ ((leadStore.currentLead as any)?.client_name?.charAt(0) || '?').toUpperCase() }}
@@ -123,7 +124,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, nextTick, computed } from 'vue';
+import { onMounted, onUnmounted, ref, nextTick, computed, inject } from 'vue';
 import { useRoute } from 'vue-router';
 import { useLeadStore } from 'stores/lead-store';
 import { date, useQuasar } from 'quasar';
@@ -131,6 +132,9 @@ import { date, useQuasar } from 'quasar';
 const route = useRoute();
 const leadStore = useLeadStore();
 const $q = useQuasar();
+
+// Inyectar la función toggleLeftDrawer del layout
+const toggleLeftDrawer = inject<() => void>('toggleLeftDrawer', () => {});
 
 const newMessage = ref('');
 
@@ -375,6 +379,7 @@ const sendMessage = async () => {
     flex-direction: column;
     margin: 0;
     padding: 0;
+    position: relative;
 }
 
 /* Header - Sticky */
@@ -393,6 +398,7 @@ const sendMessage = async () => {
     margin: 0;
     padding: 0;
     width: 100%;
+    border-top: none;
 }
 
 /* Chat Area - Scrollable */

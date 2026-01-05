@@ -1,6 +1,6 @@
 <template>
   <q-layout view="lHh Lpr lFf">
-    <q-header elevated>
+    <q-header elevated v-if="!isConversationsPage">
       <q-toolbar>
         <q-btn flat dense round icon="menu" aria-label="Menu" @click="toggleLeftDrawer" />
 
@@ -35,13 +35,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, provide } from 'vue'
+import { useRoute } from 'vue-router'
 import EssentialLink from 'components/EssentialLink.vue'
 import { useAuthStore } from 'stores/auth-store'
 import { useRouter } from 'vue-router'
 
 const authStore = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+
+// Verificar si estamos en la página de conversaciones
+const isConversationsPage = computed(() => {
+  return route.path.includes('/conversations')
+})
 
 const linksList = [
   {
@@ -79,6 +86,9 @@ const leftDrawerOpen = ref(false)
 function toggleLeftDrawer() {
   leftDrawerOpen.value = !leftDrawerOpen.value
 }
+
+// Proporcionar la función toggleLeftDrawer a los componentes hijos
+provide('toggleLeftDrawer', toggleLeftDrawer)
 
 function logout() {
     authStore.logout()
