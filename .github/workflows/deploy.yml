@@ -16,32 +16,58 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           port: 22
           script: |
-              # Usamos la ruta confirmada en el diagnóstico
-              cd /opt/docker/laravel/app
+              # Ruta del proyecto
+              cd /var/www/html/admetricas.com
               
-              # Configuración de seguridad de Git (fix para error dubious ownership)
-              git config --global --add safe.directory /opt/docker/laravel/app
+              # Configuración de seguridad de Git
+              git config --global --add safe.directory /var/www/html/admetricas.com
 
-              # Corregir permisos (vital para evitar Permission denied)
-              sudo chown -R adminvps:adminvps .
-              
+              # Corregir permisos de archivos gitignore PRIMERO (evita error de git reset)
+              chown -R adminvps:adminvps bootstrap/cache/.gitignore storage/app/.gitignore storage/app/private/.gitignore storage/app/public/.gitignore storage/framework/.gitignore storage/framework/cache/.gitignore storage/framework/cache/data/.gitignore storage/framework/sessions/.gitignore storage/framework/testing/.gitignore storage/framework/views/.gitignore storage/logs/.gitignore 2>/dev/null || true
+              chmod 644 bootstrap/cache/.gitignore storage/app/.gitignore storage/app/private/.gitignore storage/app/public/.gitignore storage/framework/.gitignore storage/framework/cache/.gitignore storage/framework/cache/data/.gitignore storage/framework/sessions/.gitignore storage/framework/testing/.gitignore storage/framework/views/.gitignore storage/logs/.gitignore 2>/dev/null || true
+
               # Poner en mantenimiento
-              sudo docker exec -w /var/www/html laravel-php php artisan down || true
-              
-              # Pull del código (en el host)
+              docker exec -w /var/www/html laravel-php php artisan down || true
+
+              # Resetear y clean (sin sudo)
+              git reset --hard HEAD
+              git clean -fd
+
+              # Pull del código
               git pull origin master
+
+              # ========== BACKEND ==========
+              # Actualizar dependencias (composer update para resolver conflictos de versiones)
+              docker exec -u application -w /var/www/html laravel-php composer update --no-dev --optimize-autoloader
               
-              # Instalar dependencias (en el container)
-              sudo docker exec -u application -w /var/www/html laravel-php composer install --no-dev --optimize-autoloader
+              # Migraciones
+              docker exec -u application -w /var/www/html laravel-php php artisan migrate --force
+              docker exec -u application -w /var/www/html laravel-php php artisan config:clear
+              docker exec -u application -w /var/www/html laravel-php php artisan cache:clear
+              docker exec -u application -w /var/www/html laravel-php php artisan route:clear
+              docker exec -u application -w /var/www/html laravel-php php artisan view:clear
+
+              # ========== FRONTEND ==========
+              echo "🚀 Actualizando frontend..."
+
+              # Detener contenedor viejo (sin sudo)
+              docker rm -f frontend-app 2>/dev/null || true
+
+              # Habilitar BuildKit
+              export DOCKER_BUILDKIT=1
+
+              # Reconstruir imagen CON cache (usar "docker compose" no "docker-compose")
+              docker compose -f docker-compose.frontend.yml build --progress=plain frontend-app
+
+              # Levantar nuevo contenedor
+              docker compose -f docker-compose.frontend.yml up -d frontend-app
               
-              # Migraciones y limpieza (en el container)
-              sudo docker exec -u application -w /var/www/html laravel-php php artisan migrate --force
-              sudo docker exec -u application -w /var/www/html laravel-php php artisan config:clear
-              sudo docker exec -u application -w /var/www/html laravel-php php artisan cache:clear
-              sudo docker exec -u application -w /var/www/html laravel-php php artisan route:clear
-              sudo docker exec -u application -w /var/www/html laravel-php php artisan view:clear
-              
+              echo "✅ Frontend actualizado correctamente"
+
               # Levantar sitio
-              sudo docker exec -u application -w /var/www/html laravel-php php artisan up
-              
-              echo "✅ Despliegue automático completado."
+              docker exec -u application -w /var/www/html laravel-php php artisan up
+
+              # Reiniciar PHP para limpiar OPcache
+              docker restart laravel-php
+
+              echo "✅ Despliegue completado exitosamente"

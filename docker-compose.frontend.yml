@@ -1,0 +1,19 @@
+services:
+  frontend-app:
+    build:
+      context: ./frontend/admetricas-mobile
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    container_name: frontend-app
+    restart: always
+    ports:
+      - "9005:80"
+    networks:
+      - admetricas_network
+    environment:
+      - DOCKER_BUILDKIT=1
+
+networks:
+  admetricas_network:
+    external: true

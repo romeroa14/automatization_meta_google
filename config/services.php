@@ -72,4 +72,17 @@ return [
         'base_id' => env('AIRTABLE_BASE_ID'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Facebook OAuth Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Solo redirect_uri se configura aquí.
+    | App ID y App Secret se configuran en FacebookAccount (Filament).
+    |
+    */
+    'facebook' => [
+        'redirect_uri' => env('FACEBOOK_REDIRECT_URI', 'http://localhost:9000/auth/facebook/callback'),
+    ],
+
 ];

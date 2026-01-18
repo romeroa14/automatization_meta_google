@@ -17,6 +17,7 @@ class FacebookAccount extends Model
         'access_token',
         'token_expires_at',
         'is_active',
+        'is_oauth_primary',
         'settings',
         'selected_ad_account_id',
         'selected_page_id',
@@ -26,10 +27,26 @@ class FacebookAccount extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'is_oauth_primary' => 'boolean',
         'token_expires_at' => 'datetime',
         'settings' => 'array',
         'selected_campaign_ids' => 'array',
         'selected_ad_ids' => 'array',
+    ];
+
+    protected $rules = [
+        'account_name' => 'required|string|max:255',
+        'app_id' => 'required|string|max:255',
+        'app_secret' => 'required|string|max:255',
+        'access_token' => 'required|string|max:255',
+        'token_expires_at' => 'required|date',
+        'is_active' => 'required|boolean',
+        'is_oauth_primary' => 'required|boolean',
+        'settings' => 'required|array',
+        'selected_ad_account_id' => 'nullable|string|max:255',
+        'selected_page_id' => 'nullable|string|max:255',
+        'selected_campaign_ids' => 'nullable|array',
+        'selected_ad_ids' => 'nullable|array',
     ];
 
     protected $hidden = [
@@ -94,5 +111,53 @@ class FacebookAccount extends Model
     public function getActiveAutomationTasksCountAttribute(): int
     {
         return $this->automationTasks()->where('is_active', true)->count();
+    }
+
+    /**
+     * Obtener la cuenta principal para OAuth
+     * Prioriza la marcada como is_oauth_primary
+     */
+    public static function getOAuthAccount(): ?self
+    {
+        // Primero buscar la marcada explícitamente como principal
+        $primary = static::where('is_active', true)
+            ->where('is_oauth_primary', true)
+            ->whereNotNull('app_id')
+            ->whereNotNull('app_secret')
+            ->first();
+            
+        if ($primary) {
+            return $primary;
+        }
+
+        // Fallback: la primera activa con credenciales (comportamiento anterior)
+        return static::where('is_active', true)
+            ->whereNotNull('app_id')
+            ->whereNotNull('app_secret')
+            ->first();
+    }
+
+    /**
+     * Verificar si hay credenciales OAuth configuradas
+     */
+    public static function hasOAuthCredentials(): bool
+    {
+        return static::getOAuthAccount() !== null;
+    }
+
+    /**
+     * Obtener App ID para OAuth
+     */
+    public static function getOAuthAppId(): ?string
+    {
+        return static::getOAuthAccount()?->app_id;
+    }
+
+    /**
+     * Obtener App Secret para OAuth
+     */
+    public static function getOAuthAppSecret(): ?string
+    {
+        return static::getOAuthAccount()?->app_secret;
     }
 }

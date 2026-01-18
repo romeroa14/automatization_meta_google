@@ -3,6 +3,9 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        
+        <!-- Facebook Domain Verification -->
+        <meta name="facebook-domain-verification" content="xik3tk12hflj270bnb7n3qp7vclbx2" />
 
         <title>Laravel</title>
 

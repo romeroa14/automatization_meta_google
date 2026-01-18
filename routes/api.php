@@ -3,7 +3,10 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TelegramWebhookController;
+use App\Http\Controllers\Api\FacebookAuthController;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 /*
 |--------------------------------------------------------------------------
@@ -16,8 +19,81 @@ use Illuminate\Support\Facades\Artisan;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+
+    // Perfil de Usuario (rutas directas, sin prefijo auth/facebook)
+    Route::get('/profile', [App\Http\Controllers\Api\ProfileController::class, 'show']);
+    Route::post('/profile', [App\Http\Controllers\Api\ProfileController::class, 'update']);
+    Route::post('/profile/token', [App\Http\Controllers\Api\ProfileController::class, 'generateToken']);
+
+    // CRM Routes
+    Route::apiResource('leads', \App\Http\Controllers\Api\LeadController::class);
+    Route::get('leads/{id}/conversations', [\App\Http\Controllers\Api\LeadController::class, 'conversations']);
+    
+    // Marketing Routes
+    Route::apiResource('campaigns', \App\Http\Controllers\Api\ActiveCampaignController::class);
+});
+
+// Auth Routes (Temporary for dev using Sanctum SPA or Token)
+Route::post('/login', function (Request $request) {
+    try {
+        $credentials = $request->only('email', 'password');
+        
+        if (Auth::attempt($credentials)) {
+            $user = Auth::user();
+            $token = $user->createToken('mobile-app')->plainTextToken;
+            return response()->json(['token' => $token, 'user' => $user]);
+        }
+        
+        return response()->json(['message' => 'Unauthorized'], 401);
+    } catch (\Exception $e) {
+        \Log::error('Login error: ' . $e->getMessage(), [
+            'trace' => $e->getTraceAsString(),
+            'email' => $request->input('email'),
+        ]);
+        
+        return response()->json([
+            'message' => 'Server Error',
+            'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+        ], 500);
+    }
+});
+
+/*
+|--------------------------------------------------------------------------
+| Facebook OAuth Routes
+|--------------------------------------------------------------------------
+|
+| Rutas para autenticación OAuth de Facebook para clientes
+|
+*/
+
+Route::prefix('auth/facebook')->group(function () {
+    // Obtener URL de login (público, para iniciar el flujo)
+    Route::get('/login-url', [FacebookAuthController::class, 'getLoginUrl']);
+    
+    // Callback de Facebook (ahora protegido para tener acceso al usuario)
+    // Route::post('/callback', [FacebookAuthController::class, 'handleCallback']);
+    
+    // Rutas protegidas (requieren autenticación)
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/callback', [FacebookAuthController::class, 'handleCallback']);
+        Route::get('/status', [FacebookAuthController::class, 'getConnectionStatus']);
+        Route::post('/disconnect', [FacebookAuthController::class, 'disconnect']);
+
+        // Webhook para n8n (Recibir Leads) - DESHABILITADO: n8n maneja todo directamente en la BD
+        // Route::post('/leads/webhook', [App\Http\Controllers\Api\LeadWebhookController::class, 'handle']);
+        
+        // Enviar mensajes de WhatsApp desde la app
+        Route::post('/whatsapp/send', [App\Http\Controllers\Api\WhatsAppMessageController::class, 'sendMessage']);
+        Route::post('/whatsapp/toggle-bot', [App\Http\Controllers\Api\WhatsAppMessageController::class, 'toggleBot']);
+        
+        // Rutas de Datos de Facebookute::post('/select-assets', [\App\Http\Controllers\Api\FacebookDataController::class, 'selectAssets']);
+        Route::get('/campaigns', [\App\Http\Controllers\Api\FacebookDataController::class, 'getCampaigns']);
+    });
 });
 
 /*

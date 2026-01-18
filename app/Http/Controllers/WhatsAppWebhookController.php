@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Services\WhatsAppLeadService;
+use App\Models\Lead;
+use App\Models\Conversation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -86,9 +88,48 @@ class WhatsAppWebhookController extends Controller
                     'processedData' => $processedData
                 ]);
 
-                // Enviar a n8n
-                $this->sendToN8n($messageId, $processedData, $fromNumber, $profileName, $timestamp, $messageType);
+                // Lógica de envío a n8n:
+                // - Si NO hay intervención humana reciente → Enviar a n8n inmediatamente
+                // - Si hay intervención humana reciente → Programar job para enviar después de 5 minutos
+                $lead = Lead::where('phone_number', $fromNumber)->first();
+                
+                if ($lead && !$lead->shouldSendToN8n()) {
+                    // Hay intervención humana reciente, programar job para enviar después de 5 minutos
+                    $minutesSinceIntervention = now()->diffInMinutes($lead->last_human_intervention_at ?? now());
+                    $delayMinutes = 5 - $minutesSinceIntervention;
+                    
+                    \App\Jobs\SendMessageToN8nJob::dispatch(
+                        $lead->id,
+                        $messageId,
+                        $processedData,
+                        $fromNumber,
+                        $profileName,
+                        $timestamp,
+                        $messageType,
+                        now()->toDateTimeString() // Timestamp de cuando se programó
+                    )->delay(now()->addMinutes($delayMinutes));
+                    
+                    Log::info('⏸️ Mensaje programado para enviar a n8n después de 5 minutos', [
+                        'lead_id' => $lead->id,
+                        'message_id' => $messageId,
+                        'minutes_since_intervention' => $minutesSinceIntervention,
+                        'will_send_after' => $delayMinutes . ' minutos',
+                    ]);
+                } else {
+                    // No hay intervención humana reciente, enviar a n8n inmediatamente
+                    // Si han pasado 20 minutos, re-habilitar bot automáticamente
+                    if ($lead && $lead->bot_disabled && $lead->canBotRespond()) {
+                        $lead->update(['bot_disabled' => false]);
+                        Log::info('✅ Bot re-habilitado automáticamente (pasaron 20 min)', [
+                            'lead_id' => $lead->id,
+                        ]);
+                    }
+                    $this->sendToN8n($messageId, $processedData, $fromNumber, $profileName, $timestamp, $messageType);
+                }
             }
+
+            // Guardar mensaje del cliente automáticamente en la BD
+            $this->saveClientMessage($messages, $contacts);
 
             // Procesar con el servicio de leads
             $leadService = new WhatsAppLeadService();
@@ -198,6 +239,128 @@ class WhatsAppWebhookController extends Controller
         // Construir URL para descargar la imagen desde WhatsApp Business API
         $accessToken = config('services.whatsapp.access_token');
         return "https://graph.facebook.com/v21.0/{$imageId}?access_token={$accessToken}";
+    }
+
+    /**
+     * Guardar mensaje del cliente automáticamente en la BD
+     */
+    private function saveClientMessage(array $messages, array $contacts): void
+    {
+        try {
+            foreach ($messages as $message) {
+                $messageId = $message['id'] ?? '';
+                $fromNumber = $message['from'] ?? '';
+                $messageText = $message['text']['body'] ?? '';
+                
+                if (empty($messageText) || empty($fromNumber)) {
+                    continue;
+                }
+
+                // Buscar nombre del contacto
+                $profileName = '';
+                foreach ($contacts as $contact) {
+                    if ($contact['wa_id'] === $fromNumber) {
+                        $profileName = $contact['profile']['name'] ?? 'Desconocido';
+                        break;
+                    }
+                }
+
+                // Buscar usuario que tenga un lead con este número de teléfono
+                $lead = Lead::where('phone_number', $fromNumber)->first();
+                
+                if ($lead && $lead->user_id) {
+                    $user = \App\Models\User::find($lead->user_id);
+                }
+                
+                // Si no hay usuario aún, buscar cualquier usuario activo (el sistema es multi-usuario pero para desarrollo usamos el primero)
+                if (!$user) {
+                    $user = \App\Models\User::first();
+                }
+                
+                // Si aún no hay usuario, crear uno temporal o usar el usuario por defecto
+                if (!$user) {
+                    Log::warning('No hay usuarios en el sistema. Creando usuario temporal o usando el por defecto.', [
+                        'fromNumber' => $fromNumber
+                    ]);
+                    // Intentar obtener el usuario por email por defecto
+                    $user = \App\Models\User::where('email', 'alfredoromerox15@gmail.com')->first();
+                }
+
+                if (!$user) {
+                    Log::warning('No se encontró usuario para guardar mensaje de WhatsApp', [
+                        'fromNumber' => $fromNumber
+                    ]);
+                    continue;
+                }
+
+                // Crear o actualizar lead
+                $lead = Lead::updateOrCreate(
+                    [
+                        'user_id' => $user->id,
+                        'phone_number' => $fromNumber,
+                    ],
+                    [
+                        'client_name' => $profileName,
+                        'intent' => 'consulta',
+                        'lead_level' => 'cold',
+                        'stage' => 'nuevo',
+                        'confidence_score' => 0.0,
+                    ]
+                );
+
+                // Verificar si el mensaje ya existe (evitar duplicados)
+                $existingConversation = Conversation::where('message_id', $messageId)->first();
+                
+                if (!$existingConversation) {
+                    // Guardar conversación del cliente
+                    $lead->conversations()->create([
+                        'user_id' => $user->id,
+                        'message_id' => $messageId,
+                        'message_text' => $messageText,
+                        'is_client_message' => true,
+                        'is_employee' => false,
+                        'platform' => 'whatsapp',
+                        'timestamp' => date('Y-m-d H:i:s', $message['timestamp'] ?? time()),
+                        'message_length' => strlen($messageText),
+                    ]);
+
+                    Log::info('✅ Mensaje del cliente guardado automáticamente', [
+                        'lead_id' => $lead->id,
+                        'message_id' => $messageId,
+                        'from' => $fromNumber,
+                    ]);
+
+                    // Verificar si el bot puede responder (han pasado 20 min desde intervención humana)
+                    if ($lead->canBotRespond()) {
+                        // Si han pasado 20 minutos, habilitar bot automáticamente
+                        if ($lead->bot_disabled) {
+                            $lead->update(['bot_disabled' => false]);
+                            Log::info('✅ Bot re-habilitado automáticamente (pasaron 20 min)', [
+                                'lead_id' => $lead->id,
+                                'last_intervention' => $lead->last_human_intervention_at,
+                            ]);
+                        }
+                        Log::info('📤 Mensaje listo para enviar a n8n', [
+                            'lead_id' => $lead->id,
+                            'bot_disabled' => false,
+                        ]);
+                    } else {
+                        $minutesSinceIntervention = now()->diffInMinutes($lead->last_human_intervention_at ?? now());
+                        Log::info('🤖 Bot deshabilitado (intervención humana reciente)', [
+                            'lead_id' => $lead->id,
+                            'phone_number' => $fromNumber,
+                            'minutes_since_intervention' => $minutesSinceIntervention,
+                            'bot_will_respond_after' => 20 - $minutesSinceIntervention . ' minutos',
+                        ]);
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('Error guardando mensaje del cliente automáticamente', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
     }
 
     private function sendToN8n($messageId, $processedData, $fromNumber, $profileName, $timestamp, $messageType)
