@@ -124,7 +124,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, nextTick, computed, inject } from 'vue';
+import { onMounted, ref, nextTick, computed, inject } from 'vue';
 import { useRoute } from 'vue-router';
 import { useLeadStore } from 'stores/lead-store';
 import { date, useQuasar } from 'quasar';
@@ -225,16 +225,9 @@ onMounted(async () => {
     
     scrollToBottom();
     
-    // Refrescar conversaciones cada 3 segundos para ver nuevas respuestas del bot
-    const refreshInterval = setInterval(async () => {
-        await leadStore.fetchConversations(leadId);
-        scrollToBottom();
-    }, 3000);
-    
-    // Limpiar intervalo al desmontar
-    onUnmounted(() => {
-        clearInterval(refreshInterval);
-    });
+    // Polling removed as per user request to avoid excessive requests
+    // The user can refresh manually or we can rely on websocket/pusher in the future
+
 });
 
 const formatDate = (val: string | Date) => {
