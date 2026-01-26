@@ -25,12 +25,14 @@ return new class extends Migration
             $table->boolean('bot_disabled')->default(false)->comment('Si es true, el bot no responderá (intervención humana activa)');
             $table->timestamp('last_human_intervention_at')->nullable()->comment('Última vez que un agente humano escribió. Después de 20 min, el bot puede responder de nuevo');
             $table->timestamps();
-            DB::statement('
+        });
+        
+        // Crear índice único parcial después de crear la tabla
+        DB::statement('
             CREATE UNIQUE INDEX IF NOT EXISTS leads_phone_number_unique 
             ON leads (phone_number) 
             WHERE phone_number IS NOT NULL
         ');
-        });
     }
 
     /**

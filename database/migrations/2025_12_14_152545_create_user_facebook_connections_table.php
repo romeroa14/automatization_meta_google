@@ -20,6 +20,12 @@ return new class extends Migration
             $table->string('facebook_name')->nullable();
             $table->string('facebook_email')->nullable();
             
+            // WhatsApp Business Account Info
+            $table->string('waba_id')->nullable()->comment('WhatsApp Business Account ID');
+            $table->string('business_id')->nullable()->comment('Facebook Business Portfolio ID');
+            $table->json('waba_data')->nullable()->comment('WhatsApp Business Account full data');
+            $table->string('signup_method')->nullable()->comment('embedded_signup, manual, etc.');
+            
             // Token Info (encrypted in model)
             $table->text('access_token');
             $table->timestamp('token_expires_at')->nullable();
@@ -38,6 +44,7 @@ return new class extends Migration
             $table->timestamps();
             
             $table->index(['user_id', 'is_active']);
+            $table->index('waba_id');
         });
     }
 

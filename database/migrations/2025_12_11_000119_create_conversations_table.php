@@ -35,12 +35,14 @@ return new class extends Migration
             $table->json('payload')->nullable();
             $table->timestamps();
             
-            DB::statement('
+        });
+        
+        // Crear índice único parcial después de crear la tabla
+        DB::statement('
             CREATE UNIQUE INDEX IF NOT EXISTS conversations_message_id_unique 
             ON conversations (message_id) 
             WHERE message_id IS NOT NULL
         ');
-        });
     }
 
     /**

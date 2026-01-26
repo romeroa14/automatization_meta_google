@@ -98,6 +98,26 @@ Route::prefix('auth/facebook')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
+| WhatsApp Embedded Signup Routes
+|--------------------------------------------------------------------------
+|
+| Rutas para el registro insertado de WhatsApp Business
+|
+*/
+
+Route::prefix('whatsapp-signup')->group(function () {
+    // Público: obtener configuración para el SDK
+    Route::get('/config', [App\Http\Controllers\Api\WhatsAppSignupController::class, 'getConfig']);
+    
+    // Público: manejar callback del signup (crea/registra usuario)
+    Route::post('/callback', [App\Http\Controllers\Api\WhatsAppSignupController::class, 'handleCallback']);
+    
+    // Webhook: account_update (GET para verificación, POST para eventos)
+    Route::match(['get', 'post'], '/webhook/account-update', [App\Http\Controllers\Api\WhatsAppSignupController::class, 'handleWebhookAccountUpdate']);
+});
+
+/*
+|--------------------------------------------------------------------------
 | Telegram Bot Routes
 |--------------------------------------------------------------------------
 |

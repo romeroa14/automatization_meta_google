@@ -74,9 +74,17 @@ module.exports = function (/* ctx */) {
 
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#devserver
     devServer: {
-      https: true,
+      https: true, // Facebook SDK requiere HTTPS
       port: 9000,
       open: true, // opens browser window automatically
+      // Proxy para comunicarse con el backend HTTP sin problemas de CORS
+      proxy: {
+        '/api': {
+          target: 'http://localhost:8001',
+          changeOrigin: true,
+          secure: false,
+        }
+      }
     },
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#framework

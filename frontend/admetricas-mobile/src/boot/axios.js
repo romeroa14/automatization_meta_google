@@ -8,23 +8,24 @@ import axios from 'axios'
 // "export default () => {}" function below (which runs individually
 // for each client)
 // Configuración de API URL según el entorno
-// En desarrollo: http://localhost:8000/api
-// En producción: https://admetricas.com/api
+// En desarrollo: usa proxy de Vite (/api se redirige a http://localhost:8001/api)
+// En producción: https://admetricas.com/api (puerto 443 por defecto)
 const getApiBaseUrl = () => {
   // Verificar si estamos en el navegador
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname
-    
+
     // Si estamos en desarrollo (localhost, 127.0.0.1, o IP local)
+    // Usar ruta relativa para que el proxy de Vite lo maneje
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('192.168.')) {
-      return 'http://localhost:8000/api'
+      return '/api'  // El proxy de Vite redirige a http://localhost:8001/api
     }
-    
+
     // Si estamos en producción (app.admetricas.com)
-    // Usar el dominio del backend
+    // Usar el dominio del backend (puerto 443 HTTPS por defecto)
     return 'https://admetricas.com/api'
   }
-  
+
   // Fallback por defecto (para SSR o casos especiales)
   return 'https://admetricas.com/api'
 }
@@ -42,21 +43,21 @@ if (typeof window !== 'undefined') {
 }
 
 export default boot(({ app }) => {
-    // Restore token from localStorage on app boot
-    const token = localStorage.getItem('token')
-    if (token) {
-        api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-        console.log('[Axios Boot] Token restored from localStorage')
-    }
+  // Restore token from localStorage on app boot
+  const token = localStorage.getItem('token')
+  if (token) {
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+    console.log('[Axios Boot] Token restored from localStorage')
+  }
 
-    // for use inside Vue files (Options API) through this.$axios and this.$api
-    app.config.globalProperties.$axios = axios
-    // ^ ^ ^ this will allow you to use this.$axios (for Vue Options API form)
-    //       so you won't necessarily have to import axios in each vue file
+  // for use inside Vue files (Options API) through this.$axios and this.$api
+  app.config.globalProperties.$axios = axios
+  // ^ ^ ^ this will allow you to use this.$axios (for Vue Options API form)
+  //       so you won't necessarily have to import axios in each vue file
 
-    app.config.globalProperties.$api = api
-    // ^ ^ ^ this will allow you to use this.$api (for Vue Options API form)
-    //       so you can easily perform requests against your app's API
+  app.config.globalProperties.$api = api
+  // ^ ^ ^ this will allow you to use this.$api (for Vue Options API form)
+  //       so you can easily perform requests against your app's API
 })
 
 export { api }

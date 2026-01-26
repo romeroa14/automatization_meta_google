@@ -83,6 +83,8 @@ return [
     */
     'facebook' => [
         'redirect_uri' => env('FACEBOOK_REDIRECT_URI', 'http://localhost:9000/auth/facebook/callback'),
+        'wa_signup_config_id' => env('FACEBOOK_WA_SIGNUP_CONFIG_ID'),
+        'webhook_verify_token' => env('FACEBOOK_WEBHOOK_VERIFY_TOKEN', 'admetricas_webhook_token'),
     ],
 
 ];
