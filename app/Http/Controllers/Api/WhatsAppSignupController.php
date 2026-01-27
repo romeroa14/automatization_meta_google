@@ -189,18 +189,19 @@ class WhatsAppSignupController extends Controller
             ];
         }
         
-        // Detectar redirect_uri según el entorno (producción vs desarrollo)
-        // NOTA: Para WhatsApp Embedded Signup, NO enviamos redirect_uri
-        // porque el código se devuelve vía JavaScript callback, no por redirect
+        // Facebook SÍ valida redirect_uri incluso en Embedded Signup
+        // Debe coincidir con el configurado en "Inicio de sesión con Facebook" → "URI de OAuth válidos"
+        $redirectUri = $this->getRedirectUri();
         
-        Log::info('[WhatsApp Signup] Exchanging code for token (Embedded Signup - no redirect_uri)', [
+        Log::info('[WhatsApp Signup] Exchanging code for token', [
             'environment' => config('app.env'),
+            'redirect_uri' => $redirectUri,
         ]);
         
         $response = Http::get("{$this->graphApiUrl}/{$this->graphApiVersion}/oauth/access_token", [
             'client_id' => $oauthAccount->app_id,
             'client_secret' => $oauthAccount->app_secret,
-            // NO incluir redirect_uri para Embedded Signup
+            'redirect_uri' => $redirectUri,
             'code' => $code,
         ]);
         
