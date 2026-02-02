@@ -226,6 +226,10 @@ class WhatsAppSignupController extends Controller
     
     /**
      * Obtener redirect_uri según el entorno
+     * 
+     * IMPORTANTE: Para WhatsApp Embedded Signup, el redirect_uri debe ser
+     * la URL de ORIGEN de la página donde se inicializa el SDK, NO una ruta de callback.
+     * El código se retorna en el mismo contexto JavaScript, no hay redirección HTTP.
      */
     protected function getRedirectUri(): string
     {
@@ -242,13 +246,14 @@ class WhatsAppSignupController extends Controller
         
         // Si estamos en producción
         if ($appEnv === 'production' || str_contains($appUrl, 'admetricas.com')) {
-            $uri = 'https://app.admetricas.com/auth/facebook/callback';
+            // Para Embedded Signup: usar el origen de la página, NO una ruta de callback
+            $uri = 'https://app.admetricas.com/';
             Log::info('[WhatsApp Signup] Using production redirect_uri', ['uri' => $uri]);
             return $uri;
         }
         
-        // Desarrollo: localhost con HTTPS
-        $uri = 'https://localhost:9000/auth/facebook/callback';
+        // Desarrollo: localhost con HTTPS (origen de la página)
+        $uri = 'https://localhost:9000/';
         Log::info('[WhatsApp Signup] Using development redirect_uri', ['uri' => $uri]);
         return $uri;
     }
