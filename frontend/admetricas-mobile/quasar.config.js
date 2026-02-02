@@ -80,7 +80,7 @@ module.exports = function (/* ctx */) {
       // Proxy para comunicarse con el backend HTTP sin problemas de CORS
       proxy: {
         '/api': {
-          target: 'http://localhost:8001',
+          target: 'http://localhost:8000',
           changeOrigin: true,
           secure: false,
         }

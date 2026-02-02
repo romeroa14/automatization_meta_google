@@ -77,43 +77,98 @@ const loadConfig = async () => {
 };
 
 /**
+ * Inicializar SDK de Facebook cuando esté listo
+ */
+const initFacebookSDK = () => {
+  if (!appId.value) {
+    console.log('[WhatsApp Signup] Waiting for appId...');
+    return false;
+  }
+
+  if (!window.FB) {
+    console.log('[WhatsApp Signup] FB object not available yet');
+    return false;
+  }
+
+  console.log('[WhatsApp Signup] Initializing FB with appId:', appId.value);
+  
+  window.FB.init({
+    appId: appId.value,
+    autoLogAppEvents: true,
+    xfbml: true,
+    version: 'v24.0'
+  });
+  
+  sdkLoaded.value = true;
+  console.log('[WhatsApp Signup] ✅ Facebook SDK initialized successfully!');
+  return true;
+};
+
+/**
  * Cargar SDK de Facebook
  */
 const loadFacebookSDK = () => {
-  // Si ya existe el SDK, no cargar de nuevo
+  // Si ya existe el SDK e está inicializado
+  if (window.FB && sdkLoaded.value) {
+    console.log('[WhatsApp Signup] SDK already loaded');
+    return;
+  }
+
+  // IMPORTANTE: Definir fbAsyncInit ANTES de cargar el script
+  window.fbAsyncInit = function() {
+    console.log('[WhatsApp Signup] fbAsyncInit called');
+    
+    // Intentar inicializar, si no hay appId, reintentar
+    if (!initFacebookSDK()) {
+      const checkAppId = setInterval(() => {
+        console.log('[WhatsApp Signup] Checking for appId... Current:', appId.value);
+        if (initFacebookSDK()) {
+          clearInterval(checkAppId);
+        }
+      }, 500);
+      
+      // Timeout después de 10 segundos
+      setTimeout(() => {
+        clearInterval(checkAppId);
+        if (!sdkLoaded.value) {
+          console.error('[WhatsApp Signup] ❌ Timeout waiting for appId');
+        }
+      }, 10000);
+    }
+  };
+
+  // Si el SDK ya está cargado pero no inicializado
   if (window.FB) {
-    sdkLoaded.value = true;
+    console.log('[WhatsApp Signup] FB exists, calling init directly');
+    window.fbAsyncInit();
+    return;
+  }
+
+  // Verificar si ya existe el script
+  const existingScript = document.querySelector('script[src*="connect.facebook.net"]');
+  if (existingScript) {
+    console.log('[WhatsApp Signup] SDK script already in DOM');
     return;
   }
 
   // Crear script tag
+  console.log('[WhatsApp Signup] Loading Facebook SDK script...');
   const script = document.createElement('script');
   script.src = 'https://connect.facebook.net/en_US/sdk.js';
   script.async = true;
   script.defer = true;
   script.crossOrigin = 'anonymous';
   
+  script.onload = () => {
+    console.log('[WhatsApp Signup] SDK script loaded');
+  };
+  
+  script.onerror = (error) => {
+    console.error('[WhatsApp Signup] ❌ Error loading SDK script:', error);
+  };
+  
   // Agregar al DOM
   document.body.appendChild(script);
-
-  // Inicializar SDK cuando cargue
-  window.fbAsyncInit = function() {
-    // Esperar hasta que tengamos el appId
-    const checkAppId = setInterval(() => {
-      if (appId.value) {
-        clearInterval(checkAppId);
-        window.FB.init({
-          appId: appId.value,
-          autoLogAppEvents: true,
-          xfbml: true,
-          version: 'v24.0'
-        });
-        
-        sdkLoaded.value = true;
-        console.log('[WhatsApp Signup] Facebook SDK loaded');
-      }
-    }, 100);
-  };
 };
 
 /**
