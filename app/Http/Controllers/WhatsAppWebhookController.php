@@ -267,6 +267,7 @@ class WhatsAppWebhookController extends Controller
 
                 // Buscar usuario que tenga un lead con este número de teléfono
                 $lead = Lead::where('phone_number', $fromNumber)->first();
+                $user = null;
                 
                 if ($lead && $lead->user_id) {
                     $user = \App\Models\User::find($lead->user_id);
