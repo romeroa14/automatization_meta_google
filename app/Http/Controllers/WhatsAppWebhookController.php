@@ -295,12 +295,13 @@ class WhatsAppWebhookController extends Controller
                 }
 
                 // Crear o actualizar lead
+                // Buscar solo por phone_number (que es único) para evitar duplicados
                 $lead = Lead::updateOrCreate(
                     [
-                        'user_id' => $user->id,
                         'phone_number' => $fromNumber,
                     ],
                     [
+                        'user_id' => $user->id,
                         'client_name' => $profileName,
                         'intent' => 'consulta',
                         'lead_level' => 'cold',
