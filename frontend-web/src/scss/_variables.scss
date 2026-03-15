@@ -1,0 +1,26 @@
+// Custom Variables for Mantis theme
+// Global font size and border radius
+$border-radius-root: 4px !default;
+$body-font-family: 'Public Sans', sans-serif !default;
+$btn-font-weight: 400 !default;
+$btn-letter-spacing: 0 !default;
+
+// colors
+$white: #fff !default;
+
+// cards
+$card-item-spacer-xy: 20px !default;
+$card-text-spacer: 20px !default;
+$card-title-size: 16px !default;
+
+// Global Shadow
+$box-shadow: 0px 0px 4px rgba(0, 0, 0, 0.08) !default;
+
+$theme-colors: (
+  primary: var(--v-theme-primary),
+  secondary: var(--v-theme-secondary),
+  success: var(--v-theme-success),
+  info: var(--v-theme-info),
+  warning: var(--v-theme-warning),
+  error: var(--v-theme-error)
+) !default;
