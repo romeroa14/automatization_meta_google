@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
 const loading = ref(false)
 const showCreateDialog = ref(false)
+const formData = ref({
+  name: '',
+  description: '',
+  email: '',
+  phone: '',
+  website: '',
+  plan: 'free'
+})
 
 // Datos de ejemplo para modo demo
 const organizations = ref([
@@ -16,7 +24,8 @@ const organizations = ref([
     phone: '04242536795',
     plan: 'enterprise',
     is_active: true,
-    phone_numbers_count: 2
+    phone_numbers_count: 2,
+    users_count: 5
   },
   {
     id: 2,
@@ -26,7 +35,8 @@ const organizations = ref([
     phone: '04141234567',
     plan: 'pro',
     is_active: true,
-    phone_numbers_count: 1
+    phone_numbers_count: 1,
+    users_count: 3
   },
   {
     id: 3,
@@ -36,7 +46,8 @@ const organizations = ref([
     phone: '04167891234',
     plan: 'basic',
     is_active: true,
-    phone_numbers_count: 1
+    phone_numbers_count: 1,
+    users_count: 2
   }
 ])
 
@@ -59,6 +70,20 @@ const getPlanColor = (plan: string) => {
 
 const viewOrganization = (id: number) => {
   router.push(`/dashboard/organizations/${id}`)
+}
+
+const createOrganization = () => {
+  // Demo: agregar organización localmente
+  const newOrg = {
+    id: organizations.value.length + 1,
+    ...formData.value,
+    is_active: true,
+    phone_numbers_count: 0,
+    users_count: 1
+  }
+  organizations.value.push(newOrg)
+  showCreateDialog.value = false
+  formData.value = { name: '', description: '', email: '', phone: '', website: '', plan: 'free' }
 }
 </script>
 
@@ -151,30 +176,10 @@ const viewOrganization = (id: number) => {
       </v-col>
     </v-row>
 
-    <!-- Page Header -->
-    <div class="page-header mb-8">
-      <div class="d-flex flex-wrap align-center justify-space-between gap-4">
-        <div>
-          <h1 class="text-h4 font-weight-bold mb-1">Organizaciones</h1>
-          <p class="text-body-2 text-medium-emphasis">Gestiona tus organizaciones y números de WhatsApp</p>
-        </div>
-        <v-btn
-          color="primary"
-          size="large"
-          rounded="lg"
-          elevation="0"
-          prepend-icon="mdi-plus"
-          @click="showCreateDialog = true"
-        >
-          Nueva Organización
-        </v-btn>
-      </div>
-    </div>
-
     <!-- Organizations Grid -->
-    <v-row v-if="!loading && orgStore.organizations.length > 0">
+    <v-row v-if="!loading && organizations.length > 0">
       <v-col
-        v-for="org in orgStore.organizations"
+        v-for="org in organizations"
         :key="org.id"
         cols="12"
         md="6"
@@ -279,7 +284,7 @@ const viewOrganization = (id: number) => {
     </v-row>
 
     <!-- Empty State -->
-    <v-card v-else-if="!loading" class="empty-state text-center pa-12" elevation="0">
+    <v-card v-else-if="!loading && organizations.length === 0" class="empty-state text-center pa-12" elevation="0">
       <v-icon size="80" color="grey-lighten-1" class="mb-4">mdi-domain-plus</v-icon>
       <h3 class="text-h5 font-weight-bold mb-2">No hay organizaciones</h3>
       <p class="text-body-1 text-medium-emphasis mb-6">
@@ -369,7 +374,7 @@ const viewOrganization = (id: number) => {
           <v-btn
             color="primary"
             variant="flat"
-            :loading="orgStore.loading"
+            :loading="loading"
             @click="createOrganization"
           >
             Crear Organización
