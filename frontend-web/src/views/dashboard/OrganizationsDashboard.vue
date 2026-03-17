@@ -102,35 +102,19 @@ const createOrganization = () => {
 
     <!-- Stats Cards -->
     <v-row class="mb-6">
-      <v-col cols="12" sm="6" md="3">
-        <v-card>
-          <v-card-text>
-            <div class="d-flex justify-space-between align-center">
-              <div>
-                <p class="text-caption text-medium-emphasis mb-1">Total Organizaciones</p>
-                <h3 class="text-h4 font-weight-bold">{{ stats.total }}</h3>
-              </div>
-              <v-avatar color="primary" variant="tonal" size="48">
-                <v-icon>mdi-domain</v-icon>
-              </v-avatar>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-
-      <v-col cols="12" sm="6" md="3">
-        <v-card>
-          <v-card-text>
+      <v-col cols="12" sm="6" lg="3">
+        <v-card class="stat-card" elevation="0">
+          <v-card-text class="pa-5">
             <div class="d-flex align-center justify-space-between">
               <div>
-                <p class="text-body-2 text-medium-emphasis mb-1">Activas</p>
-                <h2 class="text-h4 font-weight-bold text-success">{{ stats.active }}</h2>
+                <p class="text-body-2 text-medium-emphasis mb-1">Total Organizaciones</p>
+                <h2 class="text-h4 font-weight-bold">{{ stats.total }}</h2>
                 <p class="text-caption text-medium-emphasis mt-1">
-                  {{ Math.round((stats.active / stats.total) * 100) || 0 }}% del total
+                  Registradas en sistema
                 </p>
               </div>
-              <div class="stat-icon stat-icon-success">
-                <v-icon size="28">mdi-check-circle</v-icon>
+              <div class="stat-icon stat-icon-primary">
+                <v-icon size="28">mdi-domain</v-icon>
               </div>
             </div>
           </v-card-text>
@@ -138,18 +122,38 @@ const createOrganization = () => {
       </v-col>
 
       <v-col cols="12" sm="6" lg="3">
-        <v-card class="stat-card stat-card-warning" elevation="0">
+        <v-card class="stat-card" elevation="0">
+          <v-card-text class="pa-5">
+            <div class="d-flex align-center justify-space-between">
+              <div>
+                <p class="text-body-2 text-medium-emphasis mb-1">Activas</p>
+                <h2 class="text-h4 font-weight-bold">{{ stats.active }}</h2>
+                <p class="text-caption text-success font-weight-medium mt-1">
+                  <v-icon size="small" color="success" class="mr-1">mdi-trending-up</v-icon>
+                  {{ Math.round((stats.active / stats.total) * 100) || 0 }}% del total
+                </p>
+              </div>
+              <div class="stat-icon stat-icon-success">
+                <v-icon size="28">mdi-check-circle-outline</v-icon>
+              </div>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+
+      <v-col cols="12" sm="6" lg="3">
+        <v-card class="stat-card" elevation="0">
           <v-card-text class="pa-5">
             <div class="d-flex align-center justify-space-between">
               <div>
                 <p class="text-body-2 text-medium-emphasis mb-1">Enterprise</p>
-                <h2 class="text-h4 font-weight-bold text-amber-darken-2">{{ stats.enterprise }}</h2>
+                <h2 class="text-h4 font-weight-bold">{{ stats.enterprise }}</h2>
                 <p class="text-caption text-medium-emphasis mt-1">
                   Plan premium
                 </p>
               </div>
               <div class="stat-icon stat-icon-warning">
-                <v-icon size="28">mdi-crown</v-icon>
+                <v-icon size="28">mdi-crown-outline</v-icon>
               </div>
             </div>
           </v-card-text>
@@ -157,14 +161,14 @@ const createOrganization = () => {
       </v-col>
 
       <v-col cols="12" sm="6" lg="3">
-        <v-card class="stat-card stat-card-info" elevation="0">
+        <v-card class="stat-card" elevation="0">
           <v-card-text class="pa-5">
             <div class="d-flex align-center justify-space-between">
               <div>
                 <p class="text-body-2 text-medium-emphasis mb-1">WhatsApp</p>
-                <h2 class="text-h4 font-weight-bold text-teal">{{ stats.totalNumbers }}</h2>
+                <h2 class="text-h4 font-weight-bold">{{ stats.totalNumbers }}</h2>
                 <p class="text-caption text-medium-emphasis mt-1">
-                  Números activos
+                  Números conectados
                 </p>
               </div>
               <div class="stat-icon stat-icon-info">

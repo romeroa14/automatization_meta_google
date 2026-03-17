@@ -6,12 +6,17 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      redirect: '/dashboard/organizations'
+      redirect: '/dashboard/main'
     },
     {
       path: '/dashboard',
       component: () => import('@/layouts/dashboard/DashboardLayout.vue'),
       children: [
+        {
+          path: 'main',
+          name: 'main-dashboard',
+          component: () => import('@/views/dashboard/MainDashboard.vue')
+        },
         {
           path: 'organizations',
           name: 'organizations',

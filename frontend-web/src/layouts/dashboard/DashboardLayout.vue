@@ -6,8 +6,9 @@ const router = useRouter()
 const drawer = ref(true)
 
 const menuItems = [
+  { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', to: '/dashboard/main' },
   { title: 'Organizaciones', icon: 'mdi-domain', to: '/dashboard/organizations' },
-  { title: 'Leads', icon: 'mdi-account-group', to: '/dashboard/leads' },
+  { title: 'Leads', icon: 'mdi-account-group-outline', to: '/dashboard/leads' },
 ]
 
 const logout = () => {
@@ -19,24 +20,22 @@ const logout = () => {
 <template>
   <v-app>
     <!-- Sidebar -->
-    <v-navigation-drawer v-model="drawer" width="260" color="primary" dark>
+    <v-navigation-drawer v-model="drawer" width="260" color="white" elevation="0" border="right">
       <!-- Logo -->
-      <div class="pa-4">
-        <div class="d-flex align-center">
-          <v-avatar color="success" size="42" class="mr-3">
+      <div class="pa-4 pt-6 pb-4">
+        <div class="d-flex align-center cursor-pointer" @click="router.push('/dashboard/main')">
+          <v-avatar color="primary" size="42" class="mr-3">
             <v-icon color="white">mdi-whatsapp</v-icon>
           </v-avatar>
           <div>
-            <div class="text-subtitle-1 font-weight-bold text-white">Admetricas</div>
-            <div class="text-caption" style="opacity: 0.7;">WhatsApp Multi-Tenant</div>
+            <div class="text-subtitle-1 font-weight-bold text-primary" style="font-size: 1.1rem !important;">Admetricas</div>
+            <div class="text-caption text-medium-emphasis">WhatsApp Multi-Tenant</div>
           </div>
         </div>
       </div>
 
-      <v-divider class="mb-2" style="opacity: 0.2;"></v-divider>
-
       <!-- Menu -->
-      <v-list nav dense>
+      <v-list nav class="px-3">
         <v-list-item
           v-for="item in menuItems"
           :key="item.title"
@@ -44,13 +43,15 @@ const logout = () => {
           :prepend-icon="item.icon"
           :title="item.title"
           rounded="lg"
-          class="mb-1 mx-2"
+          color="primary"
+          class="mb-1"
+          active-class="bg-primary-lighten-5 text-primary"
         ></v-list-item>
       </v-list>
 
       <template v-slot:append>
-        <div class="pa-4">
-          <v-btn block variant="outlined" color="white" @click="logout" prepend-icon="mdi-logout">
+        <div class="pa-5">
+          <v-btn block variant="tonal" color="error" @click="logout" prepend-icon="mdi-logout">
             Cerrar Sesión
           </v-btn>
         </div>
@@ -58,26 +59,30 @@ const logout = () => {
     </v-navigation-drawer>
 
     <!-- Header -->
-    <v-app-bar flat color="white" elevation="1">
-      <v-app-bar-nav-icon @click="drawer = !drawer"></v-app-bar-nav-icon>
+    <v-app-bar flat color="white" border="bottom">
+      <v-app-bar-nav-icon @click="drawer = !drawer" color="medium-emphasis"></v-app-bar-nav-icon>
       <v-spacer></v-spacer>
       <v-text-field
         density="compact"
-        variant="outlined"
+        variant="solo-filled"
+        flat
         hide-details
         placeholder="Buscar..."
         prepend-inner-icon="mdi-magnify"
-        style="max-width: 250px;"
+        style="max-width: 280px;"
         class="mr-4"
+        bg-color="grey-lighten-4"
       ></v-text-field>
-      <v-btn icon class="mr-2">
-        <v-badge color="error" content="3" overlap>
+      <v-btn icon class="mr-2" color="medium-emphasis">
+        <v-badge color="error" dot>
           <v-icon>mdi-bell-outline</v-icon>
         </v-badge>
       </v-btn>
-      <v-avatar color="primary" size="36">
-        <span class="text-white text-body-2">AD</span>
-      </v-avatar>
+      <div class="mr-4 d-flex align-center cursor-pointer">
+        <v-avatar color="primary-lighten-4" size="40">
+          <span class="text-primary font-weight-medium text-body-1">AD</span>
+        </v-avatar>
+      </div>
     </v-app-bar>
 
     <!-- Main Content -->
