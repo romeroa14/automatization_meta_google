@@ -5,11 +5,14 @@ import apiClient from '@/plugins/axios'
 export interface Lead {
   id: number
   client_name: string
-  phone: string
+  phone_number: string
+  organization_id?: number
   stage: string
   platform: string
-  confidence_score?: string
+  confidence_score?: number
   intent?: string
+  lead_level?: string
+  bot_disabled?: boolean
   created_at: string
 }
 
@@ -22,6 +25,7 @@ export interface Conversation {
   platform: string
   is_client_message: boolean
   is_employee: boolean
+  created_at?: string
 }
 
 export const useLeadStore = defineStore('lead', () => {
@@ -116,6 +120,33 @@ export const useLeadStore = defineStore('lead', () => {
     }
   }
 
+  // Toggle Bot status
+  async function toggleBot(leadId: number, botDisabled: boolean) {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await apiClient.post('/whatsapp/toggle-bot', {
+        lead_id: leadId,
+        bot_disabled: botDisabled
+      })
+      if (currentLead.value?.id === leadId) {
+        currentLead.value.bot_disabled = botDisabled
+      }
+      
+      const leadIndex = leads.value.findIndex(l => l.id === leadId)
+      if (leadIndex !== -1 && leads.value[leadIndex]) {
+        leads.value[leadIndex]!.bot_disabled = botDisabled
+      }
+      return response.data
+    } catch (err: any) {
+      error.value = err.response?.data?.message || 'Error al cambiar estado del bot'
+      console.error('Error toggling bot:', err)
+      throw err
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     leads,
     currentLead,
@@ -126,6 +157,7 @@ export const useLeadStore = defineStore('lead', () => {
     fetchLead,
     fetchConversations,
     sendMessage,
-    updateLeadStage
+    updateLeadStage,
+    toggleBot
   }
 })

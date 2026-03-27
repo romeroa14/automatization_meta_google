@@ -1,14 +1,58 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+import apiClient from '@/plugins/axios'
 
-const loading = ref(false)
+const loading = ref(true)
+const campaigns = ref<any[]>([])
+const errorMsg = ref<string | null>(null)
 
-const overviewStats = ref([
-  { title: 'Ingresos Mensuales', value: '$12,500', icon: 'mdi-currency-usd', color: 'primary', trend: '+15%' },
-  { title: 'Nuevos Leads', value: '342', icon: 'mdi-account-plus-outline', color: 'success', trend: '+5%' },
-  { title: 'Tasa de Conversión', value: '18.4%', icon: 'mdi-chart-line', color: 'warning', trend: '+2%' },
-  { title: 'Mensajes Enviados', value: '45.2K', icon: 'mdi-message-text-outline', color: 'info', trend: '+10%' }
+// Computed stats based on FB Data
+const fbStats = computed(() => {
+  if (campaigns.value.length === 0) return { spent: 0, clicks: 0, cpm: 0, reach: 0 }
+  
+  return campaigns.value.reduce((acc, curr) => {
+    return {
+      spent: acc.spent + (parseFloat(curr.amount_spent) || 0),
+      clicks: acc.clicks + (parseInt(curr.clicks) || 0),
+      cpm: curr.cpm ? parseFloat(curr.cpm) : acc.cpm, // Simplification
+      reach: acc.reach + (parseInt(curr.impressions) || 0)
+    }
+  }, { spent: 0, clicks: 0, cpm: 0, reach: 0 })
+})
+
+const overviewStats = computed(() => [
+  { title: 'Inversión Total (Ads)', value: `$${fbStats.value.spent.toFixed(2)}`, icon: 'mdi-currency-usd', color: 'primary', trend: 'Actualizado' },
+  { title: 'Clics Obtenidos', value: fbStats.value.clicks.toString(), icon: 'mdi-cursor-default-click-outline', color: 'success', trend: 'Actualizado' },
+  { title: 'Costo por Mil (CPM)', value: `$${fbStats.value.cpm.toFixed(2)}`, icon: 'mdi-chart-line', color: 'warning', trend: 'Promedio' },
+  { title: 'Impresiones Meta', value: fbStats.value.reach.toString(), icon: 'mdi-eye-outline', color: 'info', trend: 'Actualizado' }
 ])
+
+const connectFacebook = async () => {
+  try {
+    loading.value = true
+    const response = await apiClient.get('/facebook/login-url')
+    if (response.data && response.data.login_url) {
+      window.location.href = response.data.login_url
+    }
+  } catch (error: any) {
+    console.error('Error fetching Facebook Login URL:', error)
+    errorMsg.value = error.response?.data?.error || 'No se pudo generar el enlace de conexión'
+    loading.value = false
+  }
+}
+
+onMounted(async () => {
+  try {
+    const response = await apiClient.get('/facebook/campaigns')
+    campaigns.value = response.data.data || []
+    errorMsg.value = null
+  } catch (error: any) {
+    console.error('Error fetching dashboard FB data:', error)
+    errorMsg.value = error.response?.data?.error || 'No fue posible cargar las métricas de Facebook. Asegurate de conectar tu cuenta.'
+  } finally {
+    loading.value = false
+  }
+})
 </script>
 
 <template>
@@ -24,7 +68,25 @@ const overviewStats = ref([
       </div>
     </div>
 
-    <!-- Quick Stats -->
+    <!-- Alert for Missing Connection -->
+    <v-alert
+      v-if="errorMsg"
+      type="warning"
+      variant="tonal"
+      class="mb-6"
+    >
+      <div class="d-flex justify-space-between align-center">
+        <span>{{ errorMsg }}</span>
+        <v-btn color="primary" variant="flat" size="small" @click="connectFacebook">Conectar con Meta</v-btn>
+      </div>
+    </v-alert>
+
+    <div v-if="loading" class="d-flex justify-center my-12">
+      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
+    </div>
+
+    <div v-else>
+      <!-- Quick Stats -->
     <v-row class="mb-6">
       <v-col cols="12" sm="6" lg="3" v-for="(stat, index) in overviewStats" :key="index">
         <v-card class="stat-card" elevation="0">
@@ -71,23 +133,42 @@ const overviewStats = ref([
 
       <!-- Secondary Chart / Info -->
       <v-col cols="12" md="4">
-        <v-card elevation="0" class="chart-card">
+        <v-card elevation="0" class="chart-card h-100">
           <v-card-text class="pa-6">
             <div class="d-flex justify-space-between align-center mb-6">
-              <h3 class="text-h6 font-weight-bold">Distribución de Leads</h3>
+              <h3 class="text-h6 font-weight-bold">Campañas Activas</h3>
             </div>
             
-            <div class="chart-placeholder d-flex align-center justify-center bg-grey-lighten-4 rounded-lg" style="height: 300px; border: 2px dashed #e0e0e0;">
-              <!-- Here a real chart like ApexCharts Circular would be inserted -->
-              <div class="text-center">
-                <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-chart-donut</v-icon>
-                <p class="text-body-2 text-medium-emphasis">Gráfico de Donut</p>
-              </div>
+            <div v-if="campaigns.length === 0" class="text-center pa-8 bg-grey-lighten-4 rounded-lg">
+              <v-icon size="48" color="grey-lighten-1" class="mb-2">mdi-google-ads</v-icon>
+              <p class="text-body-2 text-medium-emphasis">No hay campañas disponibles</p>
             </div>
+            
+            <v-list v-else lines="two" class="bg-transparent">
+              <v-list-item
+                v-for="campaign in campaigns.slice(0, 5)"
+                :key="campaign.id"
+                class="px-0 border-b"
+              >
+                <template v-slot:prepend>
+                  <v-avatar color="primary-lighten-4" size="40">
+                    <v-icon color="primary">mdi-bullhorn-outline</v-icon>
+                  </v-avatar>
+                </template>
+                <v-list-item-title class="font-weight-medium">{{ campaign.name }}</v-list-item-title>
+                <v-list-item-subtitle class="mt-1">
+                  <v-chip size="x-small" :color="campaign.status === 'ACTIVE' ? 'success' : 'grey'">
+                    {{ campaign.status }}
+                  </v-chip>
+                  <span class="ml-2 text-caption">Gasto: ${{ (parseFloat(campaign.amount_spent) || 0).toFixed(2) }}</span>
+                </v-list-item-subtitle>
+              </v-list-item>
+            </v-list>
           </v-card-text>
         </v-card>
       </v-col>
     </v-row>
+    </div>
   </div>
 </template>
 

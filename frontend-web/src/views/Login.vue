@@ -72,13 +72,31 @@ const loading = ref(false)
 
 const handleLogin = async () => {
   loading.value = true
+  // Simulación de sesión real para Ads Vzla
   setTimeout(() => {
+    // Usamos el token generado manualmente en el backend para que axios funcione
+    const token = '1|NYBZVaAdmqgEn6f45ngJXxDj9ssDHZdiXZbn3f7h8944c75a'
+    const userObj = { 
+      id: 3,
+      name: 'Admin Ads Vzla',
+      email: email.value || 'admin@admetricas.com',
+      token: token 
+    }
+    
+    // Guardamos en ambos formatos para asegurar compatibilidad con todos los componentes
+    localStorage.setItem('user', JSON.stringify(userObj))
+    localStorage.setItem('auth_token', token)
+    
     loading.value = false
-    router.push('/dashboard/organizations')
-  }, 1000)
+    router.push('/dashboard/main')
+  }, 800)
 }
 
 const skipLogin = () => {
-  router.push('/dashboard/organizations')
+  const token = '1|NYBZVaAdmqgEn6f45ngJXxDj9ssDHZdiXZbn3f7h8944c75a'
+  const userObj = { id: 3, name: 'Admin Demo', email: 'admin@admetricas.com', token: token }
+  localStorage.setItem('user', JSON.stringify(userObj))
+  localStorage.setItem('auth_token', token)
+  router.push('/dashboard/main')
 }
 </script>

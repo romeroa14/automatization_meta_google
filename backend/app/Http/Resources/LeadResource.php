@@ -22,6 +22,10 @@ class LeadResource extends JsonResource
             'lead_level' => $this->lead_level,
             'stage' => $this->stage,
             'confidence_score' => $this->confidence_score,
+            'bot_disabled' => (boolean) $this->bot_disabled,
+            'last_human_intervention_at' => $this->last_human_intervention_at,
+            'organization_id' => $this->organization_id,
+            'whatsapp_phone_number_id' => $this->whatsapp_phone_number_id,
             'created_at' => $this->created_at,
         ];
     }

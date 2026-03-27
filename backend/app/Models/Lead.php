@@ -17,6 +17,8 @@ class Lead extends Model
         'confidence_score', // Renamed from confidence
         'bot_disabled', // Si es true, el bot no responderá (intervención humana)
         'last_human_intervention_at', // Última vez que un agente humano escribió
+        'organization_id',
+        'whatsapp_phone_number_id',
     ];
 
     protected $casts = [
@@ -69,5 +71,10 @@ class Lead extends Model
     public function conversations(): HasMany
     {
         return $this->hasMany(Conversation::class);
+    }
+
+    public function organization()
+    {
+        return $this->belongsTo(Organization::class);
     }
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+// Refresh ts
 import { useLeadStore } from '@/stores/leadStore'
 import { useOrganizationStore } from '@/stores/organizationStore'
 import { useRouter } from 'vue-router'
@@ -89,8 +90,25 @@ const sendMessage = async () => {
   try {
     await leadStore.sendMessage(selectedLead.value.id, newMessage.value)
     newMessage.value = ''
+    
+    // Si se envía un mensaje humano, el bot se deshabilita automáticamente por backend.
+    // Actualizamos el estado local por si acaso:
+    selectedLead.value.bot_disabled = true
+    
   } catch (error) {
     console.error('Error sending message:', error)
+  }
+}
+
+const toggleBotStatus = async () => {
+  if (!selectedLead.value) return
+  
+  try {
+    const isNowDisabled = !selectedLead.value.bot_disabled
+    await leadStore.toggleBot(selectedLead.value.id, isNowDisabled)
+    selectedLead.value.bot_disabled = isNowDisabled
+  } catch (error) {
+    console.error('Error toggling bot status:', error)
   }
 }
 
@@ -252,9 +270,9 @@ const formatDate = (date: string) => {
           <v-card-text>
             <div class="d-flex justify-space-between align-center mb-3">
               <v-chip
-                :color="getLevelColor(lead.lead_level)"
+                :color="getLevelColor(lead.lead_level || '')"
                 size="small"
-                :prepend-icon="`mdi-${getLevelIcon(lead.lead_level)}`"
+                :prepend-icon="`mdi-${getLevelIcon(lead.lead_level || '')}`"
               >
                 {{ lead.lead_level?.toUpperCase() }}
               </v-chip>
@@ -336,7 +354,40 @@ const formatDate = (date: string) => {
               <p class="text-caption">{{ selectedLead.phone_number }}</p>
             </div>
           </div>
-          <v-btn icon="mdi-close" variant="text" color="white" @click="showChatDialog = false"></v-btn>
+          <div class="d-flex align-center">
+            <v-chip
+              v-if="selectedLead.bot_disabled"
+              color="warning"
+              variant="flat"
+              size="small"
+              class="mr-4"
+              prepend-icon="mdi-robot-off"
+            >
+              Bot Apagado
+            </v-chip>
+            <v-chip
+              v-else
+              color="success"
+              variant="flat"
+              size="small"
+              class="mr-4 text-white"
+              prepend-icon="mdi-robot"
+            >
+              Bot Activo
+            </v-chip>
+            
+            <v-switch
+              v-model="selectedLead.bot_disabled"
+              color="error"
+              inset
+              hide-details
+              density="compact"
+              class="mr-2"
+              @change="toggleBotStatus"
+            ></v-switch>
+            
+            <v-btn icon="mdi-close" variant="text" color="white" @click="showChatDialog = false"></v-btn>
+          </div>
         </v-card-title>
 
         <v-divider></v-divider>
@@ -352,18 +403,14 @@ const formatDate = (date: string) => {
               v-for="conv in leadStore.conversations"
               :key="conv.id"
               class="message-wrapper mb-4"
+              :class="conv.is_client_message ? 'client-message' : 'agent-message'"
             >
-              <div v-if="conv.message_text" class="message client-message">
-                <div class="message-bubble">
-                  <p class="message-text">{{ conv.message_text }}</p>
-                  <span class="message-time">{{ formatTime(conv.timestamp || conv.created_at) }}</span>
-                </div>
-              </div>
-
-              <div v-if="conv.response" class="message bot-message">
-                <div class="message-bubble">
-                  <p class="message-text">{{ conv.response }}</p>
-                  <span class="message-time">{{ formatTime(conv.timestamp || conv.created_at) }}</span>
+              <div class="message-bubble" :class="conv.is_employee ? 'employee-bubble' : ''">
+                <p class="message-text">{{ conv.message_text || conv.response }}</p>
+                <div class="d-flex align-center mt-1">
+                  <v-icon v-if="conv.is_employee" size="10" class="mr-1">mdi-account-tie</v-icon>
+                  <v-icon v-else-if="!conv.is_client_message" size="10" class="mr-1">mdi-robot</v-icon>
+                  <span class="message-time">{{ formatTime(conv.timestamp || conv.created_at || '') }}</span>
                 </div>
               </div>
             </div>
@@ -434,32 +481,39 @@ const formatDate = (date: string) => {
 .message-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.message {
-  display: flex;
-  max-width: 70%;
 }
 
 .client-message {
-  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.agent-message {
+  align-items: flex-end;
+}
+
+.message-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .client-message .message-bubble {
   background: white;
-  border-radius: 0 12px 12px 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-bottom-left-radius: 2px;
+  color: #333;
 }
 
-.bot-message {
-  align-self: flex-end;
+.agent-message .message-bubble {
+  background: #E3F2FD;
+  border-bottom-right-radius: 2px;
+  color: #1565C0;
 }
 
-.bot-message .message-bubble {
-  background: #dcf8c6;
-  border-radius: 12px 0 12px 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.agent-message .employee-bubble {
+  background: #E8F5E9;
+  color: #2E7D32;
 }
 
 .message-bubble {

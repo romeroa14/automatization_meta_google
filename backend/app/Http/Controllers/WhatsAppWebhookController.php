@@ -70,6 +70,108 @@ class WhatsAppWebhookController extends Controller
         return response('OK', 200);
     }
 
+    /**
+     * Manejar respuesta de n8n (POST)
+     * Cuando el bot responde desde n8n, envía los detalles aquí para loguearlos en el CRM
+     */
+    public function handleN8nResponse(Request $request)
+    {
+        try {
+            $data = $request->all();
+            
+            Log::info('🤖 Respuesta de n8n recibida para loguear', $data);
+
+            $leadId = $data['leadId'] ?? null;
+            $messageText = $data['responseText'] ?? ($data['message'] ?? '');
+            $organizationId = $data['organizationId'] ?? null;
+            $whatsappPhoneNumberId = $data['whatsappPhoneNumberId'] ?? null;
+
+            if (!$leadId || empty($messageText)) {
+                return response()->json(['error' => 'Missing data'], 400);
+            }
+
+            $lead = Lead::findOrFail($leadId);
+            
+            // 1. Obtener número de WhatsApp para enviar
+            $whatsappNumber = $lead->whatsapp_phone_number_id 
+                ? WhatsAppPhoneNumber::find($lead->whatsapp_phone_number_id)
+                : ($lead->organization_id ? \App\Models\Organization::find($lead->organization_id)?->getDefaultPhoneNumber() : null);
+
+            if (!$whatsappNumber) {
+                // Fallback to global setting if no specific number
+                $phoneNumberId = config('services.whatsapp.phone_number_id');
+                $accessToken = config('services.whatsapp.access_token');
+            } else {
+                $phoneNumberId = $whatsappNumber->phone_number_id;
+                $accessToken = $whatsappNumber->access_token;
+            }
+
+            if (!$phoneNumberId || !$accessToken) {
+                return response()->json(['error' => 'No de WhatsApp credentials found'], 400);
+            }
+
+            // 2. ENVIAR A META VIA HTTPS (CRM como único emisor)
+            $to = preg_replace('/[^0-9]/', '', $lead->phone_number);
+
+            $response = Http::withHeaders([
+                'Authorization' => "Bearer {$accessToken}",
+                'Content-Type' => 'application/json',
+            ])->post("https://graph.facebook.com/v21.0/{$phoneNumberId}/messages", [
+                'messaging_product' => 'whatsapp',
+                'to' => $to,
+                'type' => 'text',
+                'text' => [
+                    'body' => $messageText,
+                ],
+            ]);
+
+            if (!$response->successful()) {
+                Log::error('❌ Error enviando respuesta de BOT desde CRM', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return response()->json(['error' => 'Meta API Error', 'details' => $response->json()], 502);
+            }
+
+            $responseData = $response->json();
+            $wamid = $responseData['messages'][0]['id'] ?? null;
+
+            // 3. Guardar en la tabla de conversaciones como mensaje del BOT
+            $conversation = $lead->conversations()->create([
+                'user_id' => $lead->user_id,
+                'organization_id' => $lead->organization_id,
+                'whatsapp_phone_number_id' => $whatsappNumber?->id,
+                'message_id' => $wamid,
+                'message_text' => null, // Es respuesta del bot
+                'response' => $messageText,
+                'is_client_message' => false,
+                'is_employee' => false,
+                'platform' => 'whatsapp',
+                'timestamp' => now()->toDateTimeString(),
+                'status' => 'sent',
+                'message_length' => strlen($messageText),
+            ]);
+
+            Log::info('✅ Respuesta de BOT enviada y logueada', [
+                'lead_id' => $lead->id,
+                'wamid' => $wamid,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'conversation_id' => $conversation->id,
+                'wamid' => $wamid,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Error guardando respuesta de n8n', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json(['error' => 'Internal server error'], 500);
+        }
+    }
+
     private function processWhatsAppMessage($messageData)
     {
         try {

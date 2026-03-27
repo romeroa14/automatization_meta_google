@@ -18,21 +18,17 @@ class ConversationResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        // Log para debug - verificar qué datos tiene cada conversación
-        \Log::info('📤 ConversationResource', [
-            'id' => $this->id,
-            'has_message_text' => !empty($this->message_text),
-            'has_response' => !empty($this->response),
-            'message_text_preview' => substr($this->message_text ?? '', 0, 50),
-            'response_preview' => substr($this->response ?? '', 0, 50),
-        ]);
-        
         return [
             'id' => $this->id,
             'lead_id' => $this->lead_id,
+            'user_id' => $this->user_id,
+            'organization_id' => $this->organization_id,
             'message_text' => $this->message_text,
             'response' => $this->response,
+            'is_client_message' => (boolean) $this->is_client_message,
+            'is_employee' => (boolean) $this->is_employee,
             'platform' => $this->platform,
+            'status' => $this->status,
             'timestamp' => $this->timestamp,
             'created_at' => $this->created_at,
         ];

@@ -25,59 +25,40 @@ class WhatsAppMessageController extends Controller
         ]);
 
         try {
-            $lead = Lead::where('id', $request->lead_id)
-                ->where('user_id', $user->id)
-                ->firstOrFail();
-
-            // ⚠️ TEMPORALMENTE DESHABILITADO: n8n maneja el envío de mensajes a WhatsApp
-            // TODO: Cuando se reactive, descomentar el código de abajo y eliminar el código temporal
+            $lead = Lead::findOrFail($request->lead_id);
             
-            // Deshabilitar bot y registrar intervención humana
-            $lead->update([
-                'bot_disabled' => true,
-                'last_human_intervention_at' => now(),
-            ]);
+            // Verificar si el usuario tiene acceso a la organización del lead
+            $organization = \App\Models\Organization::find($lead->organization_id);
+            if (!$organization || !$user->organizations()->where('organizations.id', $organization->id)->exists()) {
+                return response()->json(['success' => false, 'error' => 'No tienes permiso para responder a este lead'], 403);
+            }
 
-            // Guardar conversación como mensaje del empleado
-            // NOTA: message_id será null temporalmente hasta que n8n envíe el webhook con el wamid
-            $conversation = $lead->conversations()->create([
-                'user_id' => $user->id,
-                'message_id' => null, // Se actualizará cuando n8n envíe el webhook
-                'message_text' => $request->message,
-                'response' => null, // Mensaje del empleado, no tiene response
-                'is_client_message' => false,
-                'is_employee' => true,
-                'platform' => 'whatsapp',
-                'timestamp' => now()->toDateTimeString(),
-                'message_length' => strlen($request->message),
-                'status' => 'pending', // Pendiente de envío por n8n
-            ]);
-
-            Log::info('✅ Mensaje del empleado guardado (pendiente de envío por n8n)', [
-                'lead_id' => $lead->id,
-                'conversation_id' => $conversation->id,
-                'bot_disabled' => true,
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Mensaje guardado correctamente (será enviado por n8n)',
-                'conversation_id' => $conversation->id,
-                'bot_disabled' => true,
-            ]);
-
-            /* CÓDIGO COMENTADO - Envío directo a WhatsApp (deshabilitado temporalmente)
+            // Obtener el número de WhatsApp para enviar
+            $whatsappNumber = null;
+            if ($lead->whatsapp_phone_number_id) {
+                $whatsappNumber = \App\Models\WhatsAppPhoneNumber::find($lead->whatsapp_phone_number_id);
+            }
             
-            // Enviar mensaje a WhatsApp usando la API
-            $phoneNumberId = config('services.whatsapp.phone_number_id');
-            $accessToken = config('services.whatsapp.access_token');
+            if (!$whatsappNumber) {
+                $whatsappNumber = $organization->whatsappPhoneNumbers()->where('is_default', true)->first();
+            }
+
+            if (!$whatsappNumber) {
+                return response()->json(['success' => false, 'error' => 'No hay número de WhatsApp configurado para esta organización'], 400);
+            }
+
+            // Enviar mensaje a WhatsApp usando la API real
+            $phoneNumberId = $whatsappNumber->phone_number_id;
+            $accessToken = $whatsappNumber->getAccessTokenAttribute($whatsappNumber->getRawOriginal('access_token'));
             
+            $to = preg_replace('/[^0-9]/', '', $lead->phone_number);
+
             $response = Http::withHeaders([
                 'Authorization' => "Bearer {$accessToken}",
                 'Content-Type' => 'application/json',
             ])->post("https://graph.facebook.com/v21.0/{$phoneNumberId}/messages", [
                 'messaging_product' => 'whatsapp',
-                'to' => $lead->phone_number,
+                'to' => $to,
                 'type' => 'text',
                 'text' => [
                     'body' => $request->message,
@@ -97,6 +78,8 @@ class WhatsAppMessageController extends Controller
                 // Guardar conversación como mensaje del empleado
                 $conversation = $lead->conversations()->create([
                     'user_id' => $user->id,
+                    'organization_id' => $organization->id, // Agregar para multi-tenant
+                    'whatsapp_phone_number_id' => $whatsappNumber->id, // Asociar al número
                     'message_id' => $wamid,
                     'message_text' => $request->message,
                     'is_client_message' => false,
@@ -107,7 +90,7 @@ class WhatsAppMessageController extends Controller
                     'status' => 'sent',
                 ]);
 
-                Log::info('✅ Mensaje enviado desde la app', [
+                Log::info('✅ Mensaje humano enviado desde la app (WhatsApp)', [
                     'lead_id' => $lead->id,
                     'conversation_id' => $conversation->id,
                     'wamid' => $wamid,
@@ -122,7 +105,7 @@ class WhatsAppMessageController extends Controller
                     'bot_disabled' => true,
                 ]);
             } else {
-                Log::error('Error enviando mensaje a WhatsApp', [
+                Log::error('❌ Error enviando mensaje a WhatsApp desde app', [
                     'status' => $response->status(),
                     'response' => $response->body(),
                     'lead_id' => $lead->id,
@@ -134,7 +117,6 @@ class WhatsAppMessageController extends Controller
                     'details' => $response->json(),
                 ], $response->status());
             }
-            */
         } catch (\Exception $e) {
             Log::error('Error en sendMessage', [
                 'error' => $e->getMessage(),

@@ -118,6 +118,8 @@ Route::get('/webhook/n8n', [App\Http\Controllers\InstagramWebhookController::cla
 ||
 */
 
-// Webhook de WhatsApp Business (sin CSRF)
 Route::post('/webhook/whatsapp', [App\Http\Controllers\WhatsAppWebhookController::class, 'handleWebhook'])->withoutMiddleware(['web']);
 Route::get('/webhook/whatsapp', [App\Http\Controllers\WhatsAppWebhookController::class, 'verifyWebhook'])->withoutMiddleware(['web']);
+
+// n8n response for WhatsApp
+Route::post('/webhook/whatsapp/n8n-response', [App\Http\Controllers\WhatsAppWebhookController::class, 'handleN8nResponse']);

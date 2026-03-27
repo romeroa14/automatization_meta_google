@@ -10,10 +10,23 @@ const apiClient = axios.create({
   },
 })
 
-// Interceptor para agregar token si existe (para compatibilidad)
+// Interceptor para agregar token si existe
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth_token')
+    let token = localStorage.getItem('auth_token')
+    
+    if (!token) {
+      const userStr = localStorage.getItem('user')
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr)
+          token = user.token
+        } catch (e) {
+          console.error('Error parsing user from localStorage', e)
+        }
+      }
+    }
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }

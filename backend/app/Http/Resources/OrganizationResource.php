@@ -21,6 +21,7 @@ class OrganizationResource extends JsonResource
             'settings' => $this->settings,
             'is_active' => $this->is_active,
             'plan' => $this->plan,
+            'n8n_webhook_url' => $this->n8n_webhook_url,
             'trial_ends_at' => $this->trial_ends_at?->toIso8601String(),
             'created_at' => $this->created_at->toIso8601String(),
             'updated_at' => $this->updated_at->toIso8601String(),

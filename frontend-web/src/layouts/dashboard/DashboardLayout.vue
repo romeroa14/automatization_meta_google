@@ -13,6 +13,8 @@ const menuItems = [
 
 const logout = () => {
   localStorage.removeItem('token')
+  localStorage.removeItem('auth_token')
+  localStorage.removeItem('user')
   router.push('/login')
 }
 </script>
