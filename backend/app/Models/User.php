@@ -2,16 +2,18 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Filament\Panel;
+use Filament\Models\Contracts\HasTenants;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-
 use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
-class User extends Authenticatable
+class User extends Authenticatable implements HasTenants
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
 
     /**
@@ -50,22 +52,25 @@ class User extends Authenticatable
     }
 
     /**
-     * Relationships
+     * Relationships para Multi-Tenancy (Workspace)
      */
-    public function organizations()
+    public function workspaces(): BelongsToMany
     {
-        return $this->belongsToMany(Organization::class, 'organization_user')
-            ->withPivot('role')
-            ->withTimestamps();
+        return $this->belongsToMany(Workspace::class)
+                    ->withPivot('role')
+                    ->withTimestamps();
     }
 
-    public function leads()
+    /**
+     * Filament HasTenants implementation
+     */
+    public function getTenants(Panel $panel): Collection
     {
-        return $this->hasMany(Lead::class);
+        return $this->workspaces;
     }
 
-    public function conversations()
+    public function canAccessTenant(Model $tenant, Panel $panel): bool
     {
-        return $this->hasMany(Conversation::class);
+        return $this->workspaces()->whereKey($tenant)->exists();
     }
 }
