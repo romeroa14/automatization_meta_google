@@ -1,0 +1,33 @@
+// Import Vuetify styles first
+@use 'vuetify/styles';
+
+// Import custom overrides
+@import './override';
+@import './layout/container';
+@import './layout/sidebar';
+@import './layout/footer';
+@import './layout/topbar';
+
+@import './components/VAlert';
+@import './components/VList';
+@import './components/VButtons';
+@import './components/VCard';
+@import './components/VBadge';
+@import './components/VBreadcrumb';
+@import './components/VField';
+@import './components/VInput';
+@import './components/VNavigationDrawer';
+@import './components/VShadow';
+@import './components/VTextField';
+@import './components/VTextarea';
+
+@import './page/dashboards';
+
+// Global styles
+:root {
+  --font-family: 'Public Sans', sans-serif;
+}
+
+body {
+  font-family: var(--font-family);
+}

@@ -1,6 +1,40 @@
-# 🚀 Sistema de Automatización Facebook Ads → Google Sheets
+# 🚀 Admetricas - Sistema de Gestión de Leads con IA
 
-Un sistema completo de automatización que sincroniza métricas de Facebook Ads directamente a Google Sheets en tiempo real.
+Sistema integral de gestión de leads con arquitectura API-First que integra WhatsApp, Instagram, Facebook y análisis con IA para optimizar la conversión de clientes potenciales.
+
+## 🏗️ Arquitectura
+
+Este proyecto utiliza una arquitectura moderna desacoplada:
+
+```
+Admetricas/
+├── backend/           # Laravel 11 + Filament (API + Admin Panel)
+├── frontend-web/      # Vue 3 + Vite (Web Application)
+└── mobile-app/        # Flutter + Dart (iOS/Android App)
+```
+
+### Backend (Laravel API)
+- **Framework**: Laravel 11
+- **Admin Panel**: FilamentPHP
+- **Autenticación**: Laravel Sanctum
+  - Cookies para SPA (Vue)
+  - Tokens para Mobile (Flutter)
+- **Base de datos**: PostgreSQL
+- **APIs**: RESTful JSON API en `/api/v1/*`
+
+### Frontend Web (Vue 3)
+- **Framework**: Vue 3 + Composition API
+- **Build Tool**: Vite
+- **Estado**: Pinia
+- **HTTP Client**: Axios
+- **UI**: TailwindCSS + Componentes personalizados
+
+### Mobile App (Flutter)
+- **Framework**: Flutter 3.x
+- **Lenguaje**: Dart
+- **Estado**: Provider/Riverpod
+- **HTTP**: Dio
+- **Almacenamiento**: flutter_secure_storage
 
 ## ✨ Características Principales
 

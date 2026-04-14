@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # Backend API (Laravel)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: admetricas-backend
+    working_dir: /var/www/html
+    volumes:
+      - ./backend:/var/www/html
+    ports:
+      - "8000:80"
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+    networks:
+      - admetricas-network
+    depends_on:
+      - postgres
+
+  # Frontend Web (Vue 3)
+  frontend-web:
+    build:
+      context: ./frontend-web
+      dockerfile: Dockerfile
+    container_name: admetricas-frontend-web
+    working_dir: /app
+    volumes:
+      - ./frontend-web:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000/api/v1
+    networks:
+      - admetricas-network
+    depends_on:
+      - backend
+
+  # Python LangGraph Agent Engine
+  brain:
+    build:
+      context: ./brain
+    container_name: admetricas-brain
+    working_dir: /app
+    volumes:
+      - ./brain:/app
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/admetricas
+    networks:
+      - admetricas-network
+    depends_on:
+      - postgres
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: admetricas-postgres
+    environment:
+      POSTGRES_DB: admetricas
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - admetricas-network
+
+networks:
+  admetricas-network:
+    driver: bridge
+
+volumes:
+  postgres-data:

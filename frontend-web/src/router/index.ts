@@ -1,0 +1,55 @@
+import { createRouter, createWebHistory } from 'vue-router'
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: '/',
+      name: 'home',
+      redirect: '/dashboard/main'
+    },
+    {
+      path: '/dashboard',
+      component: () => import('@/layouts/dashboard/DashboardLayout.vue'),
+      children: [
+        {
+          path: 'main',
+          name: 'main-dashboard',
+          component: () => import('@/views/dashboard/MainDashboard.vue')
+        },
+        {
+          path: 'organizations',
+          name: 'organizations',
+          component: () => import('@/views/dashboard/OrganizationsDashboard.vue')
+        },
+        {
+          path: 'organizations/:id',
+          name: 'organization-detail',
+          component: () => import('@/views/dashboard/OrganizationDetail.vue')
+        },
+        {
+          path: 'leads',
+          name: 'leads',
+          component: () => import('@/views/dashboard/LeadsDashboard.vue')
+        },
+        {
+          path: 'leads/:id/conversations',
+          name: 'lead-conversations',
+          component: () => import('@/views/LeadConversations.vue')
+        }
+      ]
+    },
+    {
+      path: '/auth/facebook/callback',
+      name: 'facebook-callback',
+      component: () => import('@/views/auth/FacebookCallback.vue')
+    },
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/views/Login.vue')
+    }
+  ]
+})
+
+export default router
