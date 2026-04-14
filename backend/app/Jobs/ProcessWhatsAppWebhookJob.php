@@ -119,12 +119,12 @@ class ProcessWhatsAppWebhookJob implements ShouldQueue
                         $timestamp,
                         $messageType,
                         now()->toDateTimeString(),
-                        $organization?->id, // wait, I should replace this with $workspace?->id
+                        $workspace?->id,
                         $whatsappNumber?->id
                     )->delay(now()->addMinutes($delayMinutes));
                     
                     Log::info('⏸️ Mensaje programado para enviar a n8n después de 5 minutos', [
-                        'organization_id' => $organization?->id,
+                        'workspace_id' => $workspace?->id,
                         'lead_id' => $lead->id,
                         'message_id' => $messageId,
                         'minutes_since_intervention' => $minutesSinceIntervention,
@@ -280,26 +280,6 @@ class ProcessWhatsAppWebhookJob implements ShouldQueue
                 }
 
                 $lead = Lead::where('phone_number', $fromNumber)->first();
-                $user = null;
-                
-                if ($lead && $lead->user_id) {
-                    $user = \App\Models\User::find($lead->user_id);
-                }
-                
-                if (!$user) {
-                    $user = \App\Models\User::first();
-                }
-                
-                if (!$user) {
-                    $user = \App\Models\User::where('email', 'alfredoromerox15@gmail.com')->first();
-                }
-
-                if (!$user) {
-                    Log::warning('No se encontró usuario para guardar mensaje de WhatsApp', [
-                        'fromNumber' => $fromNumber
-                    ]);
-                    continue;
-                }
 
                 $leadData = [
                     'client_name' => $profileName,
@@ -307,7 +287,6 @@ class ProcessWhatsAppWebhookJob implements ShouldQueue
                     'lead_level' => 'cold',
                     'stage' => 'nuevo',
                     'confidence_score' => 0.0,
-                    'user_id' => $user->id,
                 ];
                 
                 if ($workspace) {
@@ -329,7 +308,6 @@ class ProcessWhatsAppWebhookJob implements ShouldQueue
                 
                 if (!$existingConversation) {
                     $conversationData = [
-                        'user_id' => $user->id,
                         'message_id' => $messageId,
                         'content' => $messageText,
                         'direction' => 'inbound',

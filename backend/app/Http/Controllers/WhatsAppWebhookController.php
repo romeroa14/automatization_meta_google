@@ -119,7 +119,6 @@ class WhatsAppWebhookController extends Controller
             $wamid = $responseData['messages'][0]['id'] ?? null;
 
             $message = $lead->messages()->create([
-                'user_id' => $lead->user_id,
                 'workspace_id' => $lead->workspace_id,
                 'whatsapp_instance_id' => $whatsappNumber?->id,
                 'message_id' => $wamid,

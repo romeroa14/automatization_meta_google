@@ -69,7 +69,7 @@ class User extends Authenticatable implements HasTenants
         return $this->workspaces;
     }
 
-    public function canAccessTenant(Model $tenant, Panel $panel): bool
+    public function canAccessTenant(Model $tenant): bool
     {
         return $this->workspaces()->whereKey($tenant)->exists();
     }
