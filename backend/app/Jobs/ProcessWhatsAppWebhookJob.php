@@ -7,21 +7,21 @@ use App\Models\Message;
 use App\Models\WhatsappInstance;
 use App\Models\Workspace;
 use App\Services\WhatsAppLeadService;
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
+use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Tries;
+use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 
+#[Tries(3)]
+#[Timeout(120)]
 class ProcessWhatsAppWebhookJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Queueable;
 
     public function __construct(public array $data)
     {
-        $this->onQueue('webhooks');
     }
 
     public function handle(): void

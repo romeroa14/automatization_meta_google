@@ -53,6 +53,8 @@ return [
         'verify_token' => env('INSTAGRAM_VERIFY_TOKEN', 'adsbot'),
         'app_secret' => env('INSTAGRAM_APP_SECRET'),
         'app_id' => env('INSTAGRAM_APP_ID'),
+        'page_id' => env('INSTAGRAM_PAGE_ID'),
+        'ig_user_id' => env('INSTAGRAM_IG_USER_ID', '25051594434529218'),
     ],
 
     'whatsapp' => [
@@ -85,6 +87,16 @@ return [
         'redirect_uri' => env('FACEBOOK_REDIRECT_URI', 'http://localhost:9000/auth/facebook/callback'),
         'wa_signup_config_id' => env('FACEBOOK_WA_SIGNUP_CONFIG_ID'),
         'webhook_verify_token' => env('FACEBOOK_WEBHOOK_VERIFY_TOKEN', 'admetricas_webhook_token'),
+    ],
+
+    'brain' => [
+        'url' => env('BRAIN_URL', 'http://localhost:8000'),
+        'api_key' => env('BRAIN_API_KEY', ''),
+    ],
+
+    'deepseek' => [
+        'api_key' => env('DEEPSEEK_API_KEY'),
+        'base_url' => env('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
     ],
 
 ];

@@ -49,6 +49,30 @@ jobs:
               docker exec laravel-php php artisan route:clear
               docker exec laravel-php php artisan view:clear
               
+              # ========== CONFIGURACIÓN DE INSTAGRAM (Tokens sensibles) ==========
+              echo "📱 Configurando Instagram..."
+              
+              # Valores de Instagram
+              INSTAGRAM_TOKEN="IGAASTMZAj71HVBZAGE5Ry1Ray00LXlieXpBVHk2Y0tsZAXpqZAExzTFZAvU2hVZAmtYMTNEX3ZAWYnlLSXBUZAWpiT1RmZAmN6LWVyQkw5SFhOVy00aGU2LVU1bFBaRUIxN05kcXA4OUhIQ21SY3dXX29QLVFNaFlKM2hpcVF6QmlFLVpqZAwZDZD"
+              INSTAGRAM_VERIFY="adsbot"
+              INSTAGRAM_PAGE_ID="692024630667546"
+              INSTAGRAM_IG_USER_ID="25051594434529218"
+              
+              # Actualizar valores en .env (eliminar líneas existentes y agregar nuevas)
+              docker exec laravel-php bash -c "sed -i '/^INSTAGRAM_ACCESS_TOKEN=/d' /var/www/html/backend/.env"
+              docker exec laravel-php bash -c "sed -i '/^INSTAGRAM_VERIFY_TOKEN=/d' /var/www/html/backend/.env"
+              docker exec laravel-php bash -c "sed -i '/^INSTAGRAM_PAGE_ID=/d' /var/www/html/backend/.env"
+              docker exec laravel-php bash -c "sed -i '/^INSTAGRAM_IG_USER_ID=/d' /var/www/html/backend/.env"
+              docker exec laravel-php bash -c "echo 'INSTAGRAM_ACCESS_TOKEN=$INSTAGRAM_TOKEN' >> /var/www/html/backend/.env"
+              docker exec laravel-php bash -c "echo 'INSTAGRAM_VERIFY_TOKEN=$INSTAGRAM_VERIFY' >> /var/www/html/backend/.env"
+              docker exec laravel-php bash -c "echo 'INSTAGRAM_PAGE_ID=$INSTAGRAM_PAGE_ID' >> /var/www/html/backend/.env"
+              docker exec laravel-php bash -c "echo 'INSTAGRAM_IG_USER_ID=$INSTAGRAM_IG_USER_ID' >> /var/www/html/backend/.env"
+              
+              # Limpiar cache de config
+              docker exec laravel-php php artisan config:clear
+              docker exec laravel-php php artisan cache:clear
+              
+              echo "✅ Instagram configurado"
               echo "✅ Backend actualizado"
 
               # ========== FRONTEND WEB (Vue 3) ==========

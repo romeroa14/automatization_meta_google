@@ -1,4 +1,5 @@
-from typing import TypedDict, List, Any
+from typing import TypedDict, List, Any, Optional, Dict
+
 
 class AgentState(TypedDict):
     messages: List[Any]
@@ -7,3 +8,4 @@ class AgentState(TypedDict):
     customer_id: str
     platform: str
     intent: str
+    retrieved_products: Optional[Dict[str, Any]]

@@ -2,21 +2,21 @@
 
 namespace App\Jobs;
 
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
+use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Tries;
+use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 
+#[Tries(3)]
+#[Timeout(120)]
 class ProcessInstagramWebhookJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Queueable;
 
     public function __construct(public array $data)
     {
-        $this->onQueue('webhooks');
     }
 
     public function handle(): void
@@ -112,13 +112,26 @@ class ProcessInstagramWebhookJob implements ShouldQueue
             return;
         }
 
+        // Get organization_id - for @adsvnzla we use a default
+        // In production, this would come from the Instagram account configuration
+        $organizationId = $this->getOrganizationIdForInstagramAccount();
+        
         sleep(rand(2, 5));
         
         \App\Jobs\SendInstagramMessageToN8nJob::dispatch(
             $senderId,
             $messageText,
-            $messageId
+            $messageId,
+            $organizationId,
+            'instagram'
         )->onQueue('webhooks');
+    }
+
+    private function getOrganizationIdForInstagramAccount(): string
+    {
+        // For @adsvnzla, use 'adsvnzla' as organization_id
+        // In production, this would query the InstagramAccount model
+        return 'adsvnzla';
     }
 
     private function processInstagramComment($commentData)

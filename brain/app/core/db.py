@@ -1,4 +1,5 @@
 import os
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -16,4 +17,7 @@ async def get_session() -> AsyncSession:
 
 async def init_db():
     async with engine.begin() as conn:
-        await conn.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        try:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        except Exception:
+            pass  # Extension not available - fine for non-RAG usage
