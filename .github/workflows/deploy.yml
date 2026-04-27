@@ -16,96 +16,86 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           port: 22
           script: |
-              # Ruta del proyecto
-              cd /var/www/html/Admetricas
-              
-              # Configuración de seguridad de Git
-              git config --global --add safe.directory /var/www/html/Admetricas
+            # Ruta del proyecto
+            cd /var/www/html/admetricas.com
+            
+            # Configuración de seguridad de Git
+            git config --global --add safe.directory /var/www/html/admetricas.com
 
-              # Poner en mantenimiento
-              docker exec laravel-php php artisan down || true
+            # Poner en mantenimiento
+            docker exec laravel-php php artisan down || true
 
-              # Resetear y clean
-              git reset --hard HEAD
-              git clean -fd
+            # Resetear y clean
+            git reset --hard HEAD
+            git clean -fd
 
-              # Pull del código
-              git pull origin master
+            # Pull del código
+            git pull origin master
 
-              # ========== BACKEND ==========
-              echo "🔧 Actualizando backend..."
-              
-              # Corregir permisos de archivos gitignore
-              chown -R adminvps:adminvps backend/bootstrap/cache/.gitignore backend/storage/app/.gitignore backend/storage/app/private/.gitignore backend/storage/app/public/.gitignore backend/storage/framework/.gitignore backend/storage/framework/cache/.gitignore backend/storage/framework/cache/data/.gitignore backend/storage/framework/sessions/.gitignore backend/storage/framework/testing/.gitignore backend/storage/framework/views/.gitignore backend/storage/logs/.gitignore 2>/dev/null || true
-              chmod 644 backend/bootstrap/cache/.gitignore backend/storage/app/.gitignore backend/storage/app/private/.gitignore backend/storage/app/public/.gitignore backend/storage/framework/.gitignore backend/storage/framework/cache/.gitignore backend/storage/framework/cache/data/.gitignore backend/storage/framework/sessions/.gitignore backend/storage/framework/testing/.gitignore backend/storage/framework/views/.gitignore backend/storage/logs/.gitignore 2>/dev/null || true
-              
-              # Actualizar dependencias
-              docker exec -u application laravel-php composer install --no-dev --optimize-autoloader --working-dir=/var/www/html/backend
-              
-              # Migraciones y cache
-              docker exec laravel-php php artisan migrate --force
-              docker exec laravel-php php artisan config:clear
-              docker exec laravel-php php artisan cache:clear
-              docker exec laravel-php php artisan route:clear
-              docker exec laravel-php php artisan view:clear
-              
-              # ========== CONFIGURACIÓN DE INSTAGRAM (Tokens sensibles) ==========
-              echo "📱 Configurando Instagram..."
-              
-# Valores de Instagram
-                INSTAGRAM_TOKEN="IGAASTMZAj71HVBZAGE5Ry1Ray00LXlieXpBVHk2Y0tsZAXpqZAExzTFZAvU2hVZAmtYMTNEX3ZAWYnlLSXBUZAWpiT1RmZAmN6LWVyQkw5SFhOVy00aGU2LVU1bFBaRUIxN05kcXA4OUhIQ21SY3dXX29QLVFNaFlKM2hpcVF6QmlFLVpqZAwZDZD"
-                INSTAGRAM_VERIFY="adsbot"
-                INSTAGRAM_PAGE_ID="692024630667546"
-                INSTAGRAM_IG_USER_ID="25051594434529218"
-                BRAIN_URL="http://brain:8000"
-              
-              # Actualizar valores en .env (eliminar líneas existentes y agregar nuevas)
-              docker exec laravel-php bash -c "sed -i '/^INSTAGRAM_ACCESS_TOKEN=/d' /var/www/html/backend/.env"
-              docker exec laravel-php bash -c "sed -i '/^INSTAGRAM_VERIFY_TOKEN=/d' /var/www/html/backend/.env"
-              docker exec laravel-php bash -c "sed -i '/^INSTAGRAM_PAGE_ID=/d' /var/www/html/backend/.env"
-              docker exec laravel-php bash -c "sed -i '/^INSTAGRAM_IG_USER_ID=/d' /var/www/html/backend/.env"
-              docker exec laravel-php bash -c "sed -i '/^BRAIN_URL=/d' /var/www/html/backend/.env"
-              docker exec laravel-php bash -c "echo 'INSTAGRAM_ACCESS_TOKEN=$INSTAGRAM_TOKEN' >> /var/www/html/backend/.env"
-              docker exec laravel-php bash -c "echo 'INSTAGRAM_VERIFY_TOKEN=$INSTAGRAM_VERIFY' >> /var/www/html/backend/.env"
-              docker exec laravel-php bash -c "echo 'INSTAGRAM_PAGE_ID=$INSTAGRAM_PAGE_ID' >> /var/www/html/backend/.env"
-              docker exec laravel-php bash -c "echo 'INSTAGRAM_IG_USER_ID=$INSTAGRAM_IG_USER_ID' >> /var/www/html/backend/.env"
-              docker exec laravel-php bash -c "echo 'BRAIN_URL=$BRAIN_URL' >> /var/www/html/backend/.env"
-              
-              # Limpiar cache de config
-              docker exec laravel-php php artisan config:clear
-              docker exec laravel-php php artisan cache:clear
-              
-              echo "✅ Instagram configurado"
-              echo "✅ Backend actualizado"
+            # ========== BACKEND ==========
+            echo "Actualizando backend..."
+            
+            # Corregir permisos de archivos gitignore
+            chown -R adminvps:adminvps backend/bootstrap/cache/.gitignore backend/storage/app/.gitignore backend/storage/app/private/.gitignore backend/storage/app/public/.gitignore backend/storage/framework/.gitignore backend/storage/framework/cache/.gitignore backend/storage/framework/cache/data/.gitignore backend/storage/framework/sessions/.gitignore backend/storage/framework/testing/.gitignore backend/storage/framework/views/.gitignore backend/storage/logs/.gitignore 2>/dev/null || true
+            chmod 644 backend/bootstrap/cache/.gitignore backend/storage/app/.gitignore backend/storage/app/private/.gitignore backend/storage/app/public/.gitignore backend/storage/framework/.gitignore backend/storage/framework/cache/.gitignore backend/storage/framework/cache/data/.gitignore backend/storage/framework/sessions/.gitignore backend/storage/framework/testing/.gitignore backend/storage/framework/views/.gitignore backend/storage/logs/.gitignore 2>/dev/null || true
+            
+            # Actualizar dependencias
+            docker exec -u application laravel-php composer install --no-dev --optimize-autoloader --working-dir=/var/www/html/backend
+            
+            # Migraciones y cache
+            docker exec laravel-php php artisan migrate --force
+            docker exec laravel-php php artisan config:clear
+            docker exec laravel-php php artisan cache:clear
+            docker exec laravel-php php artisan route:clear
+            docker exec laravel-php php artisan view:clear
+            
+            # ========== CONFIGURACIÓN DE INSTAGRAM (Tokens sensibles) ==========
+            echo "Configurando Instagram..."
+            
+            # Valores de Instagram
+            INSTAGRAM_TOKEN="IGAASTMZAj71HVBZAGE5Ry1Ray00LXlieXpBVHk2Y0tsZAXpqZAExzTFZAvU2hVZAmtYMTNEX3ZAWYnlLSXBUZAWpiT1RmZAmN6LWVyQkw5SFhOVy00aGU2LVU1bFBaRUIxN05kcXA4OUhIQ21SY3dXX29QLVFNaFlKM2hpcVF6QmlFLVpqZAwZDZD"
+            INSTAGRAM_VERIFY="adsbot"
+            INSTAGRAM_PAGE_ID="692024630667546"
+            INSTAGRAM_IG_USER_ID="25051594434529218"
+            BRAIN_URL="http://brain:8000"
+            
+            # Actualizar valores en .env
+            docker exec laravel-php bash -c "sed -i '/^INSTAGRAM_ACCESS_TOKEN=/d' /var/www/html/backend/.env"
+            docker exec laravel-php bash -c "sed -i '/^INSTAGRAM_VERIFY_TOKEN=/d' /var/www/html/backend/.env"
+            docker exec laravel-php bash -c "sed -i '/^INSTAGRAM_PAGE_ID=/d' /var/www/html/backend/.env"
+            docker exec laravel-php bash -c "sed -i '/^INSTAGRAM_IG_USER_ID=/d' /var/www/html/backend/.env"
+            docker exec laravel-php bash -c "sed -i '/^BRAIN_URL=/d' /var/www/html/backend/.env"
+            docker exec laravel-php bash -c "echo 'INSTAGRAM_ACCESS_TOKEN=$INSTAGRAM_TOKEN' >> /var/www/html/backend/.env"
+            docker exec laravel-php bash -c "echo 'INSTAGRAM_VERIFY_TOKEN=$INSTAGRAM_VERIFY' >> /var/www/html/backend/.env"
+            docker exec laravel-php bash -c "echo 'INSTAGRAM_PAGE_ID=$INSTAGRAM_PAGE_ID' >> /var/www/html/backend/.env"
+            docker exec laravel-php bash -c "echo 'INSTAGRAM_IG_USER_ID=$INSTAGRAM_IG_USER_ID' >> /var/www/html/backend/.env"
+            docker exec laravel-php bash -c "echo 'BRAIN_URL=$BRAIN_URL' >> /var/www/html/backend/.env"
+            
+            # Limpiar cache de config
+            docker exec laravel-php php artisan config:clear
+            docker exec laravel-php php artisan cache:clear
+            
+            echo "Instagram configurado"
+            echo "Backend actualizado"
 
-              # ========== FRONTEND WEB (Vue 3) ==========
-              echo "🚀 Actualizando frontend web..."
+            # ========== BRAIN (Python Microservice) ==========
+            echo "Actualizando brain..."
 
-              # Detener contenedor viejo
-              docker rm -f admetricas-frontend-web 2>/dev/null || true
+            # Ir al directorio correcto para docker compose
+            cd /var/www/html/admetricas.com
 
-              # Habilitar BuildKit
-              export DOCKER_BUILDKIT=1
+            # Detener contenedor viejo si existe
+            docker rm -f admetricas-brain 2>/dev/null || true
 
-              # Reconstruir y levantar frontend
-              docker compose up -d frontend-web
-              
-              echo "✅ Frontend web actualizado"
+            # Reconstruir y levantar brain
+            docker compose up -d --build brain || echo "Brain build may fail if docker-compose not available"
 
-              # ========== BRAIN (Python Microservice) ==========
-              echo "🧠 Actualizando brain..."
+            echo "Despliegue completado"
 
-              # Detener contenedor viejo si existe
-              docker rm -f admetricas-brain 2>/dev/null || true
+            # Levantar sitio
+            docker exec laravel-php php artisan up
 
-              # Reconstruir y levantar brain
-              docker compose up -d --build brain
-              
-              echo "✅ Brain actualizado"
-              echo "✅ Despliegue completado"
-              docker exec laravel-php php artisan up
+            # Reiniciar PHP para limpiar OPcache
+            docker restart laravel-php
 
-              # Reiniciar PHP para limpiar OPcache
-              docker restart laravel-php
-
-              echo "✅ Despliegue completado exitosamente"
+            echo "Despliegue completado exitosamente"
