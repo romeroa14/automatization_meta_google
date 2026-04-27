@@ -2,157 +2,304 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\ProcessInstagramWebhookJob;
+use App\Models\Tenant;
+use App\Models\Conversation;
+use App\Models\ConversationMessage;
+use App\Models\ChatbotConfig;
+use App\Models\WebhookLog;
+use App\Services\TenantManager;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Crypt;
 
 class InstagramWebhookController extends Controller
 {
-    public function verifyWebhook(Request $request)
+    /**
+     * Instagram Webhook Verification (GET)
+     */
+    public function verify(Request $request, string $slug = null)
     {
+        // Si no hay slug, usar tenant hardcoded
+        if (!$slug) {
+            $slug = 'ads_vnzla';
+        }
+        
         $mode = $request->query('hub_mode');
         $token = $request->query('hub_verify_token');
         $challenge = $request->query('hub_challenge');
-
-        $verifyToken = config('services.instagram.verify_token', 'adsbot');
-
+        
+        // Find tenant by slug
+        $tenant = Tenant::findBySlug($slug);
+        
+        if (!$tenant) {
+            return response('Tenant not found', 404);
+        }
+        
+        // Verify token matches
+        $verifyToken = $tenant->webhook_secret ?? config('services.instagram.verify_token', 'adsbot');
+        
         if ($mode === 'subscribe' && $token === $verifyToken) {
-            Log::info('Instagram webhook verificado exitosamente');
+            Log::info("Instagram webhook verified for tenant: {$slug}");
             return response($challenge, 200);
         }
-
-        if ($mode === null && $token === null) {
-            Log::info('Webhook de Instagram recibido (no es verificación)');
-            return response('OK', 200);
-        }
-
-        Log::warning('Instagram webhook verificación fallida', [
-            'mode' => $mode,
-            'token' => $token,
-            'expected_token' => $verifyToken
-        ]);
-
+        
         return response('Forbidden', 403);
     }
 
-    public function handleCommentsWebhook(Request $request)
+    /**
+     * Handle Instagram Webhook (POST) - Multi-tenant with slug
+     */
+    public function handle(Request $request, string $slug = null)
     {
-        try {
-            $data = $request->all();
-
-            Log::info('Instagram comments webhook recibido (async dispatch)', [
-                'data' => $data
-            ]);
-
-            if (isset($data['entry'])) {
-                // Despachamos el mismo job, el job ya tiene lógica para comments
-                ProcessInstagramWebhookJob::dispatch($data)->onQueue('webhooks');
-            }
-
-            return response('OK', 200);
-        } catch (\Exception $e) {
-            Log::error('Error procesando webhook de comentarios', [
-                'error' => $e->getMessage()
-            ]);
-            return response('Error', 500);
+        // Si no hay slug, usar tenant hardcoded (legacy/mi cuenta)
+        if (!$slug) {
+            $slug = 'ads_vnzla'; // Tu cuenta actual
         }
+        
+        $tenant = Tenant::findBySlug($slug);
+        
+        if (!$tenant) {
+            Log::error("Instagram webhook: Tenant not found", ['slug' => $slug]);
+            return response()->json(['error' => 'Tenant not found'], 404);
+        }
+        
+        // Set tenant context
+        TenantManager::setCurrentTenant($tenant);
+        
+        // Log the webhook
+        // $this->logWebhook($tenant, 'instagram', 'incoming', $request->all());
+        
+        $data = $request->all();
+        
+        // Handle webhook verification
+        if (isset($data['object']) && $data['object'] === 'instagram') {
+            return $this->handleInstagramEntry($tenant, $data);
+        }
+        
+        return response()->json(['status' => 'ok']);
     }
 
-    public function handleWebhook(Request $request)
+    /**
+     * Handle incoming Instagram messages
+     */
+    private function handleInstagramEntry(Tenant $tenant, array $data)
     {
         try {
-            $data = $request->all();
-
-            Log::info('Instagram webhook recibido (async dispatch)', [
-                'has_entry' => isset($data['entry'])
-            ]);
-
-            if (isset($data['entry']) || isset($data['field'])) {
-                ProcessInstagramWebhookJob::dispatch($data)->onQueue('webhooks');
+            foreach ($data['entry'] ?? [] as $entry) {
+                $instagramAccountId = $entry['id'] ?? null;
+                
+                // Skip if not our Instagram account
+                if ($instagramAccountId !== $tenant->instagram_account_id) {
+                    Log::info("Skipping message for different IG account: {$instagramAccountId}");
+                    continue;
+                }
+                
+                // Process messaging events
+                foreach ($entry['messaging'] ?? [] as $messaging) {
+                    $this->processInstagramMessage($tenant, $messaging);
+                }
             }
-
-            return response('OK', 200);
+            
+            return response()->json(['status' => 'ok']);
+            
         } catch (\Exception $e) {
-            Log::error('Error procesando webhook de Instagram', [
+            Log::error('Instagram webhook processing error', [
+                'tenant' => $tenant->id,
                 'error' => $e->getMessage(),
-                'data' => $request->all()
             ]);
-
-            return response('Error', 500);
+            
+            return response()->json(['error' => 'Processing failed'], 500);
         }
     }
 
-    public function verifyN8nWebhook(Request $request)
+    /**
+     * Process a single Instagram message
+     */
+    private function processInstagramMessage(Tenant $tenant, array $messaging)
     {
-        $challenge = $request->query('challenge');
-
-        if ($challenge) {
-            Log::info('Webhook de n8n verificado', ['challenge' => $challenge]);
-            return response($challenge, 200);
-        }
-
-        return response('OK', 200);
-    }
-
-    public function handleN8nWebhook(Request $request)
-    {
-        try {
-            $data = $request->all();
-
-            Log::info('Webhook de n8n recibido', [
-                'data' => $data,
-                'headers' => $request->headers->all()
-            ]);
-
-            if (isset($data['sender_id']) && isset($data['message'])) {
-                $this->sendResponse($data['sender_id'], $data['message']);
-            }
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Webhook de n8n procesado',
-                'timestamp' => now()->toISOString()
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Error procesando webhook de n8n', [
-                'error' => $e->getMessage(),
-                'data' => $request->all()
-            ]);
-
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Error procesando webhook'
-            ], 500);
-        }
-    }
-    
-    private function sendResponse($senderId, $messageText)
-    {
-        $accessToken = config('services.instagram.access_token');
-
-        if (!$accessToken) {
-            Log::warning('Token de acceso de Instagram no configurado');
+        $senderId = $messaging['sender']['id'] ?? null;
+        $recipientId = $messaging['recipient']['id'] ?? null;
+        $message = $messaging['message'] ?? null;
+        
+        if (!$senderId || !$message) {
             return;
         }
-
-        $response = Http::post("https://graph.facebook.com/v18.0/me/messages", [
-            'recipient' => ['id' => $senderId],
-            'message' => ['text' => $messageText],
-            'access_token' => $accessToken
+        
+        $messageText = $message['text'] ?? '';
+        $messageId = $message['mid'] ?? null;
+        
+        Log::info('Instagram message received', [
+            'tenant' => $tenant->name,
+            'sender_id' => $senderId,
+            'message' => $messageText,
         ]);
+        
+        // Find or create conversation
+        $conversation = Conversation::firstOrCreate(
+            [
+                'tenant_id' => $tenant->id,
+                'platform' => 'instagram',
+                'customer_id' => $senderId,
+            ],
+            [
+                'status' => 'active',
+                'customer_name' => 'Instagram User',
+                'last_message_at' => now(),
+            ]
+        );
+        
+        // Store incoming message
+        ConversationMessage::create([
+            'conversation_id' => $conversation->id,
+            'sender_type' => 'customer',
+            'content' => $messageText,
+            'message_type' => 'text',
+            'metadata' => ['message_id' => $messageId],
+        ]);
+        
+        // Update conversation
+        $conversation->update(['last_message_at' => now()]);
+        
+        // Process with AI and send response
+        $this->processWithAI($tenant, $conversation, $messageText);
+    }
 
-        if ($response->successful()) {
-            Log::info('Respuesta enviada desde n8n webhook handler', [
-                'sender_id' => $senderId,
-                'message' => $messageText
-            ]);
-        } else {
-            Log::error('Error enviando respuesta desde n8n webhook handler', [
-                'response' => $response->body(),
-                'status' => $response->status()
-            ]);
+    /**
+     * Process message with AI (Brain service)
+     */
+    private function processWithAI(Tenant $tenant, Conversation $conversation, string $messageText)
+    {
+        // Get chatbot config
+        $config = ChatbotConfig::where('tenant_id', $tenant->id)
+            ->where('is_active', true)
+            ->first();
+        
+        if (!$config) {
+            Log::warning("No chatbot config for tenant: {$tenant->name}");
+            return;
         }
+        
+        // Get tenant services for context
+        $services = $tenant->services()
+            ->where('is_active', true)
+            ->get()
+            ->map(fn($s) => [
+                'name' => $s->name,
+                'description' => $s->description,
+                'price' => $s->price,
+                'keywords' => $s->keywords,
+            ])
+            ->toArray();
+        
+        try {
+            $brainUrl = config('services.brain.url', 'http://brain:8000');
+            
+            $response = Http::timeout(30)->post("{$brainUrl}/api/webhook/chat", [
+                'organization_id' => $tenant->id,
+                'platform' => 'instagram',
+                'customer_id' => $conversation->customer_id,
+                'message' => $messageText,
+                'conversation_history' => [],
+                'thread_id' => $conversation->id,
+                'system_prompt' => $config->system_prompt,
+                'skills' => $config->skills ?? [],
+                'behaviors' => $config->behaviors ?? [],
+                'services' => $services,
+                'tenant_name' => $tenant->name,
+            ]);
+            
+            if ($response->successful()) {
+                $data = $response->json();
+                $reply = $data['reply'] ?? $config->fallback_message;
+                
+                // Send reply via Instagram API
+                $this->sendInstagramReply($tenant, $conversation->customer_id, $reply);
+                
+                // Store bot response
+                ConversationMessage::create([
+                    'conversation_id' => $conversation->id,
+                    'sender_type' => 'bot',
+                    'content' => $reply,
+                    'message_type' => 'text',
+                ]);
+                
+                Log::info('AI response sent', [
+                    'tenant' => $tenant->name,
+                    'sender_id' => $conversation->customer_id,
+                    'reply_length' => strlen($reply),
+                ]);
+            } else {
+                Log::error('Brain service error', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                
+                // Send fallback message
+                $this->sendInstagramReply($tenant, $conversation->customer_id, $config->fallback_message);
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('AI processing error', [
+                'tenant' => $tenant->name,
+                'error' => $e->getMessage(),
+            ]);
+            
+            // Send fallback on error
+            $this->sendInstagramReply($tenant, $conversation->customer_id, $config->fallback_message);
+        }
+    }
+
+    /**
+     * Send reply via Instagram Graph API
+     */
+    private function sendInstagramReply(Tenant $tenant, string $recipientId, string $message)
+    {
+        $token = $tenant->getDecryptedInstagramToken();
+        $igUserId = $tenant->instagram_account_id;
+        
+        if (!$token || !$igUserId) {
+            Log::error('Instagram credentials missing', ['tenant' => $tenant->id]);
+            return false;
+        }
+        
+        try {
+            $response = Http::withToken($token)
+                ->timeout(30)
+                ->post("https://graph.instagram.com/v18.0/{$igUserId}/messages", [
+                    'recipient' => ['id' => $recipientId],
+                    'message' => ['text' => $message],
+                ]);
+            
+            if (!$response->successful()) {
+                Log::error('Instagram API error', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return false;
+            }
+            
+            return true;
+            
+        } catch (\Exception $e) {
+            Log::error('Instagram send exception', [
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Log webhook for debugging
+     */
+    private function logWebhook(Tenant $tenant, string $platform, string $eventType, array $payload)
+    {
+        WebhookLog::create([
+            'tenant_id' => $tenant->id,
+            'platform' => $platform,
+            'event_type' => $eventType,
+            'payload' => $payload,
+            'processed' => true,
+        ]);
     }
 }

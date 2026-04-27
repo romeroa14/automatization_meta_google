@@ -94,16 +94,21 @@ Route::prefix('api/webhook')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| Instagram Chatbot Routes
+| Instagram Chatbot Routes (Multi-Tenant)
 |--------------------------------------------------------------------------
 |
 | Rutas para el chatbot de Instagram usando webhooks
+| Soporta múltiples tenants via slug
 |
 */
 
-// Webhook de Instagram para chatbot (sin CSRF)
-Route::post('/webhook/instagram', [App\Http\Controllers\InstagramWebhookController::class, 'handleWebhook'])->withoutMiddleware(['web']);
-Route::get('/webhook/instagram', [App\Http\Controllers\InstagramWebhookController::class, 'verifyWebhook'])->withoutMiddleware(['web']);
+// Legacy endpoint (tu cuenta actual - ads_vnzla)
+Route::post('/webhook/instagram', [App\Http\Controllers\InstagramWebhookController::class, 'handle'])->withoutMiddleware(['web']);
+Route::get('/webhook/instagram', [App\Http\Controllers\InstagramWebhookController::class, 'verify'])->withoutMiddleware(['web']);
+
+// Multi-tenant endpoint: /webhook/instagram/{tenant_slug}
+Route::post('/webhook/instagram/{slug}', [App\Http\Controllers\InstagramWebhookController::class, 'handle'])->withoutMiddleware(['web']);
+Route::get('/webhook/instagram/{slug}', [App\Http\Controllers\InstagramWebhookController::class, 'verify'])->withoutMiddleware(['web']);
 
 // Endpoint para n8n (conexión real)
 Route::post('/webhook/n8n', [App\Http\Controllers\InstagramWebhookController::class, 'handleN8nWebhook']);
