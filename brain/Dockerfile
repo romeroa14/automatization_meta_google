@@ -4,19 +4,25 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy and install Python dependencies
-COPY venv /app/venv
-ENV PATH="/app/venv/bin:$PATH"
+# Install minimal dependencies
+RUN pip install --no-cache-dir \
+    fastapi \
+    uvicorn \
+    pydantic \
+    httpx \
+    psycopg2-binary \
+    python-dotenv
 
 # Copy application code
 COPY app /app/app
+COPY .env /app/.env
 
 # Expose port
 EXPOSE 8000
 
 # Run the service
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
