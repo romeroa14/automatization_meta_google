@@ -8,14 +8,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install minimal dependencies
+# Install Python dependencies
 RUN pip install --no-cache-dir \
     fastapi \
     uvicorn \
     pydantic \
     httpx \
     psycopg2-binary \
-    python-dotenv
+    python-dotenv \
+    langchain-core \
+    langchain-nvidia-ai-endpoints
 
 # Copy application code
 COPY app /app/app
