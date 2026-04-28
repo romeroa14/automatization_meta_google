@@ -8,34 +8,23 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Conversation extends Model
 {
     protected $fillable = [
-        'lead_id',
-        'user_id',
-        'number_phone_id',
-        'message_id',
-        'message_text',
-        'response',
-        'resource',
-        'timestamp',
+        'tenant_id',
         'platform',
+        'customer_id',
+        'customer_name',
         'status',
-        'message_length',
-        'is_employee',
-        'is_client_message',
-        'lead_intent',
-        'lead_level',
-        'conversation_summary',
-        'message_sentiment',
-        'payload',
+        'last_message_at',
     ];
 
     protected $casts = [
-        'payload' => 'array',
-        'is_employee' => 'boolean',
-        'is_client_message' => 'boolean',
+        'last_message_at' => 'datetime',
     ];
 
-    public function lead(): BelongsTo
+    /**
+     * Get the tenant that owns this conversation.
+     */
+    public function tenant(): BelongsTo
     {
-        return $this->belongsTo(Lead::class);
+        return $this->belongsTo(Tenant::class);
     }
 }
