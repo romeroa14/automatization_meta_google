@@ -15,9 +15,7 @@ RUN pip install --no-cache-dir \
     pydantic \
     httpx \
     psycopg2-binary \
-    python-dotenv \
-    langchain-core \
-    langchain-nvidia-ai-endpoints
+    python-dotenv
 
 # Copy application code
 COPY app /app/app

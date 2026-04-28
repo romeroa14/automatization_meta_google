@@ -201,7 +201,7 @@ class InstagramWebhookController extends Controller
                 'customer_id' => $conversation->customer_id,
                 'message' => $messageText,
                 'conversation_history' => [],
-                'thread_id' => $conversation->id,
+                'thread_id' => (string) $conversation->id,
                 'system_prompt' => $config->system_prompt,
                 'skills' => $config->skills ?? [],
                 'behaviors' => $config->behaviors ?? [],
