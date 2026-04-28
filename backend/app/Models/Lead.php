@@ -2,16 +2,23 @@
 
 namespace App\Models;
 
+use App\Models\Scopes\TenantScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Lead extends Model
 {
-    protected $table = 'tenant_leads';
+    protected $table = 'leads';
+
+    protected static function booted()
+    {
+        static::addGlobalScope(new TenantScope);
+    }
 
     protected $fillable = [
         'workspace_id',
+        'tenant_id',
         'whatsapp_instance_id',
         'phone_number',
         'client_name',
@@ -34,6 +41,11 @@ class Lead extends Model
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);
+    }
+
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
     }
 
     public function whatsappInstance(): BelongsTo
